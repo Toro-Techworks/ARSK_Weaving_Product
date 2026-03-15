@@ -1,0 +1,89 @@
+#################################################
+# GLOBAL
+#################################################
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+#################################################
+# FRONTEND (React / Next / Node)
+#################################################
+
+node_modules/
+.next/
+dist/
+build/
+out/
+.cache/
+coverage/
+
+# Vercel
+.vercel
+
+# Package managers
+.pnpm-debug.log*
+.pnpm-store
+.npm
+
+#################################################
+# BACKEND (Laravel)
+#################################################
+
+backend/vendor/
+backend/node_modules/
+
+backend/storage/logs
+backend/storage/framework/cache
+backend/storage/framework/sessions
+backend/storage/framework/views
+
+backend/public/storage
+
+backend/.env
+backend/.env.backup
+backend/.env.production
+
+backend/storage/*.key
+
+# Composer
+backend/composer.phar
+
+#################################################
+# IDE
+#################################################
+
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+#################################################
+# TEMP FILES
+#################################################
+
+*.tmp
+*.temp
+*.bak
+*.backup
+
+#################################################
+# TEST / COVERAGE
+#################################################
+
+coverage/
+.phpunit.cache
+.phpunit.result.cache
