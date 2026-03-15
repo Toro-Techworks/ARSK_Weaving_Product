@@ -3,10 +3,10 @@ import { Search, X } from 'lucide-react';
 import api from '../api/client';
 
 /**
- * Searchable order dropdown. Search by DC number / order ID.
- * value: order id (number or string), onChange: (orderId, order | null) => void
+ * Searchable yarn order dropdown. Search by PO number, customer, or order ID.
+ * value: yarn order id (number or string), onChange: (orderId, order | null) => void
  */
-export function SearchableOrderSelect({ label, value, onChange, placeholder = 'Search by DC number or order...', className = '' }) {
+export function SearchableOrderSelect({ label, value, onChange, placeholder = 'Search by P.O number or customer...', className = '' }) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState([]);
@@ -21,7 +21,7 @@ export function SearchableOrderSelect({ label, value, onChange, placeholder = 'S
       return;
     }
     setLoading(true);
-    api.get('/orders', { params: { search: search.trim(), per_page: 15 } })
+    api.get('/yarn-orders', { params: { search: search.trim(), per_page: 15 } })
       .then(({ data: res }) => setOptions(res.data || []))
       .catch(() => setOptions([]))
       .finally(() => setLoading(false));
@@ -33,7 +33,6 @@ export function SearchableOrderSelect({ label, value, onChange, placeholder = 'S
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query]);
 
-  // When value changes externally, try to show label (we don't have order loaded, so show id or fetch one)
   useEffect(() => {
     if (value && selectedOrder?.id === Number(value)) return;
     if (!value) {
@@ -41,10 +40,9 @@ export function SearchableOrderSelect({ label, value, onChange, placeholder = 'S
       setQuery('');
       return;
     }
-    // Fetch single order to show label
-    api.get(`/orders/${value}`).then(({ data }) => {
+    api.get(`/yarn-orders/${value}`).then(({ data }) => {
       const o = data.data;
-      setSelectedOrder(o ? { id: o.id, dc_number: o.dc_number, company: o.company, fabric_type: o.fabric_type } : null);
+      setSelectedOrder(o ? { id: o.id, po_number: o.po_number, customer: o.customer, order_from: o.order_from } : null);
       if (o) setQuery('');
     }).catch(() => setSelectedOrder(null));
   }, [value]);
@@ -58,7 +56,7 @@ export function SearchableOrderSelect({ label, value, onChange, placeholder = 'S
   }, []);
 
   const handleSelect = (order) => {
-    const o = { id: order.id, dc_number: order.dc_number, company: order.company, fabric_type: order.fabric_type };
+    const o = { id: order.id, po_number: order.po_number, customer: order.customer, order_from: order.order_from };
     setSelectedOrder(o);
     setQuery('');
     setOpen(false);
@@ -73,7 +71,7 @@ export function SearchableOrderSelect({ label, value, onChange, placeholder = 'S
   };
 
   const displayValue = selectedOrder
-    ? `${selectedOrder.dc_number}${selectedOrder.company?.company_name ? ` — ${selectedOrder.company.company_name}` : ''}${selectedOrder.fabric_type ? ` — ${selectedOrder.fabric_type}` : ''}`
+    ? `#${selectedOrder.id}${selectedOrder.po_number ? ` — ${selectedOrder.po_number}` : ''}${selectedOrder.customer ? ` — ${selectedOrder.customer}` : ''}${selectedOrder.order_from ? ` (${selectedOrder.order_from})` : ''}`
     : '';
 
   return (
@@ -118,7 +116,7 @@ export function SearchableOrderSelect({ label, value, onChange, placeholder = 'S
               <div className="py-4 text-center text-sm text-gray-500">Searching...</div>
             ) : options.length === 0 ? (
               <div className="py-4 text-center text-sm text-gray-500">
-                {query.trim() ? 'No orders found. Try another DC number.' : 'Type to search by DC number or fabric.'}
+                {query.trim() ? 'No orders found. Try P.O number or customer.' : 'Type to search by P.O number or customer.'}
               </div>
             ) : (
               <ul className="py-1">
@@ -129,9 +127,9 @@ export function SearchableOrderSelect({ label, value, onChange, placeholder = 'S
                       onClick={() => handleSelect(o)}
                       className="w-full text-left px-3 py-2.5 text-sm hover:bg-brand/5 focus:bg-brand/5 focus:outline-none"
                     >
-                      <span className="font-medium text-gray-900">{o.dc_number}</span>
-                      {o.company?.company_name && <span className="text-gray-600"> — {o.company.company_name}</span>}
-                      {o.fabric_type && <span className="text-gray-500"> — {o.fabric_type}</span>}
+                      <span className="font-medium text-gray-900">#{o.id}</span>
+                      {o.po_number && <span className="text-gray-600"> — {o.po_number}</span>}
+                      {o.customer && <span className="text-gray-500"> — {o.customer}</span>}
                     </button>
                   </li>
                 ))}

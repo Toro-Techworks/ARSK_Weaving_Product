@@ -20,7 +20,7 @@ export function FormInput({
       <input
         id={id}
         type={type}
-        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none"
+        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none transition-all duration-200"
         {...props}
       />
       {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
@@ -65,7 +65,7 @@ export function FormTextarea({ label, error, required, className = '', ...props 
       )}
       <textarea
         id={id}
-        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none"
+        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none transition-all duration-200"
         rows={3}
         {...props}
       />

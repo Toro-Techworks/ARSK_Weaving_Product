@@ -16,11 +16,6 @@ class Loom extends Model
         'status',
     ];
 
-    public function orders(): HasMany
-    {
-        return $this->hasMany(Order::class);
-    }
-
     public function loomEntries(): HasMany
     {
         return $this->hasMany(LoomEntry::class);

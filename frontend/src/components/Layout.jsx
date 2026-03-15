@@ -1,29 +1,44 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, LogOut, User } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getIcon } from './iconsMap';
+import { AnimatedPage } from './AnimatedPage';
+import { defaultTransition } from '../utils/motion';
 
 const sidebarBg = '#312E81';
 
+function isPathActive(path, pathname) {
+  if (!path) return false;
+  if (pathname === path) return true;
+  if (path === '/') return false;
+  return pathname.startsWith(path + '/');
+}
+
 function NavLink({ item, collapsed }) {
   const location = useLocation();
+  const reduceMotion = useReducedMotion();
   const path = item.route_path || item.path;
-  const isActive = location.pathname === path;
+  const isActive = isPathActive(path, location.pathname);
   const Icon = item.iconComponent;
   const label = item.menu_name || item.label;
   if (!path) return null;
+  const Wrapper = reduceMotion ? 'div' : motion.div;
+  const wrapperProps = reduceMotion ? {} : { whileHover: { scale: 1.02 }, whileTap: { scale: 0.98 }, transition: defaultTransition };
   return (
-    <Link
-      to={path}
-      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-white text-sm transition-colors ${
-        isActive ? 'bg-[#312E81]' : 'hover:bg-white/10'
-      }`}
-      title={collapsed ? label : undefined}
-    >
-      {Icon && <Icon className="w-5 h-5 shrink-0" />}
-      {!collapsed && <span>{label}</span>}
-    </Link>
+    <Wrapper {...wrapperProps}>
+      <Link
+        to={path}
+        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-white text-sm transition-colors duration-200 ${
+          isActive ? 'bg-white/20 ring-1 ring-white/30' : 'hover:bg-white/10'
+        }`}
+        title={collapsed ? label : undefined}
+      >
+        {Icon && <Icon className="w-5 h-5 shrink-0" />}
+        {!collapsed && <span>{label}</span>}
+      </Link>
+    </Wrapper>
   );
 }
 
@@ -61,7 +76,7 @@ function SidebarGroup({ item, collapsed }) {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg text-white text-sm hover:bg-white/10 transition-colors ${
+        className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg text-white text-sm transition-colors hover:bg-white/10 ${
           open ? 'bg-white/10' : ''
         }`}
         title={collapsed ? label : undefined}
@@ -134,9 +149,9 @@ export default function Layout({ children }) {
         <div className="border-t border-white/10 p-3 space-y-2 shrink-0">
           <Link
             to="/settings/profile"
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/10 text-white transition-colors hover:bg-white/15 ${
-              collapsed ? 'justify-center' : ''
-            }`}
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-white transition-colors ${
+              location.pathname === '/settings/profile' ? 'bg-white/20 ring-1 ring-white/30' : 'bg-white/10 hover:bg-white/15'
+            } ${collapsed ? 'justify-center' : ''}`}
             title={collapsed ? user?.name : undefined}
           >
             <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center shrink-0">
@@ -166,7 +181,11 @@ export default function Layout({ children }) {
         <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center shrink-0">
           <h1 className="text-lg font-semibold text-gray-900">Weaving Production Management</h1>
         </header>
-        <main className="flex-1 overflow-auto p-6 min-h-0">{children}</main>
+        <main className="flex-1 overflow-auto p-6 min-h-0">
+          <AnimatePresence mode="wait">
+            <AnimatedPage key={location.pathname}>{children}</AnimatedPage>
+          </AnimatePresence>
+        </main>
       </div>
     </div>
   );

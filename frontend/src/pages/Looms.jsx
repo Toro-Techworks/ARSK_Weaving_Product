@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { Plus, Layers } from 'lucide-react';
+import { Plus, Layers, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import { Card } from '../components/Card';
@@ -39,21 +39,22 @@ export function LoomList() {
       label: 'Actions',
       render: (_, row) => (
         <span className="flex gap-2">
-          <button type="button" onClick={() => { /* open edit modal or navigate */ }} className="text-brand hover:underline">Edit</button>
+          <button type="button" onClick={() => setEditLoom(row)} className="text-brand hover:underline">Edit</button>
           <button type="button" onClick={() => deleteLoom(row.id, row.loom_number)} className="text-red-600 hover:underline">Delete</button>
         </span>
       ),
     }] : []),
   ];
 
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [editLoom, setEditLoom] = useState(null);
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-gray-900">Looms</h2>
         {canEdit && (
-          <Link to="/loom-production/looms/add">
-            <Button className="gap-2"><Plus className="w-4 h-4" /> Add Loom</Button>
-          </Link>
+          <Button className="gap-2" onClick={() => setAddModalOpen(true)}><Plus className="w-4 h-4" /> Add Loom</Button>
         )}
       </div>
       <Card>
@@ -68,6 +69,123 @@ export function LoomList() {
           </div>
         )}
       </Card>
+      {addModalOpen && (
+        <LoomAddModal
+          onClose={() => setAddModalOpen(false)}
+          onSuccess={() => { setAddModalOpen(false); fetch(); }}
+        />
+      )}
+      {editLoom && (
+        <LoomEditModal
+          loom={editLoom}
+          onClose={() => setEditLoom(null)}
+          onSuccess={() => { setEditLoom(null); fetch(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function LoomEditModal({ loom, onClose, onSuccess }) {
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({ loom_number: '', location: '', status: 'Active' });
+
+  useEffect(() => {
+    if (loom?.id) setForm({ loom_number: loom.loom_number ?? '', location: loom.location ?? '', status: loom.status ?? 'Active' });
+  }, [loom?.id]);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    setLoading(true);
+    api.put(`/looms/${loom.id}`, form)
+      .then(() => { toast.success('Loom updated'); onSuccess?.(); })
+      .catch((err) => toast.error(err.response?.data?.message || 'Failed'))
+      .finally(() => setLoading(false));
+  };
+
+  const fieldClass = 'space-y-1.5';
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-lg max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
+        <div className="border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">Edit Loom</h3>
+          <button type="button" onClick={onClose} className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700" aria-label="Close">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Layers className="w-5 h-5 text-brand" />
+            <span className="text-sm font-medium text-gray-900">Loom Details</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className={fieldClass}>
+              <FormInput label="Loom Number" required value={form.loom_number} onChange={(e) => setForm({ ...form, loom_number: e.target.value })} className="!mb-0" />
+            </div>
+            <div className={fieldClass}>
+              <FormInput label="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className="!mb-0" />
+            </div>
+            <div className={fieldClass}>
+              <FormSelect label="Status" options={[{ value: 'Active', label: 'Active' }, { value: 'Inactive', label: 'Inactive' }]} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="!mb-0" />
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">
+            <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={loading}>{loading ? 'Saving...' : 'Update Loom'}</Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function LoomAddModal({ onClose, onSuccess }) {
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({ loom_number: '', location: '', status: 'Active' });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    setLoading(true);
+    api.post('/looms', form)
+      .then(() => { toast.success('Loom added'); onSuccess?.(); })
+      .catch((err) => toast.error(err.response?.data?.message || 'Failed'))
+      .finally(() => setLoading(false));
+  };
+
+  const fieldClass = 'space-y-1.5';
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-lg max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
+        <div className="border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">Add Loom</h3>
+          <button type="button" onClick={onClose} className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700" aria-label="Close">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Layers className="w-5 h-5 text-brand" />
+            <span className="text-sm font-medium text-gray-900">Loom Details</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className={fieldClass}>
+              <FormInput label="Loom Number" required value={form.loom_number} onChange={(e) => setForm({ ...form, loom_number: e.target.value })} className="!mb-0" />
+            </div>
+            <div className={fieldClass}>
+              <FormInput label="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className="!mb-0" />
+            </div>
+            <div className={fieldClass}>
+              <FormSelect label="Status" options={[{ value: 'Active', label: 'Active' }, { value: 'Inactive', label: 'Inactive' }]} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="!mb-0" />
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">
+            <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={loading}>{loading ? 'Saving...' : 'Add Loom'}</Button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

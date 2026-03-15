@@ -13,8 +13,6 @@ class PaymentResource extends JsonResource
             'id' => $this->id,
             'company_id' => $this->company_id,
             'company' => $this->whenLoaded('company', fn () => new CompanyResource($this->company)),
-            'order_id' => $this->order_id,
-            'order' => $this->whenLoaded('order', fn () => new OrderResource($this->order)),
             'payment_date' => $this->payment_date?->format('Y-m-d'),
             'amount' => (float) $this->amount,
             'mode' => $this->mode,

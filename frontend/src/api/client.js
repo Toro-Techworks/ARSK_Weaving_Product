@@ -7,9 +7,21 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
   },
   withCredentials: true,
 });
+
+/**
+ * Call before login so Laravel sets the CSRF cookie when using stateful Sanctum.
+ * Use the base URL (no /api) so the cookie is set for the same origin as API.
+ */
+export function getCsrfCookie() {
+  return axios.get(`${API_BASE}/sanctum/csrf-cookie`, {
+    withCredentials: true,
+    headers: { 'Accept': 'application/json' },
+  });
+}
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');

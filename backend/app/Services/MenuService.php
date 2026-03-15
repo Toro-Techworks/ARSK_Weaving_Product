@@ -3,25 +3,25 @@
 namespace App\Services;
 
 use App\Models\Menu;
-use App\Models\RoleMenuPermission;
 use App\Models\User;
+use App\Models\UserMenuPermission;
 use Illuminate\Support\Collection;
 
 class MenuService
 {
+    /**
+     * Menus for the user based only on user_menu_permissions.
+     */
     public function getMenusForUser(User $user): array
     {
-        if (!$user->role_id) {
+        $menuIds = $this->getViewableMenuIdsForUser($user);
+        if ($menuIds === []) {
             return [];
         }
 
-        $menuIds = RoleMenuPermission::where('role_id', $user->role_id)
-            ->where('can_view', true)
-            ->pluck('menu_id')
-            ->unique();
-
-        $allAllowedIds = $this->includeAncestors($menuIds->toArray());
+        $allAllowedIds = $this->includeAncestors($menuIds);
         $menus = Menu::active()
+            ->select(['id', 'menu_name', 'menu_key', 'route_path', 'icon', 'parent_id', 'sort_order'])
             ->whereIn('id', $allAllowedIds)
             ->orderBy('sort_order')
             ->get();
@@ -30,21 +30,16 @@ class MenuService
     }
 
     /**
-     * Get flat permissions map for the user's role: menu_key => [ view => bool, edit => bool ].
-     * Used for page guards and edit control in the frontend.
+     * Get flat permissions map: menu_key => [ view => bool, edit => bool ].
      */
     public function getPermissionsForUser(User $user): array
     {
-        if (!$user->role_id) {
-            return [];
-        }
-
-        $rows = RoleMenuPermission::where('role_id', $user->role_id)
-            ->join('menus', 'menus.id', '=', 'role_menu_permissions.menu_id')
+        $rows = UserMenuPermission::where('user_id', $user->id)
+            ->join('menus', 'menus.id', '=', 'user_menu_permissions.menu_id')
             ->select(
                 'menus.menu_key',
-                'role_menu_permissions.can_view as view_permission',
-                'role_menu_permissions.can_edit as edit_permission'
+                'user_menu_permissions.view_permission',
+                'user_menu_permissions.edit_permission'
             )
             ->get();
 
@@ -58,17 +53,27 @@ class MenuService
         return $permissions;
     }
 
+    private function getViewableMenuIdsForUser(User $user): array
+    {
+        return UserMenuPermission::where('user_id', $user->id)
+            ->where('view_permission', true)
+            ->pluck('menu_id')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
     private function includeAncestors(array $menuIds): array
     {
         $ids = $menuIds;
-        $menus = Menu::whereIn('id', $ids)->get();
+        $menus = Menu::whereIn('id', $ids)->select(['id', 'parent_id'])->get();
         while (true) {
             $parentIds = $menus->pluck('parent_id')->filter()->unique()->diff(collect($ids))->values()->toArray();
             if (empty($parentIds)) {
                 break;
             }
             $ids = array_merge($ids, $parentIds);
-            $menus = Menu::whereIn('id', $parentIds)->get();
+            $menus = Menu::whereIn('id', $parentIds)->select(['id', 'parent_id'])->get();
         }
         return array_values(array_unique($ids));
     }
@@ -95,7 +100,9 @@ class MenuService
 
     public function getAllMenusTree(): array
     {
-        $menus = Menu::orderBy('sort_order')->get();
+        $menus = Menu::select(['id', 'menu_name', 'menu_key', 'route_path', 'icon', 'parent_id', 'sort_order'])
+            ->orderBy('sort_order')
+            ->get();
         return $this->buildTree($menus, null);
     }
 }

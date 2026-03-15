@@ -12,7 +12,6 @@ class LoomEntry extends Model
 
     protected $fillable = [
         'loom_id',
-        'order_id',
         'date',
         'shift',
         'meters_produced',
@@ -44,10 +43,5 @@ class LoomEntry extends Model
     public function loom(): BelongsTo
     {
         return $this->belongsTo(Loom::class);
-    }
-
-    public function order(): BelongsTo
-    {
-        return $this->belongsTo(Order::class);
     }
 }

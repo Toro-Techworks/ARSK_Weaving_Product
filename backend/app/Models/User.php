@@ -52,12 +52,8 @@ class User extends Authenticatable
         if ($rel && is_object($rel)) {
             return $rel->role_name ?? null;
         }
-        if (array_key_exists('role', $this->attributes)) {
-            return (string) $this->attributes['role'];
-        }
         $this->loadMissing('role');
-        $rel = $this->getRelation('role');
-        return $rel?->role_name;
+        return $this->role?->role_name;
     }
 
     public function hasRole(string $roleName): bool
@@ -83,23 +79,6 @@ class User extends Authenticatable
     public function isActive(): bool
     {
         return $this->status === self::STATUS_ACTIVE;
-    }
-
-    public function hasMenuPermission(string $menuKey, string $action = 'view'): bool
-    {
-        if (!$this->role_id) {
-            return false;
-        }
-        $col = match ($action) {
-            'create' => 'can_create',
-            'edit' => 'can_edit',
-            'delete' => 'can_delete',
-            default => 'can_view',
-        };
-        return RoleMenuPermission::where('role_id', $this->role_id)
-            ->whereHas('menu', fn ($q) => $q->where('menu_key', $menuKey))
-            ->where($col, true)
-            ->exists();
     }
 
     public function scopeActive($query)

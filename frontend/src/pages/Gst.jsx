@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Link, Navigate } from 'react-router-dom';
-import { Receipt, Calculator } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Receipt, Calculator, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import { Card } from '../components/Card';
@@ -59,29 +59,33 @@ function GstList({ type, refresh = 0, canEdit = true }) {
 export function GstIn() {
   const { canEdit } = usePagePermission();
   const [refresh, setRefresh] = useState(0);
+  const [addModalOpen, setAddModalOpen] = useState(false);
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-gray-900">GST In</h2>
         <div className="flex gap-2">
-          {canEdit && <Link to="/gst/in/add"><Button>Add GST In</Button></Link>}
+          {canEdit && <Button onClick={() => setAddModalOpen(true)}>Add GST In</Button>}
           <Link to="/gst/out"><Button variant="secondary">GST Out</Button></Link>
         </div>
       </div>
       <GstList type="in" refresh={refresh} canEdit={canEdit} />
+      {addModalOpen && (
+        <GstInAddModal
+          onClose={() => setAddModalOpen(false)}
+          onSuccess={() => { setAddModalOpen(false); setRefresh((r) => r + 1); }}
+        />
+      )}
     </div>
   );
 }
 
-export function GstInAdd({ onSuccess }) {
-  const { canEdit } = usePagePermission();
+function GstInAddModal({ onClose, onSuccess }) {
   const [companies, setCompanies] = useState([]);
   const [form, setForm] = useState({ company_id: '', invoice_number: '', date: new Date().toISOString().slice(0, 10), taxable_value: '', gst_percentage: 12, description: '' });
   const [loading, setLoading] = useState(false);
 
   useEffect(() => { api.get('/companies-list').then(({ data: d }) => setCompanies(d.data || [])); }, []);
-
-  if (!canEdit) return <Navigate to="/gst/in" replace />;
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -98,79 +102,64 @@ export function GstInAdd({ onSuccess }) {
   const fieldClass = 'space-y-1.5';
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Add GST In</h1>
-          <p className="mt-1 text-sm text-gray-500">Record a vendor or purchase entry for GST In.</p>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">Add GST In</h3>
+          <button type="button" onClick={onClose} className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700" aria-label="Close">
+            <X className="w-5 h-5" />
+          </button>
         </div>
-        <Link to="/gst/in">
-          <Button variant="secondary">Back to GST In</Button>
-        </Link>
-      </div>
-
-      <form onSubmit={handleSubmit} className="space-y-8">
-        <Card className="border-gray-100">
-          <div className="flex items-center gap-2 mb-4">
-            <Receipt className="w-5 h-5 text-brand" />
-            <h3 className="text-base font-semibold text-gray-900">Invoice & Vendor</h3>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className={fieldClass}>
-              <FormSelect label="Company (optional)" options={[{ value: '', label: '— None —' }, ...companies.map((c) => ({ value: c.id, label: c.company_name }))]} value={form.company_id} onChange={(e) => setForm({ ...form, company_id: e.target.value })} className="!mb-0" />
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Receipt className="w-5 h-5 text-brand" />
+              <span className="text-sm font-medium text-gray-900">Invoice & Vendor</span>
             </div>
-            <div className={fieldClass}>
-              <FormInput label="Invoice Number" value={form.invoice_number} onChange={(e) => setForm({ ...form, invoice_number: e.target.value })} placeholder="Invoice number" className="!mb-0" />
-            </div>
-            <div className={fieldClass}>
-              <FormInput label="Date" type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="!mb-0" />
-            </div>
-          </div>
-        </Card>
-
-        <Card className="border-gray-100">
-          <div className="flex items-center gap-2 mb-4">
-            <Calculator className="w-5 h-5 text-brand" />
-            <h3 className="text-base font-semibold text-gray-900">Amount & Tax</h3>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className={fieldClass}>
-              <FormInput label="Taxable Value (₹)" type="number" step="0.01" required value={form.taxable_value} onChange={(e) => setForm({ ...form, taxable_value: e.target.value })} placeholder="0.00" className="!mb-0" />
-            </div>
-            <div className={fieldClass}>
-              <FormInput label="GST %" type="number" step="0.01" value={form.gst_percentage} onChange={(e) => setForm({ ...form, gst_percentage: e.target.value })} placeholder="12" className="!mb-0" />
-            </div>
-            <div className="md:col-span-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className={fieldClass}>
-                <FormInput label="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Optional notes" className="!mb-0" />
+                <FormSelect label="Company (optional)" options={[{ value: '', label: '— None —' }, ...companies.map((c) => ({ value: c.id, label: c.company_name }))]} value={form.company_id} onChange={(e) => setForm({ ...form, company_id: e.target.value })} className="!mb-0" />
+              </div>
+              <div className={fieldClass}>
+                <FormInput label="Invoice Number" value={form.invoice_number} onChange={(e) => setForm({ ...form, invoice_number: e.target.value })} placeholder="Invoice number" className="!mb-0" />
+              </div>
+              <div className={fieldClass}>
+                <FormInput label="Date" type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="!mb-0" />
               </div>
             </div>
           </div>
-          <div className="mt-6 pt-6 border-t border-gray-100 flex flex-col sm:flex-row sm:items-center gap-3">
-            <Button type="submit" disabled={loading}>{loading ? 'Saving...' : 'Add GST In'}</Button>
-            <Link to="/gst/in" className="text-sm text-gray-600 hover:text-brand">Cancel</Link>
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Calculator className="w-5 h-5 text-brand" />
+              <span className="text-sm font-medium text-gray-900">Amount & Tax</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className={fieldClass}>
+                <FormInput label="Taxable Value (₹)" type="number" step="0.01" required value={form.taxable_value} onChange={(e) => setForm({ ...form, taxable_value: e.target.value })} placeholder="0.00" className="!mb-0" />
+              </div>
+              <div className={fieldClass}>
+                <FormInput label="GST %" type="number" step="0.01" value={form.gst_percentage} onChange={(e) => setForm({ ...form, gst_percentage: e.target.value })} placeholder="12" className="!mb-0" />
+              </div>
+              <div className="md:col-span-2">
+                <div className={fieldClass}>
+                  <FormInput label="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Optional notes" className="!mb-0" />
+                </div>
+              </div>
+            </div>
           </div>
-        </Card>
-      </form>
+          <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">
+            <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={loading}>{loading ? 'Saving...' : 'Add GST In'}</Button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
 
 export function GstOut() {
   const { canEdit } = usePagePermission();
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [refresh, setRefresh] = useState(0);
-
-  useEffect(() => { api.get('/orders', { params: { status: 'Completed', per_page: 100 } }).then(({ data: res }) => setOrders(res.data || [])).catch(() => setOrders([])); }, []);
-
-  const generateFromOrder = (orderId) => {
-    setLoading(true);
-    api.post(`/orders/${orderId}/gst-out`)
-      .then(() => { toast.success('GST Out generated'); setRefresh((r) => r + 1); })
-      .catch((err) => toast.error(err.response?.data?.message || 'Failed'))
-      .finally(() => setLoading(false));
-  };
 
   return (
     <div>
@@ -178,19 +167,7 @@ export function GstOut() {
         <h2 className="text-xl font-semibold text-gray-900">GST Out</h2>
         <Link to="/gst/in"><Button variant="secondary">GST In</Button></Link>
       </div>
-      <p className="text-gray-600 mb-4">GST Out is auto-generated from completed orders. Generate for a completed order below:</p>
-      <Card title="Generate from Completed Order" className="mb-6">
-        <div className="space-y-2">
-          {orders.length === 0 ? <p className="text-gray-500">No completed orders.</p> : (
-            orders.map((o) => (
-              <div key={o.id} className="flex justify-between items-center py-2 border-b border-gray-100">
-                <span>{o.dc_number} — {o.company?.company_name} — ₹{Number(o.grand_total).toLocaleString()}</span>
-                <Button onClick={() => generateFromOrder(o.id)} disabled={loading || !canEdit}>Generate GST Out</Button>
-              </div>
-            ))
-          )}
-        </div>
-      </Card>
+      <p className="text-gray-600 mb-4">GST Out records are entered manually or from your own records. Add entries using the GST In/Out flow as needed.</p>
       <GstList type="out" refresh={refresh} canEdit={canEdit} />
     </div>
   );

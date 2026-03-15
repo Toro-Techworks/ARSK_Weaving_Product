@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import { Card } from '../components/Card';
 import { Table } from '../components/Table';
 import Button from '../components/Button';
 import { FormInput, FormTextarea } from '../components/FormInput';
-import { Plus, Pencil, Trash2, Building2 } from 'lucide-react';
+import { AnimatedModal } from '../components/AnimatedModal';
+import { Plus, Building2, X } from 'lucide-react';
 import { usePagePermission } from '../hooks/usePagePermission';
 
 export function CompanyList() {
@@ -56,11 +57,14 @@ export function CompanyList() {
     }] : []),
   ];
 
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [editCompany, setEditCompany] = useState(null);
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-semibold text-gray-900">Company List</h2>
-        {canEdit && <Link to="/companies/add"><Button className="gap-2"><Plus className="w-4 h-4" /> Add Company</Button></Link>}
+        {canEdit && <Button className="gap-2" onClick={() => setAddModalOpen(true)}><Plus className="w-4 h-4" /> Add Company</Button>}
       </div>
       <Card>
         <div className="flex gap-4 mb-4">
@@ -77,7 +81,156 @@ export function CompanyList() {
           </div>
         )}
       </Card>
+      {addModalOpen && (
+        <CompanyAddModal
+          onClose={() => setAddModalOpen(false)}
+          onSuccess={() => { setAddModalOpen(false); fetch(); }}
+        />
+      )}
+      {editCompany && (
+        <CompanyEditModal
+          company={editCompany}
+          onClose={() => setEditCompany(null)}
+          onSuccess={() => { setEditCompany(null); fetch(); }}
+        />
+      )}
     </div>
+  );
+}
+
+function CompanyAddModal({ onClose, onSuccess }) {
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({
+    company_name: '', gst_number: '', address: '', contact_person: '', phone: '', payment_terms: '',
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    setLoading(true);
+    api.post('/companies', form)
+      .then(() => { toast.success('Company added'); onSuccess?.(); })
+      .catch((err) => toast.error(err.response?.data?.message || 'Failed'))
+      .finally(() => setLoading(false));
+  };
+
+  const fieldClass = 'space-y-1.5';
+
+  return (
+    <AnimatedModal open onClose={onClose} maxWidth="max-w-2xl">
+      <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between rounded-t-xl">
+        <h3 className="text-lg font-semibold text-gray-900">Add Company</h3>
+        <button type="button" onClick={onClose} className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700" aria-label="Close">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+      <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Building2 className="w-5 h-5 text-brand" />
+            <span className="text-sm font-medium text-gray-900">Company Details</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className={fieldClass}>
+              <FormInput label="Company Name" required value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} className="!mb-0" />
+            </div>
+            <div className={fieldClass}>
+              <FormInput label="GST Number" value={form.gst_number} onChange={(e) => setForm({ ...form, gst_number: e.target.value })} className="!mb-0" />
+            </div>
+            <div className={fieldClass}>
+              <FormInput label="Contact Person" value={form.contact_person} onChange={(e) => setForm({ ...form, contact_person: e.target.value })} className="!mb-0" />
+            </div>
+            <div className={fieldClass}>
+              <FormInput label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="!mb-0" />
+            </div>
+            <div className="md:col-span-2">
+              <div className={fieldClass}>
+                <FormTextarea label="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="!mb-0" />
+              </div>
+            </div>
+            <div className="md:col-span-2">
+              <div className={fieldClass}>
+                <FormInput label="Payment Terms" value={form.payment_terms} onChange={(e) => setForm({ ...form, payment_terms: e.target.value })} className="!mb-0" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">
+          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button type="submit" disabled={loading}>{loading ? 'Saving...' : 'Add Company'}</Button>
+        </div>
+      </form>
+    </AnimatedModal>
+  );
+}
+
+function CompanyEditModal({ company, onClose, onSuccess }) {
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({
+    company_name: '', gst_number: '', address: '', contact_person: '', phone: '', payment_terms: '',
+  });
+
+  useEffect(() => {
+    if (company?.id) {
+      api.get(`/companies/${company.id}`).then(({ data }) => setForm(data.data || {})).catch(() => toast.error('Failed to load'));
+    }
+  }, [company?.id]);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    setLoading(true);
+    api.put(`/companies/${company.id}`, form)
+      .then(() => { toast.success('Company updated'); onSuccess?.(); })
+      .catch((err) => toast.error(err.response?.data?.message || 'Failed'))
+      .finally(() => setLoading(false));
+  };
+
+  const fieldClass = 'space-y-1.5';
+
+  return (
+    <AnimatedModal open onClose={onClose} maxWidth="max-w-2xl">
+      <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between rounded-t-xl">
+        <h3 className="text-lg font-semibold text-gray-900">Edit Company</h3>
+        <button type="button" onClick={onClose} className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700" aria-label="Close">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+      <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Building2 className="w-5 h-5 text-brand" />
+            <span className="text-sm font-medium text-gray-900">Company Details</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className={fieldClass}>
+              <FormInput label="Company Name" required value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} className="!mb-0" />
+            </div>
+            <div className={fieldClass}>
+              <FormInput label="GST Number" value={form.gst_number} onChange={(e) => setForm({ ...form, gst_number: e.target.value })} className="!mb-0" />
+            </div>
+            <div className={fieldClass}>
+              <FormInput label="Contact Person" value={form.contact_person} onChange={(e) => setForm({ ...form, contact_person: e.target.value })} className="!mb-0" />
+            </div>
+            <div className={fieldClass}>
+              <FormInput label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="!mb-0" />
+            </div>
+            <div className="md:col-span-2">
+              <div className={fieldClass}>
+                <FormTextarea label="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="!mb-0" />
+              </div>
+            </div>
+            <div className="md:col-span-2">
+              <div className={fieldClass}>
+                <FormInput label="Payment Terms" value={form.payment_terms} onChange={(e) => setForm({ ...form, payment_terms: e.target.value })} className="!mb-0" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">
+          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button type="submit" disabled={loading}>{loading ? 'Saving...' : 'Update Company'}</Button>
+        </div>
+      </form>
+    </AnimatedModal>
   );
 }
 

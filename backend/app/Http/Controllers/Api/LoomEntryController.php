@@ -13,7 +13,7 @@ class LoomEntryController extends Controller
     public function index(Request $request): JsonResponse
     {
         $perPage = $request->input('per_page', 15);
-        $entries = LoomEntry::with(['loom', 'order'])
+        $entries = LoomEntry::with(['loom'])
             ->when($request->loom_id, fn ($q) => $q->where('loom_id', $request->loom_id))
             ->when($request->date_from, fn ($q) => $q->whereDate('date', '>=', $request->date_from))
             ->when($request->date_to, fn ($q) => $q->whereDate('date', '<=', $request->date_to))
@@ -47,7 +47,7 @@ class LoomEntryController extends Controller
         $validated['rejected_meters'] = $validated['rejected_meters'] ?? 0;
 
         $entry = LoomEntry::create($validated);
-        return response()->json(['data' => new LoomEntryResource($entry->load(['loom', 'order']))], 201);
+        return response()->json(['data' => new LoomEntryResource($entry->load(['loom']))], 201);
     }
 
     public function show(LoomEntry $loomEntry): JsonResponse
@@ -60,7 +60,6 @@ class LoomEntryController extends Controller
     {
         $validated = $request->validate([
             'loom_id' => 'sometimes|required|exists:looms,id',
-            'order_id' => 'nullable|exists:orders,id',
             'date' => 'sometimes|required|date',
             'shift' => 'sometimes|required|string|max:50',
             'meters_produced' => 'sometimes|required|numeric|min:0',
@@ -69,7 +68,7 @@ class LoomEntryController extends Controller
         ]);
 
         $loomEntry->update($validated);
-        return response()->json(['data' => new LoomEntryResource($loomEntry->fresh(['loom', 'order']))]);
+        return response()->json(['data' => new LoomEntryResource($loomEntry->fresh(['loom']))]);
     }
 
     public function destroy(LoomEntry $loomEntry): JsonResponse

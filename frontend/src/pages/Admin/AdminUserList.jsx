@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { UserPlus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -18,6 +18,7 @@ export function AdminUserList() {
   const [loading, setLoading] = useState(true);
   const [editModal, setEditModal] = useState(null);
   const [resetPasswordUser, setResetPasswordUser] = useState(null);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
   const fetchUsers = () => {
     setLoading(true);
@@ -85,9 +86,7 @@ export function AdminUserList() {
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-gray-900">Manage Users</h2>
         {pageCanEdit && (
-          <Link to="/admin/users/create">
-            <Button>Create User</Button>
-          </Link>
+          <Button className="gap-2" onClick={() => setCreateModalOpen(true)}><UserPlus className="w-4 h-4" /> Create User</Button>
         )}
       </div>
 
@@ -188,6 +187,102 @@ export function AdminUserList() {
           onReset={handleResetPassword}
         />
       )}
+
+      {createModalOpen && (
+        <CreateUserModal
+          currentUser={currentUser}
+          onClose={() => setCreateModalOpen(false)}
+          onSuccess={() => { setCreateModalOpen(false); fetchUsers(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function CreateUserModal({ currentUser, onClose, onSuccess }) {
+  const [roles, setRoles] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    password_confirmation: '',
+    role_id: '',
+    status: 'active',
+  });
+
+  useEffect(() => {
+    api.get('/roles').then(({ data }) => setRoles(data.data || [])).catch(() => {});
+  }, []);
+
+  const roleOptions = roles.map((r) => ({ value: String(r.id), label: (r.role_name || '').replace(/_/g, ' ') }));
+  const filteredRoleOptions = currentUser?.role === 'super_admin'
+    ? roleOptions
+    : roleOptions.filter((r) => (r.label || '').toLowerCase() === 'user');
+
+  useEffect(() => {
+    if (form.role_id === '' && filteredRoleOptions.length > 0) {
+      setForm((f) => ({ ...f, role_id: filteredRoleOptions[0].value }));
+    }
+  }, [filteredRoleOptions.length]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await api.post('/users', form);
+      toast.success('User created successfully');
+      onSuccess?.();
+    } catch (err) {
+      const msg = err.response?.data?.message || (err.response?.data?.errors
+        ? Object.values(err.response.data.errors).flat().join(' ')
+        : 'Failed to create user');
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const STATUSES = [{ value: 'active', label: 'Active' }, { value: 'disabled', label: 'Disabled' }];
+  const fieldClass = 'space-y-1.5';
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-lg max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">Create New User</h3>
+          <button type="button" onClick={onClose} className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700" aria-label="Close">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <p className="text-sm text-gray-600 -mt-2">Create a new system user and assign a role.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className={fieldClass}>
+              <FormInput label="Name" required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Full name" className="!mb-0" />
+            </div>
+            <div className={fieldClass}>
+              <FormInput label="Email" type="email" required value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="email@example.com" className="!mb-0" />
+            </div>
+            <div className={fieldClass}>
+              <FormInput label="Password" type="password" required value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} placeholder="••••••••" className="!mb-0" />
+            </div>
+            <div className={fieldClass}>
+              <FormInput label="Confirm Password" type="password" required value={form.password_confirmation} onChange={(e) => setForm((f) => ({ ...f, password_confirmation: e.target.value }))} placeholder="••••••••" className="!mb-0" />
+            </div>
+            <div className={fieldClass}>
+              <FormSelect label="Role" required options={filteredRoleOptions} value={form.role_id} onChange={(e) => setForm((f) => ({ ...f, role_id: e.target.value }))} className="!mb-0" />
+            </div>
+            <div className={fieldClass}>
+              <FormSelect label="Status" options={STATUSES} value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} className="!mb-0" />
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">
+            <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={loading}>{loading ? 'Creating...' : 'Create User'}</Button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

@@ -67,7 +67,10 @@ class LoomController extends Controller
 
     public function list(): JsonResponse
     {
-        $looms = Loom::where('status', 'Active')->orderBy('loom_number')->get();
-        return response()->json(['data' => LoomResource::collection($looms)]);
+        $looms = Loom::select(['id', 'loom_number'])
+            ->where('status', 'Active')
+            ->orderBy('loom_number')
+            ->get();
+        return response()->json(['data' => $looms]);
     }
 }

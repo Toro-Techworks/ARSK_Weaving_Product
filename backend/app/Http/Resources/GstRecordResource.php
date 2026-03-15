@@ -15,8 +15,6 @@ class GstRecordResource extends JsonResource
             'invoice_number' => $this->invoice_number,
             'company_id' => $this->company_id,
             'company' => $this->whenLoaded('company', fn () => new CompanyResource($this->company)),
-            'order_id' => $this->order_id,
-            'order' => $this->whenLoaded('order', fn () => new OrderResource($this->order)),
             'date' => $this->date?->format('Y-m-d'),
             'taxable_value' => (float) $this->taxable_value,
             'gst_percentage' => (float) $this->gst_percentage,

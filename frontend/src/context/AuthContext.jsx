@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import api from '../api/client';
+import api, { getCsrfCookie } from '../api/client';
 
 const AuthContext = createContext(null);
 
@@ -79,6 +79,7 @@ export function AuthProvider({ children }) {
   }, [refreshMenus]);
 
   const login = useCallback(async (email, password) => {
+    await getCsrfCookie();
     const { data } = await api.post('/login', { email, password });
     localStorage.setItem('token', data.token);
     setUser(data.user);

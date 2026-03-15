@@ -73,7 +73,7 @@ class CompanyController extends Controller
 
     public function list(): JsonResponse
     {
-        $companies = Company::orderBy('company_name')->get();
-        return response()->json(['data' => CompanyResource::collection($companies)]);
+        $companies = Company::select(['id', 'company_name'])->orderBy('company_name')->get();
+        return response()->json(['data' => $companies]);
     }
 }

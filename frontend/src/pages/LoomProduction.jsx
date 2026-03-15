@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { Plus, Calendar, Layers } from 'lucide-react';
+import { Plus, Calendar, Layers, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import { Card } from '../components/Card';
@@ -50,14 +50,14 @@ export function LoomDailyEntry() {
     ...(canEdit ? [{ key: 'actions', label: 'Actions', render: (_, row) => <button type="button" onClick={() => deleteEntry(row.id)} className="text-red-600 hover:underline">Delete</button> }] : []),
   ];
 
+  const [addModalOpen, setAddModalOpen] = useState(false);
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-gray-900">Daily Entry</h2>
         {canEdit && (
-          <Link to="/loom-production/daily/add">
-            <Button className="gap-2"><Plus className="w-4 h-4" /> Add Daily Entry</Button>
-          </Link>
+          <Button className="gap-2" onClick={() => setAddModalOpen(true)}><Plus className="w-4 h-4" /> Add Daily Entry</Button>
         )}
       </div>
       <Card>
@@ -77,6 +77,106 @@ export function LoomDailyEntry() {
           </div>
         )}
       </Card>
+      {addModalOpen && (
+        <LoomEntryAddModal
+          onClose={() => setAddModalOpen(false)}
+          onSuccess={() => { setAddModalOpen(false); fetch(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function LoomEntryAddModal({ onClose, onSuccess }) {
+  const [loading, setLoading] = useState(false);
+  const [looms, setLooms] = useState([]);
+  const [form, setForm] = useState({
+    loom_id: '',
+    order_id: '',
+    date: new Date().toISOString().slice(0, 10),
+    shift: 'Day',
+    meters_produced: '',
+    rejected_meters: '0',
+    operator_name: '',
+  });
+
+  useEffect(() => { api.get('/looms-list').then(({ data: d }) => setLooms(d.data || [])); }, []);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    setLoading(true);
+    const payload = {
+      loom_id: Number(form.loom_id),
+      order_id: form.order_id ? Number(form.order_id) : null,
+      date: form.date,
+      shift: form.shift,
+      meters_produced: Number(form.meters_produced),
+      rejected_meters: Number(form.rejected_meters) || 0,
+      operator_name: form.operator_name || null,
+    };
+    api.post('/loom-entries', payload)
+      .then(() => { toast.success('Entry saved'); onSuccess?.(); })
+      .catch((err) => toast.error(err.response?.data?.message || 'Failed'))
+      .finally(() => setLoading(false));
+  };
+
+  const fieldClass = 'space-y-1.5';
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">Add Daily Entry</h3>
+          <button type="button" onClick={onClose} className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700" aria-label="Close">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Layers className="w-5 h-5 text-brand" />
+              <span className="text-sm font-medium text-gray-900">Link to Order (optional)</span>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">Search by DC number to associate this entry with an order.</p>
+            <SearchableOrderSelect
+              label="Order"
+              value={form.order_id}
+              onChange={(orderId) => setForm((f) => ({ ...f, order_id: orderId || '' }))}
+              placeholder="Search by DC number or fabric..."
+            />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Calendar className="w-5 h-5 text-brand" />
+              <span className="text-sm font-medium text-gray-900">Production Details</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className={fieldClass}>
+                <FormSelect label="Loom" required options={looms.map((l) => ({ value: l.id, label: l.loom_number }))} value={form.loom_id} onChange={(e) => setForm({ ...form, loom_id: e.target.value })} className="!mb-0" />
+              </div>
+              <div className={fieldClass}>
+                <FormInput label="Date" type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className="!mb-0" />
+              </div>
+              <div className={fieldClass}>
+                <FormSelect label="Shift" required options={[{ value: 'Day', label: 'Day' }, { value: 'Night', label: 'Night' }]} value={form.shift} onChange={(e) => setForm({ ...form, shift: e.target.value })} className="!mb-0" />
+              </div>
+              <div className={fieldClass}>
+                <FormInput label="Operator Name" value={form.operator_name} onChange={(e) => setForm({ ...form, operator_name: e.target.value })} placeholder="Operator name" className="!mb-0" />
+              </div>
+              <div className={fieldClass}>
+                <FormInput label="Meters Produced" type="number" step="0.01" required value={form.meters_produced} onChange={(e) => setForm({ ...form, meters_produced: e.target.value })} placeholder="0" className="!mb-0" />
+              </div>
+              <div className={fieldClass}>
+                <FormInput label="Rejected Meters" type="number" step="0.01" value={form.rejected_meters} onChange={(e) => setForm({ ...form, rejected_meters: e.target.value })} placeholder="0" className="!mb-0" />
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">
+            <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={loading}>{loading ? 'Saving...' : 'Save Entry'}</Button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 {
-    "name": "com.toro.arsk.production",
+    "name": "toro/arsk-production",
     "type": "project",
     "description": "Toro Production - Weaving Production Management",
     "keywords": ["laravel", "weaving", "erp"],

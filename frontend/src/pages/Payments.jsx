@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CreditCard } from 'lucide-react';
+import { CreditCard, Plus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import { Card } from '../components/Card';
@@ -16,6 +16,7 @@ export function PaymentList() {
   const [page, setPage] = useState(1);
   const [companyId, setCompanyId] = useState('');
   const [loading, setLoading] = useState(true);
+  const [addModalOpen, setAddModalOpen] = useState(false);
 
   useEffect(() => { api.get('/companies-list').then(({ data: d }) => setCompanies(d.data || [])); }, []);
 
@@ -45,7 +46,12 @@ export function PaymentList() {
 
   return (
     <div>
-      <h2 className="text-xl font-semibold text-gray-900 mb-6">Payments</h2>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-semibold text-gray-900">Income (Payments)</h2>
+        {canEdit && (
+          <Button className="gap-2" onClick={() => setAddModalOpen(true)}><Plus className="w-4 h-4" /> Record Payment</Button>
+        )}
+      </div>
       <Card>
         <div className="mb-4">
           <FormSelect options={[{ value: '', label: 'All companies' }, ...companies.map((c) => ({ value: c.id, label: c.company_name }))]} value={companyId} onChange={(e) => setCompanyId(e.target.value)} />
@@ -61,24 +67,22 @@ export function PaymentList() {
           </div>
         )}
       </Card>
+      {addModalOpen && (
+        <PaymentAddModal
+          onClose={() => setAddModalOpen(false)}
+          onSuccess={() => { setAddModalOpen(false); fetch(); }}
+        />
+      )}
     </div>
   );
 }
 
-export function PaymentForm({ onSuccess }) {
-  const { canEdit } = usePagePermission();
+function PaymentAddModal({ onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [companies, setCompanies] = useState([]);
-  const [orders, setOrders] = useState([]);
-  const [form, setForm] = useState({ company_id: '', order_id: '', payment_date: new Date().toISOString().slice(0, 10), amount: '', mode: 'Bank', reference_number: '', notes: '' });
+  const [form, setForm] = useState({ company_id: '', payment_date: new Date().toISOString().slice(0, 10), amount: '', mode: 'Bank', reference_number: '', notes: '' });
 
   useEffect(() => { api.get('/companies-list').then(({ data: d }) => setCompanies(d.data || [])); }, []);
-  useEffect(() => {
-    if (form.company_id) api.get('/orders', { params: { company_id: form.company_id } }).then(({ data: res }) => setOrders(res.data || [])).catch(() => setOrders([]));
-    else setOrders([]);
-  }, [form.company_id]);
-
-  if (!canEdit) return null;
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -92,20 +96,19 @@ export function PaymentForm({ onSuccess }) {
   const fieldClass = 'space-y-1.5';
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <Card className="border-gray-100">
-        <div className="flex items-center gap-2 mb-4">
-          <CreditCard className="w-5 h-5 text-brand" />
-          <h3 className="text-base font-semibold text-gray-900">Record Payment</h3>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">Record Payment</h3>
+          <button type="button" onClick={onClose} className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700" aria-label="Close">
+            <X className="w-5 h-5" />
+          </button>
         </div>
-        <p className="text-sm text-gray-600 mb-6">Record a payment received from a company.</p>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          <p className="text-sm text-gray-600 -mt-2">Record a payment received from a company.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className={fieldClass}>
-              <FormSelect label="Company" required options={companies.map((c) => ({ value: c.id, label: c.company_name }))} value={form.company_id} onChange={(e) => setForm({ ...form, company_id: e.target.value, order_id: '' })} className="!mb-0" />
-            </div>
-            <div className={fieldClass}>
-              <FormSelect label="Order (optional)" options={[{ value: '', label: '— None —' }, ...orders.map((o) => ({ value: o.id, label: `${o.dc_number} - ₹${Number(o.grand_total).toLocaleString()}` }))]} value={form.order_id} onChange={(e) => setForm({ ...form, order_id: e.target.value })} className="!mb-0" />
+              <FormSelect label="Company" required options={companies.map((c) => ({ value: c.id, label: c.company_name }))} value={form.company_id} onChange={(e) => setForm({ ...form, company_id: e.target.value })} className="!mb-0" />
             </div>
             <div className={fieldClass}>
               <FormInput label="Payment Date" type="date" required value={form.payment_date} onChange={(e) => setForm({ ...form, payment_date: e.target.value })} className="!mb-0" />
@@ -125,11 +128,16 @@ export function PaymentForm({ onSuccess }) {
               </div>
             </div>
           </div>
-          <div className="pt-2">
+          <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">
+            <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
             <Button type="submit" disabled={loading}>{loading ? 'Saving...' : 'Save Payment'}</Button>
           </div>
         </form>
-      </Card>
+      </div>
     </div>
   );
+}
+
+export function PaymentForm({ onSuccess }) {
+  return null;
 }

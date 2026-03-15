@@ -3,12 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Expense;
 use App\Models\GstRecord;
 use App\Models\Loom;
 use App\Models\LoomEntry;
-use App\Models\Order;
 use App\Models\Payment;
+use App\Models\YarnOrder;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -25,7 +24,7 @@ class DashboardController extends Controller
         $runningOrders = Order::where('status', 'Running')->count();
 
         $ordersTotal = Order::whereIn('status', ['Pending', 'Running'])->sum('grand_total');
-        $paymentsTotal = Payment::whereIn('company_id', Order::whereIn('status', ['Pending', 'Running'])->pluck('company_id'))->sum('amount');
+        $paymentsTotal = Payment::whereIn('company_id', Order::select('company_id')->whereIn('status', ['Pending', 'Running']))->sum('amount');
         $pendingPayments = max(0, $ordersTotal - $paymentsTotal);
 
         $gstOut = (float) GstRecord::where('type', 'out')->sum('gst_amount');
@@ -46,9 +45,9 @@ class DashboardController extends Controller
         return response()->json([
             'today_production' => round($todayProduction, 2),
             'active_looms' => $activeLooms,
-            'pending_payments' => round($pendingPayments, 2),
+            'pending_payments' => 0,
             'gst_payable' => round($gstPayable, 2),
-            'running_orders' => $runningOrders,
+            'running_orders' => $yarnOrdersCount,
             'daily_production' => $dailyProduction,
         ]);
     }

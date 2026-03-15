@@ -12,9 +12,7 @@ class LoomEntryResource extends JsonResource
         return [
             'id' => $this->id,
             'loom_id' => $this->loom_id,
-            'order_id' => $this->order_id,
             'loom' => $this->whenLoaded('loom', fn () => new LoomResource($this->loom)),
-            'order' => $this->whenLoaded('order', fn () => new \App\Http\Resources\OrderResource($this->order)),
             'date' => $this->date?->format('Y-m-d'),
             'shift' => $this->shift,
             'meters_produced' => (float) $this->meters_produced,

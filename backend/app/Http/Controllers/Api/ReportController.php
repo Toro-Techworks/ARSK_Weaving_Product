@@ -46,21 +46,17 @@ class ReportController extends Controller
         $from = $request->input('date_from');
         $to = $request->input('date_to');
 
-        $query = \App\Models\Order::query()->with('company');
-        if ($from) $query->whereDate('created_at', '>=', $from);
-        if ($to) $query->whereDate('created_at', '<=', $to);
+        $query = \App\Models\YarnOrder::query()
+            ->when($from, fn ($q) => $q->whereDate('created_at', '>=', $from))
+            ->when($to, fn ($q) => $q->whereDate('created_at', '<=', $to));
 
-        $orders = $query->orderBy('created_at', 'desc')->get();
-        $byStatus = $orders->groupBy('status')->map(fn ($g) => [
-            'count' => $g->count(),
-            'total_amount' => round($g->sum('grand_total'), 2),
-        ]);
+        $totalOrders = $query->count();
 
         return response()->json([
             'period' => ['from' => $from, 'to' => $to],
-            'total_orders' => $orders->count(),
-            'by_status' => $byStatus,
-            'grand_total' => round($orders->sum('grand_total'), 2),
+            'total_orders' => $totalOrders,
+            'by_status' => [],
+            'grand_total' => 0,
         ]);
     }
 
@@ -69,7 +65,8 @@ class ReportController extends Controller
         $from = $request->input('date_from', Carbon::now()->startOfMonth()->format('Y-m-d'));
         $to = $request->input('date_to', Carbon::now()->format('Y-m-d'));
 
-        $entries = \App\Models\LoomEntry::with('loom')
+        $entries = \App\Models\LoomEntry::with('loom:id,loom_number')
+            ->select(['id', 'loom_id', 'date', 'meters_produced', 'rejected_meters', 'net_production'])
             ->whereBetween('date', [$from, $to])
             ->get();
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wallet } from 'lucide-react';
+import { Wallet, Plus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import { Card } from '../components/Card';
@@ -17,6 +17,7 @@ export function ExpenseList() {
   const [page, setPage] = useState(1);
   const [category, setCategory] = useState('');
   const [loading, setLoading] = useState(true);
+  const [addModalOpen, setAddModalOpen] = useState(false);
 
   const fetch = () => {
     setLoading(true);
@@ -43,7 +44,12 @@ export function ExpenseList() {
 
   return (
     <div>
-      <h2 className="text-xl font-semibold text-gray-900 mb-6">Expenses</h2>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-semibold text-gray-900">Expenses</h2>
+        {canEdit && (
+          <Button className="gap-2" onClick={() => setAddModalOpen(true)}><Plus className="w-4 h-4" /> Add Expense</Button>
+        )}
+      </div>
       <Card>
         <div className="mb-4">
           <FormSelect options={[{ value: '', label: 'All categories' }, ...CATEGORIES.map((c) => ({ value: c, label: c }))]} value={category} onChange={(e) => setCategory(e.target.value)} />
@@ -59,22 +65,25 @@ export function ExpenseList() {
           </div>
         )}
       </Card>
+      {addModalOpen && (
+        <ExpenseAddModal
+          onClose={() => setAddModalOpen(false)}
+          onSuccess={() => { setAddModalOpen(false); fetch(); }}
+        />
+      )}
     </div>
   );
 }
 
-export function ExpenseForm({ onSuccess }) {
-  const { canEdit } = usePagePermission();
+function ExpenseAddModal({ onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ category: 'Electricity', amount: '', date: new Date().toISOString().slice(0, 10), notes: '' });
-
-  if (!canEdit) return null;
 
   const handleSubmit = (e) => {
     e.preventDefault();
     setLoading(true);
     api.post('/expenses', { ...form, amount: Number(form.amount) })
-      .then(() => { toast.success('Expense recorded'); setForm({ ...form, amount: '', notes: '' }); onSuccess?.(); })
+      .then(() => { toast.success('Expense recorded'); onSuccess?.(); })
       .catch((err) => toast.error(err.response?.data?.message || 'Failed'))
       .finally(() => setLoading(false));
   };
@@ -82,15 +91,17 @@ export function ExpenseForm({ onSuccess }) {
   const fieldClass = 'space-y-1.5';
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <Card className="border-gray-100">
-        <div className="flex items-center gap-2 mb-4">
-          <Wallet className="w-5 h-5 text-brand" />
-          <h3 className="text-base font-semibold text-gray-900">Add Expense</h3>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-lg max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
+        <div className="border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">Add Expense</h3>
+          <button type="button" onClick={onClose} className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700" aria-label="Close">
+            <X className="w-5 h-5" />
+          </button>
         </div>
-        <p className="text-sm text-gray-600 mb-6">Record an expense by category and amount.</p>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <p className="text-sm text-gray-600 -mt-2">Record an expense by category and amount.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className={fieldClass}>
               <FormSelect label="Category" options={CATEGORIES.map((c) => ({ value: c, label: c }))} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="!mb-0" />
             </div>
@@ -106,11 +117,16 @@ export function ExpenseForm({ onSuccess }) {
               </div>
             </div>
           </div>
-          <div className="pt-2">
+          <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">
+            <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
             <Button type="submit" disabled={loading}>{loading ? 'Saving...' : 'Save Expense'}</Button>
           </div>
         </form>
-      </Card>
+      </div>
     </div>
   );
+}
+
+export function ExpenseForm({ onSuccess }) {
+  return null;
 }

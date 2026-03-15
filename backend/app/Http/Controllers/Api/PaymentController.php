@@ -13,9 +13,8 @@ class PaymentController extends Controller
     public function index(Request $request): JsonResponse
     {
         $perPage = $request->input('per_page', 15);
-        $payments = Payment::with(['company', 'order'])
+        $payments = Payment::with(['company'])
             ->when($request->company_id, fn ($q) => $q->where('company_id', $request->company_id))
-            ->when($request->order_id, fn ($q) => $q->where('order_id', $request->order_id))
             ->when($request->date_from, fn ($q) => $q->whereDate('payment_date', '>=', $request->date_from))
             ->when($request->date_to, fn ($q) => $q->whereDate('payment_date', '<=', $request->date_to))
             ->orderBy('payment_date', 'desc')
@@ -36,7 +35,6 @@ class PaymentController extends Controller
     {
         $validated = $request->validate([
             'company_id' => 'required|exists:companies,id',
-            'order_id' => 'nullable|exists:orders,id',
             'payment_date' => 'required|date',
             'amount' => 'required|numeric|min:0',
             'mode' => 'required|in:Cash,Bank,UPI',
@@ -50,7 +48,7 @@ class PaymentController extends Controller
 
     public function show(Payment $payment): JsonResponse
     {
-        $payment->load(['company', 'order']);
+        $payment->load(['company']);
         return response()->json(['data' => new PaymentResource($payment)]);
     }
 
@@ -67,7 +65,7 @@ class PaymentController extends Controller
         ]);
 
         $payment->update($validated);
-        return response()->json(['data' => new PaymentResource($payment->fresh(['company', 'order']))]);
+        return response()->json(['data' => new PaymentResource($payment->fresh(['company']))]);
     }
 
     public function destroy(Payment $payment): JsonResponse

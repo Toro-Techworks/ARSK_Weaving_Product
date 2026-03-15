@@ -17,7 +17,6 @@ class GstRecord extends Model
         'type',
         'invoice_number',
         'company_id',
-        'order_id',
         'date',
         'taxable_value',
         'gst_percentage',
@@ -37,10 +36,5 @@ class GstRecord extends Model
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
-    }
-
-    public function order(): BelongsTo
-    {
-        return $this->belongsTo(Order::class);
     }
 }

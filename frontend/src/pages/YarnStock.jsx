@@ -89,6 +89,54 @@ const TYPE_OPTIONS = [
   { value: 'Hank', label: 'Hank' },
 ];
 
+const YARN_RECEIPT_ROW_KEYS = [
+  'dc_no', 'vehicle_details', 'date', 'yarn', 'count', 'content', 'colour', 'type',
+  'no_of_bags', 'bundles', 'knots', 'net_weight', 'gross_weight',
+];
+
+function emptyYarnReceiptRow() {
+  return {
+    dc_no: '', vehicle_details: '', date: '', yarn: '', count: '', content: '', colour: '', type: '',
+    no_of_bags: '', bundles: '', knots: '', net_weight: '', gross_weight: '',
+  };
+}
+
+function receiptToRow(r) {
+  return {
+    dc_no: r.dc_no ?? '',
+    vehicle_details: r.vehicle_details ?? '',
+    date: r.date ? (typeof r.date === 'string' ? r.date.slice(0, 10) : '') : '',
+    yarn: r.yarn ?? '',
+    count: r.count ?? '',
+    content: r.content ?? '',
+    colour: r.colour ?? '',
+    type: r.type ?? '',
+    no_of_bags: r.no_of_bags ?? '',
+    bundles: r.bundles ?? '',
+    knots: r.knots ?? '',
+    net_weight: r.net_weight ?? '',
+    gross_weight: r.gross_weight ?? '',
+  };
+}
+
+function rowToPayload(row) {
+  return {
+    dc_no: row.dc_no?.trim() || null,
+    vehicle_details: row.vehicle_details?.trim() || null,
+    date: row.date?.trim() || null,
+    yarn: row.yarn?.trim() || null,
+    count: row.count?.trim() || null,
+    content: row.content?.trim() || null,
+    colour: row.colour?.trim() || null,
+    type: row.type?.trim() || null,
+    no_of_bags: row.no_of_bags === '' ? null : Number(row.no_of_bags),
+    bundles: row.bundles === '' ? null : Number(row.bundles),
+    knots: row.knots === '' ? null : Number(row.knots),
+    net_weight: row.net_weight === '' ? null : Number(row.net_weight),
+    gross_weight: row.gross_weight === '' ? null : Number(row.gross_weight),
+  };
+}
+
 function formatDate(val) {
   if (!val) return '—';
   const d = new Date(val);
@@ -98,6 +146,61 @@ function formatDate(val) {
 function formatNum(val) {
   if (val == null || val === '') return '—';
   return Number(val);
+}
+
+// --- Production Planning (Fabrics) ---
+const FABRIC_ROW_KEYS = [
+  'description', 'design', 'weave_technique', 'warp_count', 'warp_content', 'weft_count', 'weft_content',
+  'con_final_reed', 'con_final_pick', 'con_on_loom_reed', 'con_on_loom_pick',
+  'gsm_required', 'required_width', 'po_quantity', 'price_per_metre',
+];
+
+function emptyFabricRow() {
+  return {
+    description: '', design: '', weave_technique: '', warp_count: '', warp_content: '', weft_count: '', weft_content: '',
+    con_final_reed: '', con_final_pick: '', con_on_loom_reed: '', con_on_loom_pick: '',
+    gsm_required: '', required_width: '', po_quantity: '', price_per_metre: '',
+  };
+}
+
+function fabricToRow(f) {
+  return {
+    description: f.description ?? '', design: f.design ?? '', weave_technique: f.weave_technique ?? '',
+    warp_count: f.warp_count ?? '', warp_content: f.warp_content ?? '', weft_count: f.weft_count ?? '', weft_content: f.weft_content ?? '',
+    con_final_reed: f.con_final_reed ?? '', con_final_pick: f.con_final_pick ?? '', con_on_loom_reed: f.con_on_loom_reed ?? '', con_on_loom_pick: f.con_on_loom_pick ?? '',
+    gsm_required: f.gsm_required ?? '', required_width: f.required_width ?? '', po_quantity: f.po_quantity ?? '', price_per_metre: f.price_per_metre ?? '',
+  };
+}
+
+function fabricRowToPayload(row) {
+  return {
+    description: row.description?.trim() || null, design: row.design?.trim() || null, weave_technique: row.weave_technique?.trim() || null,
+    warp_count: row.warp_count?.trim() || null, warp_content: row.warp_content?.trim() || null, weft_count: row.weft_count?.trim() || null, weft_content: row.weft_content?.trim() || null,
+    con_final_reed: row.con_final_reed === '' ? null : Number(row.con_final_reed), con_final_pick: row.con_final_pick === '' ? null : Number(row.con_final_pick),
+    con_on_loom_reed: row.con_on_loom_reed === '' ? null : Number(row.con_on_loom_reed), con_on_loom_pick: row.con_on_loom_pick === '' ? null : Number(row.con_on_loom_pick),
+    gsm_required: row.gsm_required === '' ? null : Number(row.gsm_required), required_width: row.required_width === '' ? null : Number(row.required_width),
+    po_quantity: row.po_quantity === '' ? null : Number(row.po_quantity), price_per_metre: row.price_per_metre === '' ? null : Number(row.price_per_metre),
+  };
+}
+
+// --- Yarn Requirement ---
+const YARN_REQ_ROW_KEYS = ['yarn_requirement', 'colour', 'count', 'content', 'required_weight'];
+
+function emptyYarnReqRow() {
+  return { yarn_requirement: '', colour: '', count: '', content: '', required_weight: '' };
+}
+
+function yarnReqToRow(r) {
+  return {
+    yarn_requirement: r.yarn_requirement ?? '', colour: r.colour ?? '', count: r.count ?? '', content: r.content ?? '', required_weight: r.required_weight ?? '',
+  };
+}
+
+function yarnReqRowToPayload(row) {
+  return {
+    yarn_requirement: row.yarn_requirement?.trim() || null, colour: row.colour?.trim() || null, count: row.count?.trim() || null, content: row.content?.trim() || null,
+    required_weight: row.required_weight === '' ? null : Number(row.required_weight),
+  };
 }
 
 const orderEntryInitial = {
@@ -116,22 +219,33 @@ export function YarnStockEntry() {
   const { hasRole } = useAuth();
   const isSuperAdmin = hasRole('super_admin');
   const [receipts, setReceipts] = useState([]);
+  const [yarnReceiptRows, setYarnReceiptRows] = useState([]);
+  const [activeCell, setActiveCell] = useState(null);
+  const [saveReceiptsLoading, setSaveReceiptsLoading] = useState(false);
+  const [rowErrors, setRowErrors] = useState({});
   const [yarnOrders, setYarnOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingReceipt, setEditingReceipt] = useState(null);
+  const cellRefs = useRef({});
   const [orderEntry, setOrderEntry] = useState(orderEntryInitial);
   const [editingOrderId, setEditingOrderId] = useState(null);
   const [orderEntryErrors, setOrderEntryErrors] = useState({});
   const [orderEntrySaving, setOrderEntrySaving] = useState(false);
   const [fabrics, setFabrics] = useState([]);
   const [fabricsLoading, setFabricsLoading] = useState(false);
-  const [fabricModalOpen, setFabricModalOpen] = useState(false);
-  const [editingFabric, setEditingFabric] = useState(null);
+  const [fabricRows, setFabricRows] = useState([]);
+  const [activeCellFabric, setActiveCellFabric] = useState(null);
+  const [saveFabricsLoading, setSaveFabricsLoading] = useState(false);
+  const [fabricRowErrors, setFabricRowErrors] = useState({});
+  const fabricCellRefs = useRef({});
   const [yarnRequirements, setYarnRequirements] = useState([]);
   const [yarnRequirementsLoading, setYarnRequirementsLoading] = useState(false);
-  const [yarnReqModalOpen, setYarnReqModalOpen] = useState(false);
-  const [editingYarnReq, setEditingYarnReq] = useState(null);
+  const [yarnReqRows, setYarnReqRows] = useState([]);
+  const [activeCellYarnReq, setActiveCellYarnReq] = useState(null);
+  const [saveYarnReqLoading, setSaveYarnReqLoading] = useState(false);
+  const [yarnReqRowErrors, setYarnReqRowErrors] = useState({});
+  const yarnReqCellRefs = useRef({});
 
   const fetchReceipts = (orderId) => {
     setLoading(true);
@@ -247,8 +361,11 @@ export function YarnStockEntry() {
   useEffect(() => {
     if (!editingOrderId) {
       setReceipts([]);
+      setYarnReceiptRows([]);
       setFabrics([]);
+      setFabricRows([]);
       setYarnRequirements([]);
+      setYarnReqRows([]);
       setLoading(false);
       return;
     }
@@ -261,20 +378,226 @@ export function YarnStockEntry() {
     fetchYarnRequirements(editingOrderId);
   }, [editingOrderId]);
 
-  const openAddModal = () => {
-    setEditingReceipt(null);
-    setModalOpen(true);
+  // Sync receipts from API to editable rows
+  useEffect(() => {
+    if (receipts.length > 0) {
+      setYarnReceiptRows(receipts.map(receiptToRow));
+    } else if (editingOrderId) {
+      setYarnReceiptRows([emptyYarnReceiptRow()]);
+    } else {
+      setYarnReceiptRows([]);
+    }
+  }, [receipts, editingOrderId]);
+
+  // Sync fabrics from API to editable rows
+  useEffect(() => {
+    if (fabrics.length > 0) {
+      setFabricRows(fabrics.map(fabricToRow));
+    } else if (editingOrderId) {
+      setFabricRows([emptyFabricRow()]);
+    } else {
+      setFabricRows([]);
+    }
+  }, [fabrics, editingOrderId]);
+
+  // Sync yarn requirements from API to editable rows
+  useEffect(() => {
+    if (yarnRequirements.length > 0) {
+      setYarnReqRows(yarnRequirements.map(yarnReqToRow));
+    } else if (editingOrderId && isSuperAdmin) {
+      setYarnReqRows([emptyYarnReqRow()]);
+    } else {
+      setYarnReqRows([]);
+    }
+  }, [yarnRequirements, editingOrderId, isSuperAdmin]);
+
+  const handleCellChange = (rowIndex, field, value) => {
+    setYarnReceiptRows((prev) => {
+      const next = prev.map((row, i) => (i === rowIndex ? { ...row, [field]: value } : row));
+      return next;
+    });
   };
 
-  const openEditModal = (row) => {
-    setEditingReceipt(row);
-    setModalOpen(true);
+  const addRow = () => {
+    setYarnReceiptRows((prev) => {
+      const newLen = prev.length;
+      setTimeout(() => {
+        setActiveCell({ rowIndex: newLen, colKey: 'dc_no' });
+        cellRefs.current[`${newLen}-dc_no`]?.focus();
+      }, 0);
+      return [...prev, emptyYarnReceiptRow()];
+    });
   };
 
-  const handleSaved = () => {
-    setModalOpen(false);
-    setEditingReceipt(null);
-    fetchReceipts(editingOrderId);
+  const deleteRow = (rowIndex) => {
+    setYarnReceiptRows((prev) => prev.filter((_, i) => i !== rowIndex));
+    setActiveCell(null);
+  };
+
+  const moveFocus = (rowIndex, colKey, direction) => {
+    const cols = YARN_RECEIPT_ROW_KEYS;
+    const colIdx = cols.indexOf(colKey);
+    if (direction === 'next') {
+      if (colIdx < cols.length - 1) {
+        setActiveCell({ rowIndex, colKey: cols[colIdx + 1] });
+        setTimeout(() => cellRefs.current[`${rowIndex}-${cols[colIdx + 1]}`]?.focus(), 0);
+      } else if (rowIndex < yarnReceiptRows.length - 1) {
+        setActiveCell({ rowIndex: rowIndex + 1, colKey: cols[0] });
+        setTimeout(() => cellRefs.current[`${rowIndex + 1}-${cols[0]}`]?.focus(), 0);
+      }
+    } else if (direction === 'down') {
+      if (rowIndex < yarnReceiptRows.length - 1) {
+        setActiveCell({ rowIndex: rowIndex + 1, colKey });
+        setTimeout(() => cellRefs.current[`${rowIndex + 1}-${colKey}`]?.focus(), 0);
+      }
+    }
+  };
+
+  const isRowEmpty = (row) => !row.dc_no?.trim() && !row.vehicle_details?.trim() && !row.date?.trim()
+    && !row.yarn?.trim() && !row.count?.trim() && !row.content?.trim() && !row.colour?.trim()
+    && !row.type?.trim() && row.no_of_bags === '' && row.bundles === '' && row.knots === ''
+    && row.net_weight === '' && row.gross_weight === '';
+
+  const saveAllRows = async () => {
+    if (!editingOrderId) return;
+    const errors = {};
+    yarnReceiptRows.forEach((row, i) => {
+      if (isRowEmpty(row)) return;
+      if (!row.dc_no?.trim()) errors[i] = 'DC No is required when row has data';
+    });
+    setRowErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      toast.error('Please enter DC No for rows that have data.');
+      return;
+    }
+    const rowsToSave = yarnReceiptRows.filter((row) => !isRowEmpty(row));
+    setSaveReceiptsLoading(true);
+    try {
+      const payload = {
+        yarn_order_id: editingOrderId,
+        yarn_receipts: rowsToSave.map(rowToPayload),
+      };
+      await api.post('/yarn-receipts/bulk', payload);
+      toast.success('Yarn receipts saved.');
+      setRowErrors({});
+      fetchReceipts(editingOrderId);
+    } catch (err) {
+      const msg = err.response?.data?.message
+        || (err.response?.data?.errors ? Object.values(err.response.data.errors).flat().join(' ') : 'Failed to save');
+      toast.error(msg);
+    } finally {
+      setSaveReceiptsLoading(false);
+    }
+  };
+
+  const isFabricRowEmpty = (row) => FABRIC_ROW_KEYS.every((k) => {
+    const v = row[k];
+    return v === '' || v == null;
+  });
+  const handleFabricCellChange = (rowIndex, field, value) => {
+    setFabricRows((prev) => prev.map((row, i) => (i === rowIndex ? { ...row, [field]: value } : row)));
+  };
+  const addFabricRow = () => {
+    setFabricRows((prev) => {
+      const newLen = prev.length;
+      setTimeout(() => {
+        setActiveCellFabric({ rowIndex: newLen, colKey: FABRIC_ROW_KEYS[0] });
+        fabricCellRefs.current[`${newLen}-${FABRIC_ROW_KEYS[0]}`]?.focus();
+      }, 0);
+      return [...prev, emptyFabricRow()];
+    });
+  };
+  const deleteFabricRow = (rowIndex) => {
+    setFabricRows((prev) => prev.filter((_, i) => i !== rowIndex));
+    setActiveCellFabric(null);
+  };
+  const moveFabricFocus = (rowIndex, colKey, direction) => {
+    const cols = FABRIC_ROW_KEYS;
+    const colIdx = cols.indexOf(colKey);
+    if (direction === 'next') {
+      if (colIdx < cols.length - 1) {
+        setActiveCellFabric({ rowIndex, colKey: cols[colIdx + 1] });
+        setTimeout(() => fabricCellRefs.current[`${rowIndex}-${cols[colIdx + 1]}`]?.focus(), 0);
+      } else if (rowIndex < fabricRows.length - 1) {
+        setActiveCellFabric({ rowIndex: rowIndex + 1, colKey: cols[0] });
+        setTimeout(() => fabricCellRefs.current[`${rowIndex + 1}-${cols[0]}`]?.focus(), 0);
+      }
+    } else if (direction === 'down') {
+      if (rowIndex < fabricRows.length - 1) {
+        setActiveCellFabric({ rowIndex: rowIndex + 1, colKey });
+        setTimeout(() => fabricCellRefs.current[`${rowIndex + 1}-${colKey}`]?.focus(), 0);
+      }
+    }
+  };
+  const saveAllFabrics = async () => {
+    if (!editingOrderId) return;
+    const rowsToSave = fabricRows.filter((row) => !isFabricRowEmpty(row));
+    setSaveFabricsLoading(true);
+    try {
+      await api.post('/fabrics/bulk', { yarn_order_id: editingOrderId, fabrics: rowsToSave.map(fabricRowToPayload) });
+      toast.success('Production planning saved.');
+      fetchFabrics(editingOrderId);
+    } catch (err) {
+      const msg = err.response?.data?.message || (err.response?.data?.errors ? Object.values(err.response.data.errors).flat().join(' ') : 'Failed to save');
+      toast.error(msg);
+    } finally {
+      setSaveFabricsLoading(false);
+    }
+  };
+
+  const isYarnReqRowEmpty = (row) => YARN_REQ_ROW_KEYS.every((k) => {
+    const v = row[k];
+    return v === '' || v == null;
+  });
+  const handleYarnReqCellChange = (rowIndex, field, value) => {
+    setYarnReqRows((prev) => prev.map((row, i) => (i === rowIndex ? { ...row, [field]: value } : row)));
+  };
+  const addYarnReqRow = () => {
+    setYarnReqRows((prev) => {
+      const newLen = prev.length;
+      setTimeout(() => {
+        setActiveCellYarnReq({ rowIndex: newLen, colKey: YARN_REQ_ROW_KEYS[0] });
+        yarnReqCellRefs.current[`${newLen}-${YARN_REQ_ROW_KEYS[0]}`]?.focus();
+      }, 0);
+      return [...prev, emptyYarnReqRow()];
+    });
+  };
+  const deleteYarnReqRow = (rowIndex) => {
+    setYarnReqRows((prev) => prev.filter((_, i) => i !== rowIndex));
+    setActiveCellYarnReq(null);
+  };
+  const moveYarnReqFocus = (rowIndex, colKey, direction) => {
+    const cols = YARN_REQ_ROW_KEYS;
+    const colIdx = cols.indexOf(colKey);
+    if (direction === 'next') {
+      if (colIdx < cols.length - 1) {
+        setActiveCellYarnReq({ rowIndex, colKey: cols[colIdx + 1] });
+        setTimeout(() => yarnReqCellRefs.current[`${rowIndex}-${cols[colIdx + 1]}`]?.focus(), 0);
+      } else if (rowIndex < yarnReqRows.length - 1) {
+        setActiveCellYarnReq({ rowIndex: rowIndex + 1, colKey: cols[0] });
+        setTimeout(() => yarnReqCellRefs.current[`${rowIndex + 1}-${cols[0]}`]?.focus(), 0);
+      }
+    } else if (direction === 'down') {
+      if (rowIndex < yarnReqRows.length - 1) {
+        setActiveCellYarnReq({ rowIndex: rowIndex + 1, colKey });
+        setTimeout(() => yarnReqCellRefs.current[`${rowIndex + 1}-${colKey}`]?.focus(), 0);
+      }
+    }
+  };
+  const saveAllYarnReqRows = async () => {
+    if (!editingOrderId) return;
+    const rowsToSave = yarnReqRows.filter((row) => !isYarnReqRowEmpty(row));
+    setSaveYarnReqLoading(true);
+    try {
+      await api.post('/yarn-requirements/bulk', { yarn_order_id: editingOrderId, yarn_requirements: rowsToSave.map(yarnReqRowToPayload) });
+      toast.success('Yarn requirements saved.');
+      fetchYarnRequirements(editingOrderId);
+    } catch (err) {
+      const msg = err.response?.data?.message || (err.response?.data?.errors ? Object.values(err.response.data.errors).flat().join(' ') : 'Failed to save');
+      toast.error(msg);
+    } finally {
+      setSaveYarnReqLoading(false);
+    }
   };
 
   const openAddFabric = () => {
@@ -386,297 +709,244 @@ export function YarnStockEntry() {
         </div>
       )}
 
-      {/* New Order Entry - Card */}
-      <div className={`w-full bg-white rounded-[10px] shadow-sm border border-gray-200 p-6 mb-[30px] ${pageLoading ? 'opacity-60 pointer-events-none' : ''}`}>
-        <h3 className="text-lg font-semibold text-gray-900 mb-5">New Order Entry</h3>
-        <form onSubmit={handleOrderEntrySubmit} className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5" style={!canEdit ? { pointerEvents: 'none', opacity: 0.85 } : undefined}>
-          {/* Row 1: Order From | Customer */}
-          <div className="space-y-1.5">
-            <FormInput
-              label={<>Order From <span className="text-red-500">*</span></>}
-              value={orderEntry.order_from}
-              onChange={(e) => { setOrderEntry((o) => ({ ...o, order_from: e.target.value })); setOrderEntryErrors((prev) => ({ ...prev, order_from: undefined })); }}
-              placeholder="Order from"
-              className="!mb-0"
-            />
-            {orderEntryErrors.order_from && <p className="text-sm text-red-600">{orderEntryErrors.order_from}</p>}
-          </div>
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-gray-700">Customer</label>
-            <FormInput
-              value={orderEntry.customer}
-              onChange={(e) => setOrderEntry((o) => ({ ...o, customer: e.target.value }))}
-              placeholder="Customer name"
-              className="!mb-0"
-            />
-          </div>
-          {/* Row 2: Weaving Unit | PO Date */}
-          <div className="space-y-1.5">
-            <FormInput
-              label={<>Weaving Unit <span className="text-red-500">*</span></>}
-              value={orderEntry.weaving_unit}
-              onChange={(e) => { setOrderEntry((o) => ({ ...o, weaving_unit: e.target.value })); setOrderEntryErrors((prev) => ({ ...prev, weaving_unit: undefined })); }}
-              placeholder="Weaving unit"
-              className="!mb-0"
-            />
-            {orderEntryErrors.weaving_unit && <p className="text-sm text-red-600">{orderEntryErrors.weaving_unit}</p>}
-          </div>
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-gray-700">
-              PO Date <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <FormInput
-                type="date"
-                value={orderEntry.po_date}
-                onChange={(e) => { setOrderEntry((o) => ({ ...o, po_date: e.target.value })); setOrderEntryErrors((prev) => ({ ...prev, po_date: undefined })); }}
-                className="!mb-0"
-                inputClassName="pr-9"
-              />
-              <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" aria-hidden />
-            </div>
-            {orderEntryErrors.po_date && <p className="text-sm text-red-600">{orderEntryErrors.po_date}</p>}
-          </div>
-          {/* Row 3: P.O Number | Delivery Date */}
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-gray-700">
-              P.O Number <span className="text-red-500">*</span>
-            </label>
-            <FormInput
-              value={orderEntry.po_number}
-              onChange={(e) => { setOrderEntry((o) => ({ ...o, po_number: e.target.value })); setOrderEntryErrors((prev) => ({ ...prev, po_number: undefined })); }}
-              placeholder="P.O Number"
-              className="!mb-0"
-            />
-            {orderEntryErrors.po_number && <p className="text-sm text-red-600">{orderEntryErrors.po_number}</p>}
-          </div>
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-gray-700">
-              Delivery Date <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <FormInput
-                type="date"
-                value={orderEntry.delivery_date}
-                onChange={(e) => { setOrderEntry((o) => ({ ...o, delivery_date: e.target.value })); setOrderEntryErrors((prev) => ({ ...prev, delivery_date: undefined })); }}
-                className="!mb-0"
-                inputClassName="pr-9"
-              />
-              <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" aria-hidden />
-            </div>
-            {orderEntryErrors.delivery_date && <p className="text-sm text-red-600">{orderEntryErrors.delivery_date}</p>}
-          </div>
-          <div className="md:col-span-2 flex justify-end pt-2">
-            <Button type="submit" disabled={orderEntrySaving || !canEdit}>
-              {orderEntrySaving ? (editingOrderId ? 'Updating...' : 'Saving...') : (editingOrderId ? 'Edit Order' : 'Save Order')}
-            </Button>
-          </div>
-        </form>
-      </div>
-
       <Card>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-medium text-gray-900">Yarn Receipt Details</h3>
-          <Button onClick={openAddModal} disabled={!editingOrderId || !canEdit}>
-            + Add Yarn Receipt
-          </Button>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead>
-              <tr>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">DC No</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Vehicle Details</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Yarn</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Count</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Content</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Colour</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">No of Bags</th>
-                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Bundles</th>
-                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Knots</th>
-                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Net Weight</th>
-                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Gross Weight</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-20">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={14} className="px-4 py-8 text-center text-gray-500">Loading...</td>
-                </tr>
-              ) : receipts.length === 0 ? (
-                <tr>
-                  <td colSpan={14} className="px-4 py-8 text-center text-gray-500">
-                    {editingOrderId
-                      ? 'No yarn receipts for this order yet. Click "+ Add Yarn Receipt" to add one.'
-                      : 'Save the order above first to add receipts for this order.'}
-                  </td>
-                </tr>
-              ) : (
-                receipts.map((r) => (
-                  <tr key={r.id} className="border-t border-gray-100 hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm text-gray-900">{r.dc_no ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{r.vehicle_details ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{formatDate(r.date)}</td>
-                    <td className="px-4 py-3 text-sm">{r.yarn ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm">{r.count ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm">{r.content ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm">{r.colour ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm">{r.type ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm text-right">{formatNum(r.no_of_bags)}</td>
-                    <td className="px-4 py-3 text-sm text-right">{formatNum(r.bundles)}</td>
-                    <td className="px-4 py-3 text-sm text-right">{formatNum(r.knots)}</td>
-                    <td className="px-4 py-3 text-sm text-right">{formatNum(r.net_weight)}</td>
-                    <td className="px-4 py-3 text-sm text-right">{formatNum(r.gross_weight)}</td>
-                    <td className="px-4 py-3">
-                      {canEdit && (
-                        <button
-                          type="button"
-                          onClick={() => openEditModal(r)}
-                          className="text-sm text-[#312E81] hover:underline"
-                        >
-                          Edit
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      <Card className="mt-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-medium text-gray-900">Production Planning</h3>
-          <Button onClick={openAddFabric} disabled={!editingOrderId || !canEdit}>
-            + Add Fabric
-          </Button>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead>
-              <tr>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sl No</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Design</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Weave Technique</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Warp Count</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Warp Content</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Weft Count</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Weft Content</th>
-                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Con Final Reed</th>
-                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Con Final Pick</th>
-                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Con On Loom Reed</th>
-                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Con On Loom Pick</th>
-                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">GSM Required</th>
-                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Required Width</th>
-                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">P.O Quantity</th>
-                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Price Per Metre</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-24">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {fabricsLoading ? (
-                <tr>
-                  <td colSpan={18} className="px-4 py-8 text-center text-gray-500">Loading...</td>
-                </tr>
-              ) : fabrics.length === 0 ? (
-                <tr>
-                  <td colSpan={18} className="px-4 py-8 text-center text-gray-500">
-                    {editingOrderId
-                      ? 'No fabric details for this order yet. Click "+ Add Fabric" to add one.'
-                      : 'Save the order above first to add fabric details for this order.'}
-                  </td>
-                </tr>
-              ) : (
-                fabrics.map((f, idx) => (
-                  <tr key={f.id} className="border-t border-gray-100 hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm text-gray-600">{idx + 1}</td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{f.description ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{f.design ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{f.weave_technique ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{f.warp_count ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{f.warp_content ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{f.weft_count ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{f.weft_content ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm text-right">{formatNum(f.con_final_reed)}</td>
-                    <td className="px-4 py-3 text-sm text-right">{formatNum(f.con_final_pick)}</td>
-                    <td className="px-4 py-3 text-sm text-right">{formatNum(f.con_on_loom_reed)}</td>
-                    <td className="px-4 py-3 text-sm text-right">{formatNum(f.con_on_loom_pick)}</td>
-                    <td className="px-4 py-3 text-sm text-right">{formatNum(f.gsm_required)}</td>
-                    <td className="px-4 py-3 text-sm text-right">{formatNum(f.required_width)}</td>
-                    <td className="px-4 py-3 text-sm text-right">{formatNum(f.po_quantity)}</td>
-                    <td className="px-4 py-3 text-sm text-right">{formatNum(f.price_per_metre)}</td>
-                    <td className="px-4 py-3">
-                      {canEdit && (
-                        <span className="flex items-center gap-2">
-                          <button type="button" onClick={() => openEditFabric(f)} className="p-1 text-gray-500 hover:text-brand" title="Edit"><Pencil className="w-4 h-4" /></button>
-                          <button type="button" onClick={() => deleteFabric(f)} className="p-1 text-gray-500 hover:text-red-600" title="Delete"><Trash2 className="w-4 h-4" /></button>
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      {isSuperAdmin && (
-        <Card className="mt-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900">Yarn Requirement</h3>
-            <Button onClick={openAddYarnReq} disabled={!editingOrderId || !canEdit}>
-              + Add
-            </Button>
+          <div className="flex items-center gap-2">
+            {editingOrderId && canEdit && (
+              <>
+                <Button variant="secondary" onClick={addRow}>+ Add Row</Button>
+                <Button onClick={saveAllRows} disabled={saveReceiptsLoading}>
+                  {saveReceiptsLoading ? 'Saving...' : 'Save All'}
+                </Button>
+              </>
+            )}
           </div>
+        </div>
+
+        {!editingOrderId ? (
+          <p className="text-sm text-gray-500 py-6">Select an order from the Yarn Stock list to add receipt details.</p>
+        ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead>
+            <table className="min-w-full divide-y divide-gray-200 border-collapse">
+              <thead className="sticky top-0 z-10 bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sno</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Yarn Requirement</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Colour</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Count</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Content</th>
-                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Required Weight</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase w-24">Actions</th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">DC No</th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Vehicle Details</th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Date</th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Yarn</th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Count</th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Content</th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Colour</th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Type</th>
+                  <th className="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase whitespace-nowrap">No of Bags</th>
+                  <th className="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Bundles</th>
+                  <th className="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Knots</th>
+                  <th className="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Net Weight</th>
+                  <th className="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Gross Weight</th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase w-14">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {yarnRequirementsLoading ? (
+                {loading ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500">Loading...</td>
-                  </tr>
-                ) : yarnRequirements.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
-                      {editingOrderId
-                        ? 'No yarn requirements yet. Click "+ Add" to add one.'
-                        : 'Save the order above first to add yarn requirements.'}
-                    </td>
+                    <td colSpan={14} className="px-4 py-8 text-center text-gray-500">Loading...</td>
                   </tr>
                 ) : (
-                  yarnRequirements.map((r, idx) => (
-                    <tr key={r.id} className="border-t border-gray-100 hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm text-gray-600">{idx + 1}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{r.yarn_requirement ?? '—'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{r.colour ?? '—'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{r.count ?? '—'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{r.content ?? '—'}</td>
-                      <td className="px-4 py-3 text-sm text-right">{formatNum(r.required_weight)}</td>
-                      <td className="px-4 py-3">
+                  yarnReceiptRows.map((row, rowIndex) => (
+                    <tr
+                      key={rowIndex}
+                      className={`border-t border-gray-100 ${activeCell?.rowIndex === rowIndex ? 'bg-brand/5' : 'hover:bg-gray-50/80'}`}
+                    >
+                      <td className="p-0 align-top">
+                        <input
+                          ref={(el) => { cellRefs.current[`${rowIndex}-dc_no`] = el; }}
+                          type="text"
+                          value={row.dc_no}
+                          onChange={(e) => { handleCellChange(rowIndex, 'dc_no', e.target.value); setRowErrors((prev) => ({ ...prev, [rowIndex]: undefined })); }}
+                          onKeyDown={(e) => { if (e.key === 'Tab') { e.preventDefault(); moveFocus(rowIndex, 'dc_no', 'next'); } if (e.key === 'Enter') moveFocus(rowIndex, 'dc_no', 'down'); }}
+                          onFocus={() => setActiveCell({ rowIndex, colKey: 'dc_no' })}
+                          className={`w-full min-w-[80px] px-2 py-1.5 text-sm border-0 border-b focus:ring-1 focus:outline-none rounded ${rowErrors[rowIndex] ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-transparent focus:border-brand focus:ring-brand'}`}
+                          placeholder="DC No"
+                          readOnly={!canEdit}
+                          title={rowErrors[rowIndex]}
+                        />
+                      </td>
+                      <td className="p-0 align-top">
+                        <input
+                          ref={(el) => { cellRefs.current[`${rowIndex}-vehicle_details`] = el; }}
+                          type="text"
+                          value={row.vehicle_details}
+                          onChange={(e) => handleCellChange(rowIndex, 'vehicle_details', e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Tab') { e.preventDefault(); moveFocus(rowIndex, 'vehicle_details', 'next'); } if (e.key === 'Enter') moveFocus(rowIndex, 'vehicle_details', 'down'); }}
+                          onFocus={() => setActiveCell({ rowIndex, colKey: 'vehicle_details' })}
+                          className="w-full min-w-[100px] px-2 py-1.5 text-sm border-0 border-b border-transparent focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none rounded"
+                          placeholder="Vehicle"
+                          readOnly={!canEdit}
+                        />
+                      </td>
+                      <td className="p-0 align-top">
+                        <input
+                          ref={(el) => { cellRefs.current[`${rowIndex}-date`] = el; }}
+                          type="date"
+                          value={row.date}
+                          onChange={(e) => handleCellChange(rowIndex, 'date', e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Tab') { e.preventDefault(); moveFocus(rowIndex, 'date', 'next'); } if (e.key === 'Enter') moveFocus(rowIndex, 'date', 'down'); }}
+                          onFocus={() => setActiveCell({ rowIndex, colKey: 'date' })}
+                          className="w-full min-w-[110px] px-2 py-1.5 text-sm border-0 border-b border-transparent focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none rounded"
+                          readOnly={!canEdit}
+                        />
+                      </td>
+                      <td className="p-0 align-top">
+                        <input
+                          ref={(el) => { cellRefs.current[`${rowIndex}-yarn`] = el; }}
+                          type="text"
+                          value={row.yarn}
+                          onChange={(e) => handleCellChange(rowIndex, 'yarn', e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Tab') { e.preventDefault(); moveFocus(rowIndex, 'yarn', 'next'); } if (e.key === 'Enter') moveFocus(rowIndex, 'yarn', 'down'); }}
+                          onFocus={() => setActiveCell({ rowIndex, colKey: 'yarn' })}
+                          className="w-full min-w-[80px] px-2 py-1.5 text-sm border-0 border-b border-transparent focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none rounded"
+                          placeholder="Yarn"
+                          readOnly={!canEdit}
+                        />
+                      </td>
+                      <td className="p-0 align-top">
+                        <input
+                          ref={(el) => { cellRefs.current[`${rowIndex}-count`] = el; }}
+                          type="text"
+                          inputMode="numeric"
+                          value={row.count}
+                          onChange={(e) => handleCellChange(rowIndex, 'count', e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Tab') { e.preventDefault(); moveFocus(rowIndex, 'count', 'next'); } if (e.key === 'Enter') moveFocus(rowIndex, 'count', 'down'); }}
+                          onFocus={() => setActiveCell({ rowIndex, colKey: 'count' })}
+                          className="w-full min-w-[70px] px-2 py-1.5 text-sm border-0 border-b border-transparent focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none rounded text-right"
+                          placeholder="Count"
+                          readOnly={!canEdit}
+                        />
+                      </td>
+                      <td className="p-0 align-top">
+                        <input
+                          ref={(el) => { cellRefs.current[`${rowIndex}-content`] = el; }}
+                          type="text"
+                          value={row.content}
+                          onChange={(e) => handleCellChange(rowIndex, 'content', e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Tab') { e.preventDefault(); moveFocus(rowIndex, 'content', 'next'); } if (e.key === 'Enter') moveFocus(rowIndex, 'content', 'down'); }}
+                          onFocus={() => setActiveCell({ rowIndex, colKey: 'content' })}
+                          className="w-full min-w-[80px] px-2 py-1.5 text-sm border-0 border-b border-transparent focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none rounded"
+                          placeholder="Content"
+                          readOnly={!canEdit}
+                        />
+                      </td>
+                      <td className="p-0 align-top">
+                        <input
+                          ref={(el) => { cellRefs.current[`${rowIndex}-colour`] = el; }}
+                          type="text"
+                          value={row.colour}
+                          onChange={(e) => handleCellChange(rowIndex, 'colour', e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Tab') { e.preventDefault(); moveFocus(rowIndex, 'colour', 'next'); } if (e.key === 'Enter') moveFocus(rowIndex, 'colour', 'down'); }}
+                          onFocus={() => setActiveCell({ rowIndex, colKey: 'colour' })}
+                          className="w-full min-w-[70px] px-2 py-1.5 text-sm border-0 border-b border-transparent focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none rounded"
+                          placeholder="Colour"
+                          readOnly={!canEdit}
+                        />
+                      </td>
+                      <td className="p-0 align-top">
+                        <select
+                          ref={(el) => { cellRefs.current[`${rowIndex}-type`] = el; }}
+                          value={row.type}
+                          onChange={(e) => handleCellChange(rowIndex, 'type', e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Tab') { e.preventDefault(); moveFocus(rowIndex, 'type', 'next'); } if (e.key === 'Enter') moveFocus(rowIndex, 'type', 'down'); }}
+                          onFocus={() => setActiveCell({ rowIndex, colKey: 'type' })}
+                          className="w-full min-w-[80px] px-2 py-1.5 text-sm border-0 border-b border-transparent focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none rounded bg-transparent"
+                          readOnly={!canEdit}
+                          disabled={!canEdit}
+                        >
+                          <option value="">—</option>
+                          {TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                      </td>
+                      <td className="p-0 align-top">
+                        <input
+                          ref={(el) => { cellRefs.current[`${rowIndex}-no_of_bags`] = el; }}
+                          type="number"
+                          min="0"
+                          value={row.no_of_bags}
+                          onChange={(e) => handleCellChange(rowIndex, 'no_of_bags', e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Tab') { e.preventDefault(); moveFocus(rowIndex, 'no_of_bags', 'next'); } if (e.key === 'Enter') moveFocus(rowIndex, 'no_of_bags', 'down'); }}
+                          onFocus={() => setActiveCell({ rowIndex, colKey: 'no_of_bags' })}
+                          className="w-full min-w-[70px] px-2 py-1.5 text-sm border-0 border-b border-transparent focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none rounded text-right"
+                          placeholder="0"
+                          readOnly={!canEdit}
+                        />
+                      </td>
+                      <td className="p-0 align-top">
+                        <input
+                          ref={(el) => { cellRefs.current[`${rowIndex}-bundles`] = el; }}
+                          type="number"
+                          min="0"
+                          value={row.bundles}
+                          onChange={(e) => handleCellChange(rowIndex, 'bundles', e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Tab') { e.preventDefault(); moveFocus(rowIndex, 'bundles', 'next'); } if (e.key === 'Enter') moveFocus(rowIndex, 'bundles', 'down'); }}
+                          onFocus={() => setActiveCell({ rowIndex, colKey: 'bundles' })}
+                          className="w-full min-w-[70px] px-2 py-1.5 text-sm border-0 border-b border-transparent focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none rounded text-right"
+                          placeholder="0"
+                          readOnly={!canEdit}
+                        />
+                      </td>
+                      <td className="p-0 align-top">
+                        <input
+                          ref={(el) => { cellRefs.current[`${rowIndex}-knots`] = el; }}
+                          type="number"
+                          min="0"
+                          value={row.knots}
+                          onChange={(e) => handleCellChange(rowIndex, 'knots', e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Tab') { e.preventDefault(); moveFocus(rowIndex, 'knots', 'next'); } if (e.key === 'Enter') moveFocus(rowIndex, 'knots', 'down'); }}
+                          onFocus={() => setActiveCell({ rowIndex, colKey: 'knots' })}
+                          className="w-full min-w-[70px] px-2 py-1.5 text-sm border-0 border-b border-transparent focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none rounded text-right"
+                          placeholder="0"
+                          readOnly={!canEdit}
+                        />
+                      </td>
+                      <td className="p-0 align-top">
+                        <input
+                          ref={(el) => { cellRefs.current[`${rowIndex}-net_weight`] = el; }}
+                          type="number"
+                          min="0"
+                          step="0.001"
+                          value={row.net_weight}
+                          onChange={(e) => handleCellChange(rowIndex, 'net_weight', e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Tab') { e.preventDefault(); moveFocus(rowIndex, 'net_weight', 'next'); } if (e.key === 'Enter') moveFocus(rowIndex, 'net_weight', 'down'); }}
+                          onFocus={() => setActiveCell({ rowIndex, colKey: 'net_weight' })}
+                          className="w-full min-w-[80px] px-2 py-1.5 text-sm border-0 border-b border-transparent focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none rounded text-right"
+                          placeholder="0"
+                          readOnly={!canEdit}
+                        />
+                      </td>
+                      <td className="p-0 align-top">
+                        <input
+                          ref={(el) => { cellRefs.current[`${rowIndex}-gross_weight`] = el; }}
+                          type="number"
+                          min="0"
+                          step="0.001"
+                          value={row.gross_weight}
+                          onChange={(e) => handleCellChange(rowIndex, 'gross_weight', e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Tab') { e.preventDefault(); moveFocus(rowIndex, 'gross_weight', 'next'); } if (e.key === 'Enter') moveFocus(rowIndex, 'gross_weight', 'down'); }}
+                          onFocus={() => setActiveCell({ rowIndex, colKey: 'gross_weight' })}
+                          className="w-full min-w-[80px] px-2 py-1.5 text-sm border-0 border-b border-transparent focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none rounded text-right"
+                          placeholder="0"
+                          readOnly={!canEdit}
+                        />
+                      </td>
+                      <td className="px-2 py-1.5 align-top">
                         {canEdit && (
-                          <span className="flex items-center gap-2">
-                            <button type="button" onClick={() => openEditYarnReq(r)} className="p-1 text-gray-500 hover:text-brand" title="Edit"><Pencil className="w-4 h-4" /></button>
-                            <button type="button" onClick={() => deleteYarnReq(r)} className="p-1 text-gray-500 hover:text-red-600" title="Delete"><Trash2 className="w-4 h-4" /></button>
-                          </span>
+                          <button
+                            type="button"
+                            onClick={() => deleteRow(rowIndex)}
+                            className="p-1.5 text-gray-400 hover:text-red-600 rounded"
+                            title="Delete row"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         )}
                       </td>
                     </tr>
@@ -685,34 +955,158 @@ export function YarnStockEntry() {
               </tbody>
             </table>
           </div>
+        )}
+      </Card>
+
+      <Card className="mt-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-medium text-gray-900">Production Planning</h3>
+          <div className="flex items-center gap-2">
+            {editingOrderId && canEdit && (
+              <>
+                <Button variant="secondary" onClick={addFabricRow}>+ Add Row</Button>
+                <Button onClick={saveAllFabrics} disabled={saveFabricsLoading}>
+                  {saveFabricsLoading ? 'Saving...' : 'Save All'}
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+        {!editingOrderId ? (
+          <p className="text-sm text-gray-500 py-6">Select an order from the Yarn Stock list to add production planning.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 border-collapse">
+              <thead className="sticky top-0 z-10 bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap w-12">Sl No</th>
+                  {FABRIC_ROW_KEYS.map((k) => (
+                    <th key={k} className={`px-2 py-2 text-xs font-medium text-gray-500 uppercase whitespace-nowrap ${['con_final_reed', 'con_final_pick', 'con_on_loom_reed', 'con_on_loom_pick', 'gsm_required', 'required_width', 'po_quantity', 'price_per_metre'].includes(k) ? 'text-right' : 'text-left'}`}>
+                      {k.replace(/_/g, ' ')}
+                    </th>
+                  ))}
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase w-14">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fabricsLoading ? (
+                  <tr>
+                    <td colSpan={FABRIC_ROW_KEYS.length + 2} className="px-4 py-8 text-center text-gray-500">Loading...</td>
+                  </tr>
+                ) : (
+                  fabricRows.map((row, rowIndex) => (
+                    <tr
+                      key={rowIndex}
+                      className={`border-t border-gray-100 ${activeCellFabric?.rowIndex === rowIndex ? 'bg-brand/5' : 'hover:bg-gray-50/80'}`}
+                    >
+                      <td className="px-2 py-1.5 text-sm text-gray-500 align-top">{rowIndex + 1}</td>
+                      {FABRIC_ROW_KEYS.map((colKey) => {
+                        const isNum = ['con_final_reed', 'con_final_pick', 'con_on_loom_reed', 'con_on_loom_pick', 'gsm_required', 'required_width', 'po_quantity', 'price_per_metre'].includes(colKey);
+                        return (
+                          <td key={colKey} className="p-0 align-top">
+                            <input
+                              ref={(el) => { fabricCellRefs.current[`${rowIndex}-${colKey}`] = el; }}
+                              type={isNum ? 'text' : 'text'}
+                              inputMode={isNum ? 'decimal' : 'text'}
+                              value={row[colKey]}
+                              onChange={(e) => handleFabricCellChange(rowIndex, colKey, e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Tab') { e.preventDefault(); moveFabricFocus(rowIndex, colKey, 'next'); } if (e.key === 'Enter') moveFabricFocus(rowIndex, colKey, 'down'); }}
+                              onFocus={() => setActiveCellFabric({ rowIndex, colKey })}
+                              className={`w-full min-w-[70px] px-2 py-1.5 text-sm border-0 border-b border-transparent focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none rounded ${isNum ? 'text-right' : ''}`}
+                              placeholder={colKey.replace(/_/g, ' ')}
+                              readOnly={!canEdit}
+                            />
+                          </td>
+                        );
+                      })}
+                      <td className="p-1 align-top">
+                        {canEdit && (
+                          <button type="button" onClick={() => deleteFabricRow(rowIndex)} className="p-1 text-gray-500 hover:text-red-600" title="Delete row"><Trash2 className="w-4 h-4" /></button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {isSuperAdmin && (
+        <Card className="mt-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium text-gray-900">Yarn Requirement</h3>
+            <div className="flex items-center gap-2">
+              {editingOrderId && canEdit && (
+                <>
+                  <Button variant="secondary" onClick={addYarnReqRow}>+ Add Row</Button>
+                  <Button onClick={saveAllYarnReqRows} disabled={saveYarnReqLoading}>
+                    {saveYarnReqLoading ? 'Saving...' : 'Save All'}
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+          {!editingOrderId ? (
+            <p className="text-sm text-gray-500 py-6">Select an order from the Yarn Stock list to add yarn requirements.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 border-collapse">
+                <thead className="sticky top-0 z-10 bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap w-12">Sno</th>
+                    {YARN_REQ_ROW_KEYS.map((k) => (
+                      <th key={k} className={`px-2 py-2 text-xs font-medium text-gray-500 uppercase whitespace-nowrap ${k === 'required_weight' ? 'text-right' : 'text-left'}`}>
+                        {k.replace(/_/g, ' ')}
+                      </th>
+                    ))}
+                    <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase w-14">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {yarnRequirementsLoading ? (
+                    <tr>
+                      <td colSpan={YARN_REQ_ROW_KEYS.length + 2} className="px-4 py-8 text-center text-gray-500">Loading...</td>
+                    </tr>
+                  ) : (
+                    yarnReqRows.map((row, rowIndex) => (
+                      <tr
+                        key={rowIndex}
+                        className={`border-t border-gray-100 ${activeCellYarnReq?.rowIndex === rowIndex ? 'bg-brand/5' : 'hover:bg-gray-50/80'}`}
+                      >
+                        <td className="px-2 py-1.5 text-sm text-gray-500 align-top">{rowIndex + 1}</td>
+                        {YARN_REQ_ROW_KEYS.map((colKey) => (
+                          <td key={colKey} className="p-0 align-top">
+                            <input
+                              ref={(el) => { yarnReqCellRefs.current[`${rowIndex}-${colKey}`] = el; }}
+                              type="text"
+                              inputMode={colKey === 'required_weight' ? 'decimal' : 'text'}
+                              value={row[colKey]}
+                              onChange={(e) => handleYarnReqCellChange(rowIndex, colKey, e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Tab') { e.preventDefault(); moveYarnReqFocus(rowIndex, colKey, 'next'); } if (e.key === 'Enter') moveYarnReqFocus(rowIndex, colKey, 'down'); }}
+                              onFocus={() => setActiveCellYarnReq({ rowIndex, colKey })}
+                              className={`w-full min-w-[80px] px-2 py-1.5 text-sm border-0 border-b border-transparent focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none rounded ${colKey === 'required_weight' ? 'text-right' : ''}`}
+                              placeholder={colKey.replace(/_/g, ' ')}
+                              readOnly={!canEdit}
+                            />
+                          </td>
+                        ))}
+                        <td className="p-1 align-top">
+                          {canEdit && (
+                            <button type="button" onClick={() => deleteYarnReqRow(rowIndex)} className="p-1 text-gray-500 hover:text-red-600" title="Delete row"><Trash2 className="w-4 h-4" /></button>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Card>
       )}
 
-      {modalOpen && (
-        <YarnReceiptModal
-          receipt={editingReceipt}
-          yarnOrders={yarnOrders}
-          defaultYarnOrderId={editingOrderId}
-          onClose={() => { setModalOpen(false); setEditingReceipt(null); }}
-          onSaved={handleSaved}
-        />
-      )}
-      {fabricModalOpen && editingOrderId && (
-        <FabricModal
-          yarnOrderId={editingOrderId}
-          fabric={editingFabric}
-          onClose={() => { setFabricModalOpen(false); setEditingFabric(null); }}
-          onSaved={handleFabricSaved}
-        />
-      )}
-      {isSuperAdmin && yarnReqModalOpen && editingOrderId && (
-        <YarnRequirementModal
-          yarnOrderId={editingOrderId}
-          row={editingYarnReq}
-          onClose={() => { setYarnReqModalOpen(false); setEditingYarnReq(null); }}
-          onSaved={handleYarnReqSaved}
-        />
-      )}
     </div>
   );
 }

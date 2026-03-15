@@ -87,4 +87,60 @@ class FabricController extends Controller
         $fabric->delete();
         return response()->json(['message' => 'Deleted']);
     }
+
+    /**
+     * Replace all fabrics for a yarn order (bulk sync).
+     * POST /fabrics/bulk
+     * Body: { yarn_order_id: int, fabrics: [{ description, design, ... }, ...] }
+     */
+    public function bulkStore(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'yarn_order_id' => 'required|exists:yarn_orders,id',
+            'fabrics' => 'required|array',
+            'fabrics.*.description' => 'nullable|string|max:255',
+            'fabrics.*.design' => 'nullable|string|max:255',
+            'fabrics.*.weave_technique' => 'nullable|string|max:255',
+            'fabrics.*.warp_count' => 'nullable|string|max:64',
+            'fabrics.*.warp_content' => 'nullable|string|max:255',
+            'fabrics.*.weft_count' => 'nullable|string|max:64',
+            'fabrics.*.weft_content' => 'nullable|string|max:255',
+            'fabrics.*.con_final_reed' => 'nullable|numeric',
+            'fabrics.*.con_final_pick' => 'nullable|numeric',
+            'fabrics.*.con_on_loom_reed' => 'nullable|numeric',
+            'fabrics.*.con_on_loom_pick' => 'nullable|numeric',
+            'fabrics.*.gsm_required' => 'nullable|numeric',
+            'fabrics.*.required_width' => 'nullable|numeric',
+            'fabrics.*.po_quantity' => 'nullable|numeric',
+            'fabrics.*.price_per_metre' => 'nullable|numeric',
+        ]);
+
+        $yarnOrderId = (int) $validated['yarn_order_id'];
+        Fabric::where('yarn_order_id', $yarnOrderId)->delete();
+
+        $created = [];
+        foreach ($validated['fabrics'] as $row) {
+            $fabric = Fabric::create([
+                'yarn_order_id' => $yarnOrderId,
+                'description' => $row['description'] ?? null,
+                'design' => $row['design'] ?? null,
+                'weave_technique' => $row['weave_technique'] ?? null,
+                'warp_count' => $row['warp_count'] ?? null,
+                'warp_content' => $row['warp_content'] ?? null,
+                'weft_count' => $row['weft_count'] ?? null,
+                'weft_content' => $row['weft_content'] ?? null,
+                'con_final_reed' => isset($row['con_final_reed']) ? (float) $row['con_final_reed'] : null,
+                'con_final_pick' => isset($row['con_final_pick']) ? (float) $row['con_final_pick'] : null,
+                'con_on_loom_reed' => isset($row['con_on_loom_reed']) ? (float) $row['con_on_loom_reed'] : null,
+                'con_on_loom_pick' => isset($row['con_on_loom_pick']) ? (float) $row['con_on_loom_pick'] : null,
+                'gsm_required' => isset($row['gsm_required']) ? (float) $row['gsm_required'] : null,
+                'required_width' => isset($row['required_width']) ? (float) $row['required_width'] : null,
+                'po_quantity' => isset($row['po_quantity']) ? (float) $row['po_quantity'] : null,
+                'price_per_metre' => isset($row['price_per_metre']) ? (float) $row['price_per_metre'] : null,
+            ]);
+            $created[] = $fabric;
+        }
+
+        return response()->json(['data' => $created, 'message' => count($created) . ' fabric(s) saved'], 201);
+    }
 }

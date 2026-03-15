@@ -13,7 +13,18 @@ class YarnOrderController extends Controller
     {
         $perPage = (int) $request->input('per_page', 50);
         $perPage = $perPage >= 1 && $perPage <= 100 ? $perPage : 50;
-        $orders = YarnOrder::query()->orderBy('created_at', 'desc')->orderBy('id', 'desc')->paginate($perPage);
+        $q = YarnOrder::query()->orderBy('created_at', 'desc')->orderBy('id', 'desc');
+        $search = $request->input('search');
+        if ($search && is_string($search) && strlen(trim($search)) > 0) {
+            $term = '%' . trim($search) . '%';
+            $q->where(function ($query) use ($term) {
+                $query->where('po_number', 'like', $term)
+                    ->orWhere('customer', 'like', $term)
+                    ->orWhere('order_from', 'like', $term)
+                    ->orWhereRaw('CAST(id AS CHAR) LIKE ?', [$term]);
+            });
+        }
+        $orders = $q->paginate($perPage);
         return response()->json([
             'data' => $orders->items(),
             'meta' => [
@@ -45,22 +56,21 @@ class YarnOrderController extends Controller
     }
 
     /**
-     * Single-call entry data: order + receipts + fabrics + yarn_requirements (one round trip).
+     * Single-call entry data: order + receipts + fabrics + yarn_requirements (one round trip, eager loaded).
      */
     public function entry(YarnOrder $yarnOrder): JsonResponse
     {
-        $id = $yarnOrder->id;
-        [$receipts, $fabrics, $requirements] = [
-            \App\Models\YarnReceipt::where('yarn_order_id', $id)->orderBy('date', 'desc')->orderBy('id', 'desc')->get(),
-            \App\Models\Fabric::where('yarn_order_id', $id)->orderBy('id')->get(),
-            \App\Models\YarnRequirement::where('yarn_order_id', $id)->orderBy('id')->get(),
-        ];
+        $yarnOrder->load([
+            'yarnReceipts' => fn ($q) => $q->orderBy('date', 'desc')->orderBy('id', 'desc'),
+            'fabrics' => fn ($q) => $q->orderBy('id'),
+            'yarnRequirements' => fn ($q) => $q->orderBy('id'),
+        ]);
         return response()->json([
             'data' => [
                 'order' => $yarnOrder,
-                'receipts' => $receipts,
-                'fabrics' => $fabrics,
-                'yarn_requirements' => $requirements,
+                'receipts' => $yarnOrder->yarnReceipts,
+                'fabrics' => $yarnOrder->fabrics,
+                'yarn_requirements' => $yarnOrder->yarnRequirements,
             ],
         ]);
     }

@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\GstRecordResource;
 use App\Models\GstRecord;
-use App\Models\Order;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -38,7 +37,6 @@ class GstRecordController extends Controller
             'type' => 'required|in:in,out',
             'invoice_number' => 'nullable|string|max:100',
             'company_id' => 'nullable|exists:companies,id',
-            'order_id' => 'nullable|exists:orders,id',
             'date' => 'required|date',
             'taxable_value' => 'required|numeric|min:0',
             'gst_percentage' => 'required|numeric|min:0|max:100',
@@ -54,7 +52,7 @@ class GstRecordController extends Controller
 
     public function show(GstRecord $gstRecord): JsonResponse
     {
-        $gstRecord->load(['company', 'order']);
+        $gstRecord->load(['company']);
         return response()->json(['data' => new GstRecordResource($gstRecord)]);
     }
 
@@ -64,7 +62,6 @@ class GstRecordController extends Controller
             'type' => 'sometimes|required|in:in,out',
             'invoice_number' => 'nullable|string|max:100',
             'company_id' => 'nullable|exists:companies,id',
-            'order_id' => 'nullable|exists:orders,id',
             'date' => 'sometimes|required|date',
             'taxable_value' => 'sometimes|required|numeric|min:0',
             'gst_percentage' => 'sometimes|required|numeric|min:0|max:100',
@@ -79,40 +76,12 @@ class GstRecordController extends Controller
         }
 
         $gstRecord->update($validated);
-        return response()->json(['data' => new GstRecordResource($gstRecord->fresh(['company', 'order']))]);
+        return response()->json(['data' => new GstRecordResource($gstRecord->fresh(['company']))]);
     }
 
     public function destroy(GstRecord $gstRecord): JsonResponse
     {
         $gstRecord->delete();
         return response()->json(['message' => 'GST record deleted successfully']);
-    }
-
-    /** Create GST Out from completed order */
-    public function fromOrder(Order $order): JsonResponse
-    {
-        if ($order->status !== Order::STATUS_COMPLETED) {
-            return response()->json(['message' => 'Only completed orders can generate GST Out.'], 422);
-        }
-
-        $exists = GstRecord::where('type', 'out')->where('order_id', $order->id)->exists();
-        if ($exists) {
-            return response()->json(['message' => 'GST Out already generated for this order.'], 422);
-        }
-
-        $record = GstRecord::create([
-            'type' => 'out',
-            'invoice_number' => $order->dc_number,
-            'company_id' => $order->company_id,
-            'order_id' => $order->id,
-            'date' => $order->updated_at->format('Y-m-d'),
-            'taxable_value' => $order->total_amount,
-            'gst_percentage' => $order->gst_percentage,
-            'gst_amount' => $order->gst_amount,
-            'total_amount' => $order->grand_total,
-            'description' => "Order {$order->dc_number} - {$order->fabric_type}",
-        ]);
-
-        return response()->json(['data' => new GstRecordResource($record->load(['company', 'order']))], 201);
     }
 }
