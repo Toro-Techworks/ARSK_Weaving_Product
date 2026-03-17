@@ -38,10 +38,12 @@ class PaymentController extends Controller
             'payment_date' => 'required|date',
             'amount' => 'required|numeric|min:0',
             'mode' => 'required|in:Cash,Bank,UPI',
+            'status' => 'sometimes|in:open,running,closed',
             'reference_number' => 'nullable|string|max:100',
             'notes' => 'nullable|string',
         ]);
 
+        $validated['status'] = $validated['status'] ?? Payment::STATUS_OPEN;
         $payment = Payment::create($validated);
         return response()->json(['data' => new PaymentResource($payment->load(['company', 'order']))], 201);
     }
@@ -60,6 +62,7 @@ class PaymentController extends Controller
             'payment_date' => 'sometimes|required|date',
             'amount' => 'sometimes|required|numeric|min:0',
             'mode' => 'sometimes|required|in:Cash,Bank,UPI',
+            'status' => 'sometimes|required|in:open,running,closed',
             'reference_number' => 'nullable|string|max:100',
             'notes' => 'nullable|string',
         ]);

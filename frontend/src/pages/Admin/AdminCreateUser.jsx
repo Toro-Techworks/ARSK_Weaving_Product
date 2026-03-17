@@ -22,7 +22,7 @@ export function AdminCreateUser() {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     name: '',
-    email: '',
+    username: '',
     password: '',
     password_confirmation: '',
     role_id: '',
@@ -88,7 +88,7 @@ export function AdminCreateUser() {
               <FormInput label="Name" required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Full name" className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormInput label="Email" type="email" required value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="email@example.com" className="!mb-0" />
+              <FormInput label="Username" type="text" required value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value.trim().replace(/\s+/g, '') }))} placeholder="username" minLength={4} className="!mb-0" title="Min 4 characters, no spaces" />
             </div>
             <div className={fieldClass}>
               <FormInput label="Password" type="password" required value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} placeholder="••••••••" className="!mb-0" />

@@ -1,6 +1,9 @@
 <IfModule mod_rewrite.c>
 RewriteEngine On
 
+# Set default landing file
+DirectoryIndex index.html
+
 # Laravel API
 RewriteCond %{REQUEST_URI} ^/api
 RewriteCond %{REQUEST_FILENAME} !-f

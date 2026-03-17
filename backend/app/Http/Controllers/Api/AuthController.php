@@ -18,13 +18,13 @@ class AuthController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email',
+            'username' => 'required|string|min:4|max:255|unique:users,username|regex:/^\S+$/',
             'password' => ['required', 'confirmed', Password::defaults()],
         ]);
 
         $user = User::create([
             'name' => $validated['name'],
-            'email' => $validated['email'],
+            'username' => $validated['username'],
             'password' => Hash::make($validated['password']),
             'role_id' => Role::where('role_name', 'user')->value('id') ?? 3,
             'status' => User::STATUS_ACTIVE,
@@ -42,13 +42,13 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $request->validate([
-            'email' => 'required|email',
+            'username' => 'required|string',
             'password' => 'required',
         ]);
 
-        if (!Auth::attempt($request->only('email', 'password'))) {
+        if (!Auth::attempt($request->only('username', 'password'))) {
             throw ValidationException::withMessages([
-                'email' => ['The provided credentials are incorrect.'],
+                'username' => ['The provided credentials are incorrect.'],
             ]);
         }
 
@@ -57,7 +57,7 @@ class AuthController extends Controller
         if (!$user->isActive()) {
             Auth::logout();
             throw ValidationException::withMessages([
-                'email' => ['This account has been disabled. Contact an administrator.'],
+                'username' => ['This account has been disabled. Contact an administrator.'],
             ]);
         }
 

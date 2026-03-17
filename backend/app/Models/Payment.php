@@ -14,11 +14,16 @@ class Payment extends Model
     const MODE_BANK = 'Bank';
     const MODE_UPI = 'UPI';
 
+    const STATUS_OPEN = 'open';
+    const STATUS_RUNNING = 'running';
+    const STATUS_CLOSED = 'closed';
+
     protected $fillable = [
         'company_id',
         'payment_date',
         'amount',
         'mode',
+        'status',
         'reference_number',
         'notes',
     ];

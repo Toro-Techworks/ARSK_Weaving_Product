@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import api from '../api/client';
 import { Card } from '../components/Card';
 import { CardSkeleton } from '../components/Skeleton';
+import { useRefreshOnSameMenuClick } from '../hooks/useRefreshOnSameMenuClick';
 
 function BarChart({ data }) {
   const max = Math.max(...(data?.map((d) => d.meters) || [1]), 1);
@@ -27,15 +28,22 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetch = useCallback(() => {
+    setLoading(true);
     api.get('/dashboard').then(({ data: d }) => setData(d)).finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    fetch();
+  }, [fetch]);
+
+  useRefreshOnSameMenuClick(fetch);
 
   if (loading) {
     return (
       <div>
         <div className="h-8 w-48 bg-gray-200 rounded animate-pulse mb-6" />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 sm:mb-8">
           {Array.from({ length: 5 }).map((_, i) => (
             <CardSkeleton key={i} />
           ))}
@@ -53,14 +61,13 @@ export default function Dashboard() {
     { label: "Today's Production", value: `${Number(data?.today_production ?? 0).toLocaleString()} m` },
     { label: 'Active Looms', value: data?.active_looms ?? 0 },
     { label: 'Pending Payments', value: `₹${Number(data?.pending_payments ?? 0).toLocaleString()}` },
-    { label: 'GST Payable', value: `₹${Number(data?.gst_payable ?? 0).toLocaleString()}` },
     { label: 'Orders', value: data?.running_orders ?? 0 },
   ];
 
   return (
     <div>
-      <h2 className="text-xl font-semibold text-gray-900 mb-6">Dashboard</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+      <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4 sm:mb-6">Dashboard</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 sm:mb-8">
         {statCards.map((stat, i) => (
           <motion.div
             key={stat.label}

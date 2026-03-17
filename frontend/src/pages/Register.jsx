@@ -8,7 +8,7 @@ import Button from '../components/Button';
 
 export default function Register() {
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,12 +25,12 @@ export default function Register() {
     }
     setLoading(true);
     try {
-      const { data } = await api.post('/register', { name, email, password, password_confirmation: passwordConfirmation });
+      const { data } = await api.post('/register', { name, username: username.trim().replace(/\s+/g, ''), password, password_confirmation: passwordConfirmation });
       setAuth(data.token, data.user);
       toast.success('Account created successfully');
       navigate('/');
     } catch (err) {
-      const msg = err.response?.data?.message || err.response?.data?.errors?.email?.[0] || 'Registration failed';
+      const msg = err.response?.data?.message || err.response?.data?.errors?.username?.[0] || 'Registration failed';
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -41,7 +41,7 @@ export default function Register() {
     <div className="min-h-screen bg-[#F9FAFB] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2 text-center">Toro Production</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2 text-center">ARSK Weaving</h1>
           <p className="text-gray-500 text-center mb-6">Create your account</p>
           <form onSubmit={handleSubmit} className="space-y-4">
             <FormInput
@@ -53,12 +53,13 @@ export default function Register() {
               placeholder="Your name"
             />
             <FormInput
-              label="Email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              label="Username"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value.trim().replace(/\s+/g, ''))}
               required
-              placeholder="you@example.com"
+              minLength={4}
+              placeholder="username"
             />
             <FormInput
               label="Password"

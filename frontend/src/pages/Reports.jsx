@@ -3,52 +3,7 @@ import toast from 'react-hot-toast';
 import api from '../api/client';
 import { Card } from '../components/Card';
 import { FormInput } from '../components/FormInput';
-
-export function GstSummaryReport() {
-  const [data, setData] = useState(null);
-  const [from, setFrom] = useState(new Date().toISOString().slice(0, 7) + '-01');
-  const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
-  const [loading, setLoading] = useState(false);
-
-  const fetch = () => {
-    setLoading(true);
-    api.get('/reports/gst-summary', { params: { date_from: from, date_to: to } })
-      .then(({ data: res }) => setData(res))
-      .catch(() => toast.error('Failed to load'))
-      .finally(() => setLoading(false));
-  };
-  useEffect(() => fetch(), [from, to]);
-
-  if (!data) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-10 w-10 border-2 border-brand border-t-transparent" /></div>;
-
-  return (
-    <div>
-      <h2 className="text-xl font-semibold text-gray-900 mb-6">GST Summary</h2>
-      <Card>
-        <div className="flex gap-4 mb-6">
-          <FormInput type="date" label="From" value={from} onChange={(e) => setFrom(e.target.value)} />
-          <FormInput type="date" label="To" value={to} onChange={(e) => setTo(e.target.value)} />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="p-4 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-500">GST In (Taxable)</p>
-            <p className="text-xl font-semibold">₹{Number(data.gst_in?.taxable_value ?? 0).toLocaleString()}</p>
-            <p className="text-sm text-gray-500">GST: ₹{Number(data.gst_in?.gst_amount ?? 0).toLocaleString()}</p>
-          </div>
-          <div className="p-4 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-500">GST Out (Taxable)</p>
-            <p className="text-xl font-semibold">₹{Number(data.gst_out?.taxable_value ?? 0).toLocaleString()}</p>
-            <p className="text-sm text-gray-500">GST: ₹{Number(data.gst_out?.gst_amount ?? 0).toLocaleString()}</p>
-          </div>
-          <div className="p-4 bg-brand/10 rounded-lg">
-            <p className="text-sm text-gray-600">GST Payable</p>
-            <p className="text-xl font-semibold text-brand">₹{Number(data.payable ?? 0).toLocaleString()}</p>
-          </div>
-        </div>
-      </Card>
-    </div>
-  );
-}
+import { useRefreshOnSameMenuClick } from '../hooks/useRefreshOnSameMenuClick';
 
 export function OrderSummaryReport() {
   const [data, setData] = useState(null);
@@ -69,9 +24,9 @@ export function OrderSummaryReport() {
 
   return (
     <div>
-      <h2 className="text-xl font-semibold text-gray-900 mb-6">Order Summary</h2>
+      <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4 sm:mb-6">Order Summary</h2>
       <Card>
-        <div className="flex gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row gap-4 mb-6">
           <FormInput type="date" label="From" value={from} onChange={(e) => setFrom(e.target.value)} />
           <FormInput type="date" label="To" value={to} onChange={(e) => setTo(e.target.value)} />
         </div>
@@ -102,12 +57,13 @@ export function LoomEfficiencyReport() {
       .finally(() => setLoading(false));
   };
   useEffect(() => fetch(), [from, to]);
+  useRefreshOnSameMenuClick(fetch);
 
   return (
     <div>
-      <h2 className="text-xl font-semibold text-gray-900 mb-6">Loom Efficiency</h2>
+      <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4 sm:mb-6">Loom Efficiency</h2>
       <Card>
-        <div className="flex gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row gap-4 mb-6">
           <FormInput type="date" label="From" value={from} onChange={(e) => setFrom(e.target.value)} />
           <FormInput type="date" label="To" value={to} onChange={(e) => setTo(e.target.value)} />
         </div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, X } from 'lucide-react';
 import api from '../api/client';
+import { formatOrderId } from '../utils/formatOrderId';
 
 /**
  * Searchable yarn order dropdown. Search by PO number, customer, or order ID.
@@ -71,7 +72,7 @@ export function SearchableOrderSelect({ label, value, onChange, placeholder = 'S
   };
 
   const displayValue = selectedOrder
-    ? `#${selectedOrder.id}${selectedOrder.po_number ? ` — ${selectedOrder.po_number}` : ''}${selectedOrder.customer ? ` — ${selectedOrder.customer}` : ''}${selectedOrder.order_from ? ` (${selectedOrder.order_from})` : ''}`
+    ? `${formatOrderId(selectedOrder)}${selectedOrder.po_number ? ` — ${selectedOrder.po_number}` : ''}${selectedOrder.customer ? ` — ${selectedOrder.customer}` : ''}${selectedOrder.order_from ? ` (${selectedOrder.order_from})` : ''}`
     : '';
 
   return (
@@ -127,7 +128,7 @@ export function SearchableOrderSelect({ label, value, onChange, placeholder = 'S
                       onClick={() => handleSelect(o)}
                       className="w-full text-left px-3 py-2.5 text-sm hover:bg-brand/5 focus:bg-brand/5 focus:outline-none"
                     >
-                      <span className="font-medium text-gray-900">#{o.id}</span>
+                      <span className="font-medium text-gray-900">{formatOrderId(o)}</span>
                       {o.po_number && <span className="text-gray-600"> — {o.po_number}</span>}
                       {o.customer && <span className="text-gray-500"> — {o.customer}</span>}
                     </button>

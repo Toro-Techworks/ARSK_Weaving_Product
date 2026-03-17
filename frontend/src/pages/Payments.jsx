@@ -7,6 +7,7 @@ import { Table } from '../components/Table';
 import Button from '../components/Button';
 import { FormInput, FormSelect } from '../components/FormInput';
 import { usePagePermission } from '../hooks/usePagePermission';
+import { useRefreshOnSameMenuClick } from '../hooks/useRefreshOnSameMenuClick';
 
 export function PaymentList() {
   const { canEdit } = usePagePermission();
@@ -29,6 +30,7 @@ export function PaymentList() {
   };
   useEffect(() => fetch(), [page]);
   useEffect(() => { setPage(1); fetch(); }, [companyId]);
+  useRefreshOnSameMenuClick(fetch);
 
   const deletePayment = (id) => {
     if (!window.confirm('Delete this payment?')) return;
@@ -40,16 +42,17 @@ export function PaymentList() {
     { key: 'company', label: 'Company', render: (_, row) => row.company?.company_name || '-' },
     { key: 'amount', label: 'Amount', render: (v) => v != null ? `₹${Number(v).toLocaleString()}` : '-' },
     { key: 'mode', label: 'Mode' },
+    { key: 'status', label: 'Status', render: (v) => v ? String(v).toUpperCase() : '-' },
     { key: 'reference_number', label: 'Reference' },
     ...(canEdit ? [{ key: 'actions', label: 'Actions', render: (_, row) => <button type="button" onClick={() => deletePayment(row.id)} className="text-red-600 hover:underline">Delete</button> }] : []),
   ];
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Income (Payments)</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6">
+        <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Income (Payments)</h2>
         {canEdit && (
-          <Button className="gap-2" onClick={() => setAddModalOpen(true)}><Plus className="w-4 h-4" /> Record Payment</Button>
+          <Button className="gap-2 w-full sm:w-auto" onClick={() => setAddModalOpen(true)}><Plus className="w-4 h-4" /> Record Payment</Button>
         )}
       </div>
       <Card>
@@ -58,11 +61,11 @@ export function PaymentList() {
         </div>
         <Table columns={columns} data={data} isLoading={loading} />
         {meta.last_page > 1 && (
-          <div className="flex justify-between items-center mt-4 pt-4 border-t">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4 pt-4 border-t">
             <span className="text-sm text-gray-500">Page {meta.current_page} of {meta.last_page}</span>
             <div className="flex gap-2">
-              <Button variant="secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-              <Button variant="secondary" disabled={page >= meta.last_page} onClick={() => setPage((p) => p + 1)}>Next</Button>
+              <Button variant="secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="flex-1 sm:flex-none">Previous</Button>
+              <Button variant="secondary" disabled={page >= meta.last_page} onClick={() => setPage((p) => p + 1)} className="flex-1 sm:flex-none">Next</Button>
             </div>
           </div>
         )}
@@ -80,7 +83,7 @@ export function PaymentList() {
 function PaymentAddModal({ onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [companies, setCompanies] = useState([]);
-  const [form, setForm] = useState({ company_id: '', payment_date: new Date().toISOString().slice(0, 10), amount: '', mode: 'Bank', reference_number: '', notes: '' });
+  const [form, setForm] = useState({ company_id: '', payment_date: new Date().toISOString().slice(0, 10), amount: '', mode: 'Bank', status: 'open', reference_number: '', notes: '' });
 
   useEffect(() => { api.get('/companies-list').then(({ data: d }) => setCompanies(d.data || [])); }, []);
 
@@ -96,15 +99,15 @@ function PaymentAddModal({ onClose, onSuccess }) {
   const fieldClass = 'space-y-1.5';
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900">Record Payment</h3>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3 sm:p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-lg w-[90vw] sm:w-full max-w-2xl max-h-[85vh] sm:max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-4 sm:px-6 py-4 flex items-center justify-between">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-900">Record Payment</h3>
           <button type="button" onClick={onClose} className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700" aria-label="Close">
             <X className="w-5 h-5" />
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-6">
           <p className="text-sm text-gray-600 -mt-2">Record a payment received from a company.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className={fieldClass}>
@@ -120,6 +123,19 @@ function PaymentAddModal({ onClose, onSuccess }) {
               <FormSelect label="Mode" options={[{ value: 'Cash', label: 'Cash' }, { value: 'Bank', label: 'Bank' }, { value: 'UPI', label: 'UPI' }]} value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })} className="!mb-0" />
             </div>
             <div className={fieldClass}>
+              <FormSelect
+                label="Status"
+                options={[
+                  { value: 'open', label: 'Open' },
+                  { value: 'running', label: 'Running' },
+                  { value: 'closed', label: 'Closed' },
+                ]}
+                value={form.status}
+                onChange={(e) => setForm({ ...form, status: e.target.value })}
+                className="!mb-0"
+              />
+            </div>
+            <div className={fieldClass}>
               <FormInput label="Reference Number" value={form.reference_number} onChange={(e) => setForm({ ...form, reference_number: e.target.value })} className="!mb-0" />
             </div>
             <div className="md:col-span-2">
@@ -128,9 +144,9 @@ function PaymentAddModal({ onClose, onSuccess }) {
               </div>
             </div>
           </div>
-          <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">
-            <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={loading}>{loading ? 'Saving...' : 'Save Payment'}</Button>
+          <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end pt-4 border-t border-gray-100">
+            <Button type="button" variant="secondary" onClick={onClose} className="w-full sm:w-auto">Cancel</Button>
+            <Button type="submit" disabled={loading} className="w-full sm:w-auto">{loading ? 'Saving...' : 'Save Payment'}</Button>
           </div>
         </form>
       </div>

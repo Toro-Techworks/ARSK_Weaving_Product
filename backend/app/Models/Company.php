@@ -23,9 +23,4 @@ class Company extends Model
     {
         return $this->hasMany(Payment::class);
     }
-
-    public function gstRecords(): HasMany
-    {
-        return $this->hasMany(GstRecord::class, 'company_id');
-    }
 }

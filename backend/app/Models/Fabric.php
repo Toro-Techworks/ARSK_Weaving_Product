@@ -27,6 +27,7 @@ class Fabric extends Model
         'required_width',
         'po_quantity',
         'price_per_metre',
+        'total_meters_produced',
     ];
 
     protected $casts = [
@@ -38,6 +39,7 @@ class Fabric extends Model
         'required_width' => 'decimal:3',
         'po_quantity' => 'decimal:3',
         'price_per_metre' => 'decimal:2',
+        'total_meters_produced' => 'decimal:3',
     ];
 
     public function yarnOrder(): BelongsTo

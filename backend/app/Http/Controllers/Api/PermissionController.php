@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\UserMenuPermission;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class PermissionController extends Controller
 {
@@ -18,7 +19,7 @@ class PermissionController extends Controller
     public function users(): JsonResponse
     {
         $users = User::active()
-            ->select(['id', 'name', 'email', 'role_id', 'status', 'created_at'])
+            ->select(['id', 'name', 'username', 'role_id', 'status', 'created_at'])
             ->with('role:id,role_name')
             ->orderBy('name')
             ->get();

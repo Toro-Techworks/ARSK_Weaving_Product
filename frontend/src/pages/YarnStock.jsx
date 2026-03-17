@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Calendar, Pencil, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -7,6 +7,7 @@ import { Card } from '../components/Card';
 import { FormInput, FormSelect } from '../components/FormInput';
 import Button from '../components/Button';
 import { usePagePermission } from '../hooks/usePagePermission';
+import { useRefreshOnSameMenuClick } from '../hooks/useRefreshOnSameMenuClick';
 import { useAuth } from '../context/AuthContext';
 
 function formatOrderDate(val) {
@@ -22,24 +23,26 @@ export function YarnStockList() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetch = useCallback(() => {
     setLoading(true);
     api.get('/yarn-orders', { params: { per_page: 100 } })
       .then(({ data }) => setOrders(data.data || []))
       .catch(() => toast.error('Failed to load yarn orders'))
       .finally(() => setLoading(false));
   }, []);
+  useEffect(() => fetch(), [fetch]);
+  useRefreshOnSameMenuClick(fetch);
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Yarn Stock</h2>
-        <Button onClick={() => navigate('/yarn-stock/entry')} disabled={!canEdit}>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6">
+        <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Yarn Stock</h2>
+        <Button onClick={() => navigate('/yarn-stock/entry')} disabled={!canEdit} className="w-full sm:w-auto">
           New Order
         </Button>
       </div>
       <Card>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto min-w-0">
           <table className="min-w-full divide-y divide-gray-200">
             <thead>
               <tr>
@@ -691,8 +694,8 @@ export function YarnStockEntry() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Yarn Stock Entry</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6">
+        <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Yarn Stock Entry</h2>
         {!canEdit && (
           <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
             Read Only Mode
@@ -710,13 +713,13 @@ export function YarnStockEntry() {
       )}
 
       <Card>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-medium text-gray-900">Yarn Receipt Details</h3>
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <h3 className="text-base sm:text-lg font-medium text-gray-900">Yarn Receipt Details</h3>
+          <div className="flex flex-wrap gap-2">
             {editingOrderId && canEdit && (
               <>
-                <Button variant="secondary" onClick={addRow}>+ Add Row</Button>
-                <Button onClick={saveAllRows} disabled={saveReceiptsLoading}>
+                <Button variant="secondary" onClick={addRow} className="w-full sm:w-auto">+ Add Row</Button>
+                <Button onClick={saveAllRows} disabled={saveReceiptsLoading} className="w-full sm:w-auto">
                   {saveReceiptsLoading ? 'Saving...' : 'Save All'}
                 </Button>
               </>

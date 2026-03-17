@@ -12,6 +12,7 @@ class LoomEntryResource extends JsonResource
         return [
             'id' => $this->id,
             'loom_id' => $this->loom_id,
+            'yarn_order_id' => $this->yarn_order_id,
             'loom' => $this->whenLoaded('loom', fn () => new LoomResource($this->loom)),
             'date' => $this->date?->format('Y-m-d'),
             'shift' => $this->shift,

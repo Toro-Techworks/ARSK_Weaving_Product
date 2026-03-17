@@ -78,9 +78,9 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener('visibilitychange', onVisibilityChange);
   }, [refreshMenus]);
 
-  const login = useCallback(async (email, password) => {
+  const login = useCallback(async (username, password) => {
     await getCsrfCookie();
-    const { data } = await api.post('/login', { email, password });
+    const { data } = await api.post('/login', { username, password });
     localStorage.setItem('token', data.token);
     setUser(data.user);
     localStorage.setItem('user', JSON.stringify(data.user));

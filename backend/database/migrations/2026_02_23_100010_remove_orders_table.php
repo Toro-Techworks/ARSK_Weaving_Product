@@ -17,10 +17,12 @@ return new class extends Migration
             $table->dropColumn('order_id');
         });
 
-        Schema::table('gst_records', function (Blueprint $table) {
-            $table->dropForeign(['order_id']);
-            $table->dropColumn('order_id');
-        });
+        if (Schema::hasTable('gst_records')) {
+            Schema::table('gst_records', function (Blueprint $table) {
+                $table->dropForeign(['order_id']);
+                $table->dropColumn('order_id');
+            });
+        }
 
         Schema::table('loom_entries', function (Blueprint $table) {
             $table->dropForeign(['order_id']);
@@ -52,9 +54,11 @@ return new class extends Migration
         Schema::table('payments', function (Blueprint $table) {
             $table->foreignId('order_id')->nullable()->after('company_id')->constrained()->onDelete('set null');
         });
-        Schema::table('gst_records', function (Blueprint $table) {
-            $table->foreignId('order_id')->nullable()->after('company_id')->constrained()->onDelete('set null');
-        });
+        if (Schema::hasTable('gst_records')) {
+            Schema::table('gst_records', function (Blueprint $table) {
+                $table->foreignId('order_id')->nullable()->after('company_id')->constrained()->onDelete('set null');
+            });
+        }
         Schema::table('loom_entries', function (Blueprint $table) {
             $table->foreignId('order_id')->nullable()->after('loom_id')->constrained()->nullOnDelete();
         });

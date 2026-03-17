@@ -39,8 +39,10 @@ class YarnOrderController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
+            'loom_id' => 'nullable|exists:looms,id',
             'order_from' => 'nullable|string|max:255',
             'weaving_unit' => 'nullable|string|max:255',
+            'design' => 'nullable|string',
             'po_number' => 'nullable|string|max:64',
             'customer' => 'nullable|string|max:255',
             'po_date' => 'nullable|date',
@@ -78,8 +80,10 @@ class YarnOrderController extends Controller
     public function update(Request $request, YarnOrder $yarnOrder): JsonResponse
     {
         $validated = $request->validate([
+            'loom_id' => 'nullable|exists:looms,id',
             'order_from' => 'nullable|string|max:255',
             'weaving_unit' => 'nullable|string|max:255',
+            'design' => 'nullable|string',
             'po_number' => 'nullable|string|max:64',
             'customer' => 'nullable|string|max:255',
             'po_date' => 'nullable|date',

@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { usePagePermission } from '../../hooks/usePagePermission';
+import { useRefreshOnSameMenuClick } from '../../hooks/useRefreshOnSameMenuClick';
 import { Card } from '../../components/Card';
 import { FormInput, FormSelect } from '../../components/FormInput';
 import Button from '../../components/Button';
@@ -34,6 +35,7 @@ export function AdminUserList() {
   useEffect(() => {
     fetchUsers();
   }, [page]);
+  useRefreshOnSameMenuClick(fetchUsers);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -42,7 +44,7 @@ export function AdminUserList() {
   };
 
   const handleDisable = (u) => {
-    if (!window.confirm(`Disable user ${u.email}?`)) return;
+    if (!window.confirm(`Disable user ${u.username}?`)) return;
     api.put(`/users/${u.id}`, { status: 'disabled' })
       .then(() => { toast.success('User disabled'); fetchUsers(); })
       .catch(() => toast.error('Failed to update'));
@@ -56,7 +58,7 @@ export function AdminUserList() {
 
   const handleDelete = (u) => {
     if (u.role === 'super_admin') return toast.error('Cannot delete SuperAdmin.');
-    if (!window.confirm(`Delete ${u.email}? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete ${u.username}? This cannot be undone.`)) return;
     api.delete(`/users/${u.id}`)
       .then(() => { toast.success('User deleted'); fetchUsers(); setEditModal(null); })
       .catch((err) => toast.error(err.response?.data?.message || 'Failed to delete'));
@@ -83,18 +85,18 @@ export function AdminUserList() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Manage Users</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6">
+        <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Manage Users</h2>
         {pageCanEdit && (
-          <Button className="gap-2" onClick={() => setCreateModalOpen(true)}><UserPlus className="w-4 h-4" /> Create User</Button>
+          <Button className="gap-2 w-full sm:w-auto" onClick={() => setCreateModalOpen(true)}><UserPlus className="w-4 h-4" /> Create User</Button>
         )}
       </div>
 
       <Card>
-        <form onSubmit={handleSearch} className="flex gap-2 mb-4">
+        <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2 mb-4">
           <input
             type="search"
-            placeholder="Search by name or email..."
+            placeholder="Search by name or username..."
             className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -102,12 +104,12 @@ export function AdminUserList() {
           <Button type="submit">Search</Button>
         </form>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto min-w-0">
           <table className="min-w-full divide-y divide-gray-200">
             <thead>
               <tr>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Username</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
@@ -121,7 +123,7 @@ export function AdminUserList() {
                 users.map((u) => (
                   <tr key={u.id} className="border-t border-gray-100 hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm text-gray-900">{u.name}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{u.email}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{u.username}</td>
                     <td className="px-4 py-3 text-sm">{u.role_label}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
@@ -204,7 +206,7 @@ function CreateUserModal({ currentUser, onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     name: '',
-    email: '',
+    username: '',
     password: '',
     password_confirmation: '',
     role_id: '',
@@ -249,20 +251,20 @@ function CreateUserModal({ currentUser, onClose, onSuccess }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-lg max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900">Create New User</h3>
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-4 sm:px-6 py-4 flex items-center justify-between">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-900">Create New User</h3>
           <button type="button" onClick={onClose} className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700" aria-label="Close">
             <X className="w-5 h-5" />
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
           <p className="text-sm text-gray-600 -mt-2">Create a new system user and assign a role.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className={fieldClass}>
               <FormInput label="Name" required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Full name" className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormInput label="Email" type="email" required value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="email@example.com" className="!mb-0" />
+              <FormInput label="Username" type="text" required value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value.trim().replace(/\s+/g, '') }))} placeholder="username" minLength={4} className="!mb-0" title="Min 4 characters, no spaces" />
             </div>
             <div className={fieldClass}>
               <FormInput label="Password" type="password" required value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} placeholder="••••••••" className="!mb-0" />
@@ -277,9 +279,9 @@ function CreateUserModal({ currentUser, onClose, onSuccess }) {
               <FormSelect label="Status" options={STATUSES} value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} className="!mb-0" />
             </div>
           </div>
-          <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">
-            <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={loading}>{loading ? 'Creating...' : 'Create User'}</Button>
+          <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end pt-4 border-t border-gray-100">
+            <Button type="button" variant="secondary" onClick={onClose} className="w-full sm:w-auto">Cancel</Button>
+            <Button type="submit" disabled={loading} className="w-full sm:w-auto">{loading ? 'Creating...' : 'Create User'}</Button>
           </div>
         </form>
       </div>
@@ -289,7 +291,7 @@ function CreateUserModal({ currentUser, onClose, onSuccess }) {
 
 function EditUserModal({ user, onClose, onSaved, canAssignRole }) {
   const [roles, setRoles] = useState([]);
-  const [form, setForm] = useState({ name: user.name, email: user.email, role_id: String(user.role_id || ''), status: user.status });
+  const [form, setForm] = useState({ name: user.name, username: user.username, role_id: String(user.role_id || ''), status: user.status });
   const [loading, setLoading] = useState(false);
 
   React.useEffect(() => {
@@ -318,7 +320,7 @@ function EditUserModal({ user, onClose, onSaved, canAssignRole }) {
         <h3 className="text-lg font-semibold mb-4">Edit User</h3>
         <form onSubmit={handleSubmit} className="space-y-4">
           <FormInput label="Name" required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-          <FormInput label="Email" type="email" required value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
+          <FormInput label="Username" type="text" required value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value.trim().replace(/\s+/g, '') }))} placeholder="username" minLength={4} title="Min 4 characters, no spaces" />
           {canAssignRole && (
             <FormSelect
               label="Role"
@@ -363,7 +365,7 @@ function ResetPasswordModal({ user, onClose, onReset }) {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-semibold mb-2">Reset Password</h3>
-        <p className="text-sm text-gray-600 mb-4">Set a new password for {user.email}</p>
+        <p className="text-sm text-gray-600 mb-4">Set a new password for {user.username}</p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <FormInput label="New Password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
           <FormInput label="Confirm Password" type="password" required value={password_confirmation} onChange={(e) => setPasswordConfirmation(e.target.value)} placeholder="••••••••" />

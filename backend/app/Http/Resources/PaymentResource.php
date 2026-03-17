@@ -16,6 +16,7 @@ class PaymentResource extends JsonResource
             'payment_date' => $this->payment_date?->format('Y-m-d'),
             'amount' => (float) $this->amount,
             'mode' => $this->mode,
+            'status' => $this->status,
             'reference_number' => $this->reference_number,
             'notes' => $this->notes,
             'created_at' => $this->created_at?->toISOString(),

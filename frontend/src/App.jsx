@@ -12,8 +12,7 @@ import { LoomList } from './pages/Looms';
 import { LoomDailyEntry, ProductionReport } from './pages/LoomProduction';
 import { PaymentList } from './pages/Payments';
 import { ExpenseList } from './pages/Expenses';
-import { GstIn, GstOut } from './pages/Gst';
-import { GstSummaryReport, OrderSummaryReport, LoomEfficiencyReport } from './pages/Reports';
+import { OrderSummaryReport, LoomEfficiencyReport } from './pages/Reports';
 import { Profile } from './pages/Settings';
 import { AdminUserList, AdminPermissionMatrix } from './pages/Admin';
 
@@ -52,8 +51,6 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Auth />} />
-      <Route path="/register" element={<Auth />} />
-      <Route path="/signup" element={<Auth />} />
       <Route path="/access-denied" element={<ProtectedRoute><Layout><AccessDenied /></Layout></ProtectedRoute>} />
       <Route
         path="/"
@@ -76,10 +73,6 @@ function AppRoutes() {
       <Route path="/payments" element={<ProtectedRoute><RequireViewPermission menuKey="payments"><Layout><PaymentList /></Layout></RequireViewPermission></ProtectedRoute>} />
       <Route path="/expenses" element={<ProtectedRoute><RequireViewPermission menuKey="expenses"><Layout><ExpenseList /></Layout></RequireViewPermission></ProtectedRoute>} />
 
-      <Route path="/gst/in" element={<ProtectedRoute><RequireViewPermission menuKey="gst"><Layout><GstIn /></Layout></RequireViewPermission></ProtectedRoute>} />
-      <Route path="/gst/out" element={<ProtectedRoute><RequireViewPermission menuKey="gst"><Layout><GstOut /></Layout></RequireViewPermission></ProtectedRoute>} />
-
-      <Route path="/reports/gst-summary" element={<ProtectedRoute><RequireViewPermission menuKey="reports.gst_summary"><Layout><GstSummaryReport /></Layout></RequireViewPermission></ProtectedRoute>} />
       <Route path="/reports/order-summary" element={<ProtectedRoute><RequireViewPermission menuKey="reports.order_summary"><Layout><OrderSummaryReport /></Layout></RequireViewPermission></ProtectedRoute>} />
       <Route path="/reports/loom-efficiency" element={<ProtectedRoute><RequireViewPermission menuKey="reports.loom_efficiency"><Layout><LoomEfficiencyReport /></Layout></RequireViewPermission></ProtectedRoute>} />
 

@@ -36,7 +36,7 @@ class LoomEntryController extends Controller
     {
         $validated = $request->validate([
             'loom_id' => 'required|exists:looms,id',
-            'order_id' => 'nullable|exists:orders,id',
+            'yarn_order_id' => 'nullable|exists:yarn_orders,id',
             'date' => 'required|date',
             'shift' => 'required|string|max:50',
             'meters_produced' => 'required|numeric|min:0',
@@ -52,7 +52,7 @@ class LoomEntryController extends Controller
 
     public function show(LoomEntry $loomEntry): JsonResponse
     {
-        $loomEntry->load(['loom', 'order']);
+        $loomEntry->load(['loom', 'yarnOrder']);
         return response()->json(['data' => new LoomEntryResource($loomEntry)]);
     }
 
@@ -60,6 +60,7 @@ class LoomEntryController extends Controller
     {
         $validated = $request->validate([
             'loom_id' => 'sometimes|required|exists:looms,id',
+            'yarn_order_id' => 'nullable|exists:yarn_orders,id',
             'date' => 'sometimes|required|date',
             'shift' => 'sometimes|required|string|max:50',
             'meters_produced' => 'sometimes|required|numeric|min:0',

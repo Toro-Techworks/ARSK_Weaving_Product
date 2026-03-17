@@ -26,8 +26,8 @@ export function Profile() {
                   <dd className="mt-0.5 text-base text-gray-900">{user?.name ?? '—'}</dd>
                 </div>
                 <div>
-                  <dt className="text-sm font-medium text-gray-500">Email</dt>
-                  <dd className="mt-0.5 text-base text-gray-900">{user?.email ?? '—'}</dd>
+                  <dt className="text-sm font-medium text-gray-500">Username</dt>
+                  <dd className="mt-0.5 text-base text-gray-900">{user?.username ?? '—'}</dd>
                 </div>
                 <div>
                   <dt className="text-sm font-medium text-gray-500">Role</dt>
@@ -72,7 +72,7 @@ export function UserManagement() {
             <thead>
               <tr>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Username</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
               </tr>
             </thead>
@@ -80,7 +80,7 @@ export function UserManagement() {
               {users.map((u) => (
                 <tr key={u.id} className="border-t">
                   <td className="px-4 py-2">{u.name}</td>
-                  <td className="px-4 py-2">{u.email}</td>
+                  <td className="px-4 py-2">{u.username}</td>
                   <td className="px-4 py-2">{u.role_label}</td>
                 </tr>
               ))}

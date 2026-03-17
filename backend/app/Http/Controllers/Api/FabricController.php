@@ -46,6 +46,7 @@ class FabricController extends Controller
             'required_width' => 'nullable|numeric',
             'po_quantity' => 'nullable|numeric',
             'price_per_metre' => 'nullable|numeric',
+            'total_meters_produced' => 'nullable|numeric|min:0',
         ]);
         $fabric = Fabric::create($validated);
         return response()->json(['data' => $fabric], 201);
@@ -73,6 +74,7 @@ class FabricController extends Controller
             'required_width' => 'nullable|numeric',
             'po_quantity' => 'nullable|numeric',
             'price_per_metre' => 'nullable|numeric',
+            'total_meters_produced' => 'nullable|numeric|min:0',
         ]);
         $fabric->update($validated);
         return response()->json(['data' => $fabric->fresh()]);
@@ -113,6 +115,7 @@ class FabricController extends Controller
             'fabrics.*.required_width' => 'nullable|numeric',
             'fabrics.*.po_quantity' => 'nullable|numeric',
             'fabrics.*.price_per_metre' => 'nullable|numeric',
+            'fabrics.*.total_meters_produced' => 'nullable|numeric|min:0',
         ]);
 
         $yarnOrderId = (int) $validated['yarn_order_id'];
@@ -137,6 +140,7 @@ class FabricController extends Controller
                 'required_width' => isset($row['required_width']) ? (float) $row['required_width'] : null,
                 'po_quantity' => isset($row['po_quantity']) ? (float) $row['po_quantity'] : null,
                 'price_per_metre' => isset($row['price_per_metre']) ? (float) $row['price_per_metre'] : null,
+                'total_meters_produced' => isset($row['total_meters_produced']) ? (float) $row['total_meters_produced'] : 0,
             ]);
             $created[] = $fabric;
         }

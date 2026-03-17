@@ -9,6 +9,7 @@ import { FormInput, FormTextarea } from '../components/FormInput';
 import { AnimatedModal } from '../components/AnimatedModal';
 import { Plus, Building2, X } from 'lucide-react';
 import { usePagePermission } from '../hooks/usePagePermission';
+import { useRefreshOnSameMenuClick } from '../hooks/useRefreshOnSameMenuClick';
 
 export function CompanyList() {
   const { canEdit } = usePagePermission();
@@ -35,6 +36,8 @@ export function CompanyList() {
     return () => clearTimeout(t);
   }, [search]);
 
+  useRefreshOnSameMenuClick(fetch);
+
   const deleteCompany = (id, name) => {
     if (!window.confirm(`Delete company "${name}"?`)) return;
     api.delete(`/companies/${id}`).then(() => { toast.success('Deleted'); fetch(); }).catch(() => toast.error('Delete failed'));
@@ -50,7 +53,7 @@ export function CompanyList() {
       label: 'Actions',
       render: (_, row) => (
         <span className="flex gap-2">
-          <Link to={`/companies/${row.id}/edit`} className="text-brand hover:underline">Edit</Link>
+          <button type="button" onClick={() => setEditCompany(row)} className="text-brand hover:underline">Edit</button>
           <button type="button" onClick={() => deleteCompany(row.id, row.company_name)} className="text-red-600 hover:underline">Delete</button>
         </span>
       ),
@@ -62,21 +65,21 @@ export function CompanyList() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Company List</h2>
-        {canEdit && <Button className="gap-2" onClick={() => setAddModalOpen(true)}><Plus className="w-4 h-4" /> Add Company</Button>}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6">
+        <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Company List</h2>
+        {canEdit && <Button className="gap-2 w-full sm:w-auto" onClick={() => setAddModalOpen(true)}><Plus className="w-4 h-4" /> Add Company</Button>}
       </div>
       <Card>
-        <div className="flex gap-4 mb-4">
-          <FormInput placeholder="Search company or GST..." value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
+        <div className="flex flex-col sm:flex-row gap-3 mb-4">
+          <FormInput placeholder="Search company or GST..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full sm:max-w-xs" />
         </div>
         <Table columns={columns} data={data} isLoading={loading} emptyMessage="No companies yet." />
         {meta.last_page > 1 && (
-          <div className="flex justify-between items-center mt-4 pt-4 border-t">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4 pt-4 border-t">
             <span className="text-sm text-gray-500">Page {meta.current_page} of {meta.last_page}</span>
             <div className="flex gap-2">
-              <Button variant="secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-              <Button variant="secondary" disabled={page >= meta.last_page} onClick={() => setPage((p) => p + 1)}>Next</Button>
+              <Button variant="secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="flex-1 sm:flex-none">Previous</Button>
+              <Button variant="secondary" disabled={page >= meta.last_page} onClick={() => setPage((p) => p + 1)} className="flex-1 sm:flex-none">Next</Button>
             </div>
           </div>
         )}
@@ -98,6 +101,15 @@ export function CompanyList() {
   );
 }
 
+function normalizePhone(v) {
+  const digits = String(v || '').replace(/\D/g, '');
+  return digits.slice(0, 10);
+}
+
+function isValidPhone(v) {
+  return /^\d{10}$/.test(String(v || ''));
+}
+
 function CompanyAddModal({ onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
@@ -106,8 +118,13 @@ function CompanyAddModal({ onClose, onSuccess }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    const phone = normalizePhone(form.phone);
+    if (phone && !isValidPhone(phone)) {
+      toast.error('Phone number must be exactly 10 digits');
+      return;
+    }
     setLoading(true);
-    api.post('/companies', form)
+    api.post('/companies', { ...form, phone })
       .then(() => { toast.success('Company added'); onSuccess?.(); })
       .catch((err) => toast.error(err.response?.data?.message || 'Failed'))
       .finally(() => setLoading(false));
@@ -117,13 +134,13 @@ function CompanyAddModal({ onClose, onSuccess }) {
 
   return (
     <AnimatedModal open onClose={onClose} maxWidth="max-w-2xl">
-      <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between rounded-t-xl">
-        <h3 className="text-lg font-semibold text-gray-900">Add Company</h3>
+      <div className="sticky top-0 bg-white border-b border-gray-100 px-4 sm:px-6 py-4 flex items-center justify-between rounded-t-xl">
+        <h3 className="text-base sm:text-lg font-semibold text-gray-900">Add Company</h3>
         <button type="button" onClick={onClose} className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700" aria-label="Close">
           <X className="w-5 h-5" />
         </button>
       </div>
-      <form onSubmit={handleSubmit} className="p-6 space-y-6">
+      <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-6">
         <div>
           <div className="flex items-center gap-2 mb-3">
             <Building2 className="w-5 h-5 text-brand" />
@@ -140,7 +157,16 @@ function CompanyAddModal({ onClose, onSuccess }) {
               <FormInput label="Contact Person" value={form.contact_person} onChange={(e) => setForm({ ...form, contact_person: e.target.value })} className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormInput label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="!mb-0" />
+              <FormInput
+                label="Phone"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: normalizePhone(e.target.value) })}
+                inputMode="numeric"
+                maxLength={10}
+                pattern="\\d{10}"
+                placeholder="10-digit phone"
+                className="!mb-0"
+              />
             </div>
             <div className="md:col-span-2">
               <div className={fieldClass}>
@@ -154,9 +180,9 @@ function CompanyAddModal({ onClose, onSuccess }) {
             </div>
           </div>
         </div>
-        <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">
-          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={loading}>{loading ? 'Saving...' : 'Add Company'}</Button>
+        <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end pt-4 border-t border-gray-100">
+          <Button type="button" variant="secondary" onClick={onClose} className="w-full sm:w-auto">Cancel</Button>
+          <Button type="submit" disabled={loading} className="w-full sm:w-auto">{loading ? 'Saving...' : 'Add Company'}</Button>
         </div>
       </form>
     </AnimatedModal>
@@ -177,8 +203,13 @@ function CompanyEditModal({ company, onClose, onSuccess }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    const phone = normalizePhone(form.phone);
+    if (phone && !isValidPhone(phone)) {
+      toast.error('Phone number must be exactly 10 digits');
+      return;
+    }
     setLoading(true);
-    api.put(`/companies/${company.id}`, form)
+    api.put(`/companies/${company.id}`, { ...form, phone })
       .then(() => { toast.success('Company updated'); onSuccess?.(); })
       .catch((err) => toast.error(err.response?.data?.message || 'Failed'))
       .finally(() => setLoading(false));
@@ -188,13 +219,13 @@ function CompanyEditModal({ company, onClose, onSuccess }) {
 
   return (
     <AnimatedModal open onClose={onClose} maxWidth="max-w-2xl">
-      <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between rounded-t-xl">
-        <h3 className="text-lg font-semibold text-gray-900">Edit Company</h3>
+      <div className="sticky top-0 bg-white border-b border-gray-100 px-4 sm:px-6 py-4 flex items-center justify-between rounded-t-xl">
+        <h3 className="text-base sm:text-lg font-semibold text-gray-900">Edit Company</h3>
         <button type="button" onClick={onClose} className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700" aria-label="Close">
           <X className="w-5 h-5" />
         </button>
       </div>
-      <form onSubmit={handleSubmit} className="p-6 space-y-6">
+      <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-6">
         <div>
           <div className="flex items-center gap-2 mb-3">
             <Building2 className="w-5 h-5 text-brand" />
@@ -211,7 +242,16 @@ function CompanyEditModal({ company, onClose, onSuccess }) {
               <FormInput label="Contact Person" value={form.contact_person} onChange={(e) => setForm({ ...form, contact_person: e.target.value })} className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormInput label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="!mb-0" />
+              <FormInput
+                label="Phone"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: normalizePhone(e.target.value) })}
+                inputMode="numeric"
+                maxLength={10}
+                pattern="\\d{10}"
+                placeholder="10-digit phone"
+                className="!mb-0"
+              />
             </div>
             <div className="md:col-span-2">
               <div className={fieldClass}>
@@ -225,9 +265,9 @@ function CompanyEditModal({ company, onClose, onSuccess }) {
             </div>
           </div>
         </div>
-        <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">
-          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={loading}>{loading ? 'Saving...' : 'Update Company'}</Button>
+        <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end pt-4 border-t border-gray-100">
+          <Button type="button" variant="secondary" onClick={onClose} className="w-full sm:w-auto">Cancel</Button>
+          <Button type="submit" disabled={loading} className="w-full sm:w-auto">{loading ? 'Saving...' : 'Update Company'}</Button>
         </div>
       </form>
     </AnimatedModal>
@@ -250,8 +290,14 @@ export function CompanyForm({ id, onSuccess }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    const phone = normalizePhone(form.phone);
+    if (phone && !isValidPhone(phone)) {
+      toast.error('Phone number must be exactly 10 digits');
+      return;
+    }
     setLoading(true);
-    const promise = isEdit ? api.put(`/companies/${id}`, form) : api.post('/companies', form);
+    const payload = { ...form, phone };
+    const promise = isEdit ? api.put(`/companies/${id}`, payload) : api.post('/companies', payload);
     promise
       .then(() => { toast.success(isEdit ? 'Updated' : 'Company added'); onSuccess?.(); })
       .catch((err) => toast.error(err.response?.data?.message || 'Failed'))
@@ -289,7 +335,16 @@ export function CompanyForm({ id, onSuccess }) {
               <FormInput label="Contact Person" value={form.contact_person} onChange={(e) => setForm({ ...form, contact_person: e.target.value })} className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormInput label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="!mb-0" />
+              <FormInput
+                label="Phone"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: normalizePhone(e.target.value) })}
+                inputMode="numeric"
+                maxLength={10}
+                pattern="\\d{10}"
+                placeholder="10-digit phone"
+                className="!mb-0"
+              />
             </div>
             <div className="md:col-span-2">
               <div className={fieldClass}>

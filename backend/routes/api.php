@@ -5,7 +5,6 @@ use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\FabricController;
-use App\Http\Controllers\Api\GstRecordController;
 use App\Http\Controllers\Api\LoomController;
 use App\Http\Controllers\Api\LoomEntryController;
 use App\Http\Controllers\Api\MenuController;
@@ -43,8 +42,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('payments', PaymentController::class);
     Route::apiResource('expenses', ExpenseController::class);
 
-    Route::apiResource('gst-records', GstRecordController::class);
-
     Route::get('/yarn-orders/{yarnOrder}/entry', [YarnOrderController::class, 'entry']);
     Route::apiResource('yarn-orders', YarnOrderController::class);
     Route::apiResource('yarn-receipts', YarnReceiptController::class);
@@ -54,7 +51,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/yarn-requirements/bulk', [YarnRequirementController::class, 'bulkStore']);
     Route::apiResource('yarn-requirements', YarnRequirementController::class);
 
-    Route::get('/reports/gst-summary', [ReportController::class, 'gstSummary']);
     Route::get('/reports/order-summary', [ReportController::class, 'orderSummary']);
     Route::get('/reports/loom-efficiency', [ReportController::class, 'loomEfficiency']);
 

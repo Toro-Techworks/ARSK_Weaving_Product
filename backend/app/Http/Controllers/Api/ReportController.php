@@ -3,44 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\GstRecord;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class ReportController extends Controller
 {
-    public function gstSummary(Request $request): JsonResponse
-    {
-        $from = $request->input('date_from', Carbon::now()->startOfMonth()->format('Y-m-d'));
-        $to = $request->input('date_to', Carbon::now()->format('Y-m-d'));
-
-        $in = GstRecord::where('type', 'in')
-            ->whereBetween('date', [$from, $to])
-            ->selectRaw('SUM(taxable_value) as taxable, SUM(gst_amount) as gst, SUM(total_amount) as total')
-            ->first();
-        $out = GstRecord::where('type', 'out')
-            ->whereBetween('date', [$from, $to])
-            ->selectRaw('SUM(taxable_value) as taxable, SUM(gst_amount) as gst, SUM(total_amount) as total')
-            ->first();
-
-        return response()->json([
-            'period' => ['from' => $from, 'to' => $to],
-            'gst_in' => [
-                'taxable_value' => (float) ($in->taxable ?? 0),
-                'gst_amount' => (float) ($in->gst ?? 0),
-                'total_amount' => (float) ($in->total ?? 0),
-            ],
-            'gst_out' => [
-                'taxable_value' => (float) ($out->taxable ?? 0),
-                'gst_amount' => (float) ($out->gst ?? 0),
-                'total_amount' => (float) ($out->total ?? 0),
-            ],
-            'payable' => max(0, (float) ($out->gst ?? 0) - (float) ($in->gst ?? 0)),
-        ]);
-    }
-
     public function orderSummary(Request $request): JsonResponse
     {
         $from = $request->input('date_from');

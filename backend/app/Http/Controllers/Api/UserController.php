@@ -59,7 +59,7 @@ class UserController extends Controller
 
         $query->when($request->search, fn ($q) => $q->where(function ($q2) use ($request) {
             $q2->where('name', 'like', "%{$request->search}%")
-                ->orWhere('email', 'like', "%{$request->search}%");
+                ->orWhere('username', 'like', "%{$request->search}%");
         }))
             ->orderBy('name');
 
@@ -84,7 +84,7 @@ class UserController extends Controller
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email',
+            'username' => 'required|string|min:4|max:255|unique:users,username|regex:/^\S+$/',
             'password' => ['required', 'confirmed', Password::defaults()],
             'role_id' => 'required|exists:roles,id',
             'status' => 'sometimes|in:active,disabled',
@@ -117,7 +117,7 @@ class UserController extends Controller
 
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
-            'email' => 'sometimes|required|email|unique:users,email,' . $user->id,
+            'username' => 'sometimes|required|string|min:4|max:255|unique:users,username,' . $user->id . '|regex:/^\S+$/',
             'password' => ['nullable', 'confirmed', Password::defaults()],
             'role_id' => 'sometimes|required|exists:roles,id',
             'status' => 'sometimes|in:active,disabled',
@@ -154,7 +154,6 @@ class UserController extends Controller
             return response()->json(['message' => 'Forbidden. Cannot delete this user.'], 403);
         }
         $user->delete();
-        UserActivityLog::log($request->user()->id, 'user.deleted', null, null, ['email' => $user->email]);
         return response()->json(['message' => 'User deleted successfully']);
     }
 

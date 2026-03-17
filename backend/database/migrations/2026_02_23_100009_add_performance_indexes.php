@@ -22,9 +22,6 @@ return new class extends Migration
         $this->addIndex('user_menu_permissions', 'user_id', 'idx_user_menu_permissions_user_id');
         $this->addIndex('user_menu_permissions', 'menu_id', 'idx_user_menu_permissions_menu_id');
 
-        $this->addIndex('gst_records', 'type', 'idx_gst_records_type');
-        $this->addIndex('gst_records', 'date', 'idx_gst_records_date');
-
         $this->addIndex('payments', 'payment_date', 'idx_payments_payment_date');
 
         $this->addIndex('expenses', 'category', 'idx_expenses_category');
@@ -55,7 +52,6 @@ return new class extends Migration
             'yarn_requirements' => ['idx_yarn_requirements_yarn_order_id'],
             'loom_entries' => ['idx_loom_entries_date'],
             'user_menu_permissions' => ['idx_user_menu_permissions_user_id', 'idx_user_menu_permissions_menu_id'],
-            'gst_records' => ['idx_gst_records_type', 'idx_gst_records_date'],
             'payments' => ['idx_payments_payment_date'],
             'expenses' => ['idx_expenses_category', 'idx_expenses_date'],
             'companies' => ['idx_companies_company_name'],

@@ -7,6 +7,7 @@ import { Table } from '../components/Table';
 import Button from '../components/Button';
 import { FormInput, FormSelect, FormTextarea } from '../components/FormInput';
 import { usePagePermission } from '../hooks/usePagePermission';
+import { useRefreshOnSameMenuClick } from '../hooks/useRefreshOnSameMenuClick';
 
 const CATEGORIES = ['Electricity', 'Labour', 'Maintenance', 'Yarn'];
 
@@ -28,6 +29,7 @@ export function ExpenseList() {
   };
   useEffect(() => fetch(), [page]);
   useEffect(() => { setPage(1); fetch(); }, [category]);
+  useRefreshOnSameMenuClick(fetch);
 
   const deleteExpense = (id) => {
     if (!window.confirm('Delete this expense?')) return;
@@ -44,10 +46,10 @@ export function ExpenseList() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Expenses</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6">
+        <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Expenses</h2>
         {canEdit && (
-          <Button className="gap-2" onClick={() => setAddModalOpen(true)}><Plus className="w-4 h-4" /> Add Expense</Button>
+          <Button className="gap-2 w-full sm:w-auto" onClick={() => setAddModalOpen(true)}><Plus className="w-4 h-4" /> Add Expense</Button>
         )}
       </div>
       <Card>
@@ -56,11 +58,11 @@ export function ExpenseList() {
         </div>
         <Table columns={columns} data={data} isLoading={loading} />
         {meta.last_page > 1 && (
-          <div className="flex justify-between items-center mt-4 pt-4 border-t">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4 pt-4 border-t">
             <span className="text-sm text-gray-500">Page {meta.current_page} of {meta.last_page}</span>
             <div className="flex gap-2">
-              <Button variant="secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-              <Button variant="secondary" disabled={page >= meta.last_page} onClick={() => setPage((p) => p + 1)}>Next</Button>
+              <Button variant="secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="flex-1 sm:flex-none">Previous</Button>
+              <Button variant="secondary" disabled={page >= meta.last_page} onClick={() => setPage((p) => p + 1)} className="flex-1 sm:flex-none">Next</Button>
             </div>
           </div>
         )}
@@ -91,15 +93,15 @@ function ExpenseAddModal({ onClose, onSuccess }) {
   const fieldClass = 'space-y-1.5';
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-lg max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
-        <div className="border-b border-gray-100 px-6 py-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900">Add Expense</h3>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3 sm:p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-lg w-[90vw] sm:w-full max-w-lg max-h-[85vh] sm:max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="border-b border-gray-100 px-4 sm:px-6 py-4 flex items-center justify-between">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-900">Add Expense</h3>
           <button type="button" onClick={onClose} className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700" aria-label="Close">
             <X className="w-5 h-5" />
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
           <p className="text-sm text-gray-600 -mt-2">Record an expense by category and amount.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className={fieldClass}>
@@ -117,9 +119,9 @@ function ExpenseAddModal({ onClose, onSuccess }) {
               </div>
             </div>
           </div>
-          <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">
-            <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={loading}>{loading ? 'Saving...' : 'Save Expense'}</Button>
+          <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end pt-4 border-t border-gray-100">
+            <Button type="button" variant="secondary" onClick={onClose} className="w-full sm:w-auto">Cancel</Button>
+            <Button type="submit" disabled={loading} className="w-full sm:w-auto">{loading ? 'Saving...' : 'Save Expense'}</Button>
           </div>
         </form>
       </div>
