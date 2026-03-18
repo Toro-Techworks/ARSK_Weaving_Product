@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - staging
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -20,15 +21,15 @@ jobs:
         with:
           node-version: 20
 
-      # 3. Build React frontend
+      # 3. Build Frontend
       - name: Build Frontend
         working-directory: frontend
         run: |
           npm install
           npm run build
 
-      # 4. Deploy React build → public_html
-      - name: Deploy Frontend (dist)
+      # 4. Deploy React build (clean public_html)
+      - name: Deploy Frontend
         uses: burnett01/rsync-deployments@7.0.1
         with:
           switches: -avz --delete
@@ -39,19 +40,31 @@ jobs:
           remote_port: ${{ secrets.PORT }}
           remote_key: ${{ secrets.SSH_KEY }}
 
-      # 5. Deploy Laravel public files (index.php + .htaccess)
-      - name: Deploy Laravel public files
+      # 5. Copy Laravel index.php explicitly
+      - name: Upload index.php
         uses: burnett01/rsync-deployments@7.0.1
         with:
           switches: -avz
-          path: backend/public/
+          path: backend/public/index.php
           remote_path: domains/arsk.torotech.in/public_html/
           remote_host: ${{ secrets.HOST }}
           remote_user: ${{ secrets.USER }}
           remote_port: ${{ secrets.PORT }}
           remote_key: ${{ secrets.SSH_KEY }}
 
-      # 6. Deploy backend (exclude .env)
+      # 6. Copy .htaccess explicitly (IMPORTANT)
+      - name: Upload .htaccess
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          switches: -avz
+          path: backend/public/.htaccess
+          remote_path: domains/arsk.torotech.in/public_html/
+          remote_host: ${{ secrets.HOST }}
+          remote_user: ${{ secrets.USER }}
+          remote_port: ${{ secrets.PORT }}
+          remote_key: ${{ secrets.SSH_KEY }}
+
+      # 7. Deploy backend (safe)
       - name: Deploy Backend
         uses: burnett01/rsync-deployments@7.0.1
         with:
@@ -63,7 +76,7 @@ jobs:
           remote_port: ${{ secrets.PORT }}
           remote_key: ${{ secrets.SSH_KEY }}
 
-      # 7. Run Laravel commands
+      # 8. Run Laravel commands
       - name: Run Laravel Commands
         uses: appleboy/ssh-action@v1.0.3
         with:
