@@ -1,0 +1,71 @@
+name: Deploy to Staging (Hostinger)
+
+on:
+  push:
+    branches:
+      - staging   # trigger branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. Setup Node
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # 3. Build React frontend
+      - name: Build Frontend
+        working-directory: frontend
+        run: |
+          npm install
+          npm run build
+
+      # 4. Deploy frontend (to public_html)
+      - name: Deploy Frontend
+        uses: burnett01/rsync-deployments@v7
+        with:
+          switches: -avz --delete
+          path: frontend/dist/
+          remote_path: domains/arsk.torotech.in/public_html/
+          remote_host: ${{ secrets.HOST }}
+          remote_user: ${{ secrets.USER }}
+          remote_port: ${{ secrets.PORT }}
+          remote_key: ${{ secrets.SSH_KEY }}
+
+      # 5. Deploy backend (to toro-backend)
+      - name: Deploy Backend
+        uses: burnett01/rsync-deployments@v7
+        with:
+          switches: -avz --delete
+          path: backend/
+          remote_path: domains/arsk.torotech.in/toro-backend/
+          remote_host: ${{ secrets.HOST }}
+          remote_user: ${{ secrets.USER }}
+          remote_port: ${{ secrets.PORT }}
+          remote_key: ${{ secrets.SSH_KEY }}
+
+      # 6. Run Laravel commands on server
+      - name: Run Laravel Commands
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USER }}
+          port: ${{ secrets.PORT }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd domains/arsk.torotech.in/toro-backend
+
+            composer install --no-dev --optimize-autoloader
+
+            php artisan migrate --force
+            php artisan config:clear
+            php artisan cache:clear
+            php artisan config:cache
+            php artisan route:cache
