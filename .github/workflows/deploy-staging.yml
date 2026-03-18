@@ -3,7 +3,7 @@ name: Deploy to Staging (Hostinger)
 on:
   push:
     branches:
-      - staging   # trigger branch
+      - staging
 
 jobs:
   deploy:
@@ -27,8 +27,8 @@ jobs:
           npm install
           npm run build
 
-      # 4. Deploy frontend (to public_html)
-      - name: Deploy Frontend
+      # 4. Deploy React build → public_html
+      - name: Deploy Frontend (dist)
         uses: burnett01/rsync-deployments@7.0.1
         with:
           switches: -avz --delete
@@ -39,11 +39,23 @@ jobs:
           remote_port: ${{ secrets.PORT }}
           remote_key: ${{ secrets.SSH_KEY }}
 
-      # 5. Deploy backend (to toro-backend)
+      # 5. Deploy Laravel public files (index.php + .htaccess)
+      - name: Deploy Laravel public files
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          switches: -avz
+          path: backend/public/
+          remote_path: domains/arsk.torotech.in/public_html/
+          remote_host: ${{ secrets.HOST }}
+          remote_user: ${{ secrets.USER }}
+          remote_port: ${{ secrets.PORT }}
+          remote_key: ${{ secrets.SSH_KEY }}
+
+      # 6. Deploy backend (exclude .env)
       - name: Deploy Backend
         uses: burnett01/rsync-deployments@7.0.1
         with:
-          switches: -avz --delete
+          switches: -avz --delete --exclude='.env'
           path: backend/
           remote_path: domains/arsk.torotech.in/toro-backend/
           remote_host: ${{ secrets.HOST }}
@@ -51,7 +63,7 @@ jobs:
           remote_port: ${{ secrets.PORT }}
           remote_key: ${{ secrets.SSH_KEY }}
 
-      # 6. Run Laravel commands on server
+      # 7. Run Laravel commands
       - name: Run Laravel Commands
         uses: appleboy/ssh-action@v1.0.3
         with:
