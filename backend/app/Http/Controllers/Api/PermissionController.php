@@ -14,16 +14,23 @@ use Illuminate\Support\Facades\Cache;
 class PermissionController extends Controller
 {
     /**
-     * GET /permissions/users - all users (for matrix rows).
+     * GET /permissions/users — paginated (use per_page=500 for full matrix load).
      */
-    public function users(): JsonResponse
+    public function users(Request $request): JsonResponse
     {
+        $perPage = (int) $request->input('per_page', 10);
+        $perPage = $perPage >= 1 && $perPage <= 500 ? $perPage : 10;
+
         $users = User::active()
             ->select(['id', 'name', 'username', 'role_id', 'status', 'created_at'])
             ->with('role:id,role_name')
             ->orderBy('name')
-            ->get();
-        return response()->json(['data' => UserResource::collection($users)]);
+            ->paginate($perPage);
+
+        return $this->paginatedResponse(
+            $users,
+            UserResource::collection($users->items())->resolve()
+        );
     }
 
     /**

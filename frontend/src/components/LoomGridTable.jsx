@@ -3,7 +3,9 @@ import { Plus, Save, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import Button from './Button';
+import { TablePagination } from './TablePagination';
 import { formatOrderId } from '../utils/formatOrderId';
+import { normalizePaginatedResponse, fetchAllPaginated } from '../utils/pagination';
 
 function orderLabel(o) {
   if (!o) return '';
@@ -16,27 +18,43 @@ export function LoomGridTable({ canEdit = true }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(new Set()); // rowId-field
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
+  const [loomMeta, setLoomMeta] = useState({ current_page: 1, last_page: 1, per_page: 10, total: 0 });
   const wrapRef = useRef(null);
   const nextRowId = useRef(0);
+  const ordersCacheRef = useRef(null);
 
   const loadData = useCallback(() => {
     setLoading(true);
+    const ordersPromise = ordersCacheRef.current
+      ? Promise.resolve(ordersCacheRef.current)
+      : fetchAllPaginated(api, '/yarn-orders', { perPage: 200 }).then((all) => {
+          ordersCacheRef.current = all;
+          return all;
+        });
+
     Promise.all([
-      api.get('/looms', { params: { per_page: 200, page: 1 } }).then((r) => ({ data: r.data?.data || [], meta: r.data?.meta })),
-      api.get('/yarn-orders', { params: { per_page: 100, page: 1 } }).then((r) => r.data?.data || []),
+      ordersPromise,
+      api.get('/looms', { params: { page, per_page: perPage } }).then((r) => normalizePaginatedResponse(r.data)),
     ])
-      .then(([loomRes, orderList]) => {
+      .then(([orderList, loomPage]) => {
         setOrders(orderList);
-        const normalized = (loomRes.data || []).map((l) => ({
+        setLoomMeta({
+          current_page: loomPage.current_page,
+          last_page: loomPage.last_page,
+          per_page: loomPage.per_page,
+          total: loomPage.total,
+        });
+        const normalized = (loomPage.data || []).map((l) => ({
           rowId: nextRowId.current++,
           id: l.id,
           loom_number: l.loom_number ?? '',
           location: l.location ?? '',
           status: l.status ?? 'Active',
-          yarn_order_id: null, // derived below
+          yarn_order_id: null,
           _origOrderId: null,
         }));
-        // pick first order assigned to loom
         normalized.forEach((r) => {
           const o = orderList.find((oo) => oo.loom_id === r.id);
           r.yarn_order_id = o ? o.id : null;
@@ -47,7 +65,7 @@ export function LoomGridTable({ canEdit = true }) {
       })
       .catch(() => toast.error('Failed to load looms/orders'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [page, perPage]);
 
   useEffect(() => loadData(), [loadData]);
 
@@ -129,6 +147,7 @@ export function LoomGridTable({ canEdit = true }) {
 
       toast.success('Saved');
       setDirty(new Set());
+      ordersCacheRef.current = null;
       loadData();
     } catch (e) {
       toast.error(e.response?.data?.message || 'Save failed');
@@ -268,6 +287,17 @@ export function LoomGridTable({ canEdit = true }) {
           </table>
         </div>
       </div>
+      {(loomMeta.total > 0 || page > 1) && (
+        <TablePagination
+          page={loomMeta.current_page}
+          lastPage={loomMeta.last_page}
+          total={loomMeta.total}
+          perPage={loomMeta.per_page}
+          onPageChange={setPage}
+          onPerPageChange={(n) => { setPerPage(n); setPage(1); }}
+          disabled={loading || saving}
+        />
+      )}
     </div>
   );
 }

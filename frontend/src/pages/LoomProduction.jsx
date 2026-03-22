@@ -179,7 +179,7 @@ export function ProductionReport() {
 
   const fetch = () => {
     setLoading(true);
-    api.get('/reports/loom-efficiency', { params: { date_from: dateFrom, date_to: dateTo } })
+    api.get('/reports/loom-efficiency', { params: { date_from: dateFrom, date_to: dateTo, per_page: 500, page: 1 } })
       .then(({ data: res }) => setData(res.looms || []))
       .catch(() => toast.error('Failed to load'))
       .finally(() => setLoading(false));

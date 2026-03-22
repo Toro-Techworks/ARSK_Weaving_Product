@@ -8,9 +8,13 @@ export default {
     extend: {
       colors: {
         brand: {
-          DEFAULT: '#312E81',
-          light: '#312E81',
-          dark: '#1E1B4B',
+          DEFAULT: '#3c3a8f',
+          light: '#534fbd',
+          dark: '#2d2b6b',
+        },
+        toro: {
+          DEFAULT: '#3c3a8f',
+          surface: '#f4f4f7',
         },
       },
       fontFamily: {

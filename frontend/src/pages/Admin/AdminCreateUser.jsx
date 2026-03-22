@@ -3,6 +3,7 @@ import { useNavigate, Navigate, Link } from 'react-router-dom';
 import { UserPlus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/client';
+import { fetchAllPaginated } from '../../utils/pagination';
 import { useAuth } from '../../context/AuthContext';
 import { usePagePermission } from '../../hooks/usePagePermission';
 import { Card } from '../../components/Card';
@@ -30,7 +31,7 @@ export function AdminCreateUser() {
   });
 
   React.useEffect(() => {
-    api.get('/roles').then(({ data }) => setRoles(data.data || [])).catch(() => {});
+    fetchAllPaginated(api, '/roles', { perPage: 100 }).then(setRoles).catch(() => {});
   }, []);
 
   const roleOptions = roles.map((r) => ({ value: String(r.id), label: (r.role_name || '').replace(/_/g, ' ') }));

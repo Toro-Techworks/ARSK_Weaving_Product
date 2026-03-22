@@ -8,13 +8,16 @@ import Button from '../components/Button';
 import { FormInput, FormSelect } from '../components/FormInput';
 import { usePagePermission } from '../hooks/usePagePermission';
 import { useRefreshOnSameMenuClick } from '../hooks/useRefreshOnSameMenuClick';
+import { TablePagination } from '../components/TablePagination';
+import { normalizePaginatedResponse } from '../utils/pagination';
 
 export function PaymentList() {
   const { canEdit } = usePagePermission();
   const [data, setData] = useState([]);
-  const [meta, setMeta] = useState({});
+  const [meta, setMeta] = useState({ current_page: 1, last_page: 1, per_page: 10, total: 0 });
   const [companies, setCompanies] = useState([]);
   const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
   const [companyId, setCompanyId] = useState('');
   const [loading, setLoading] = useState(true);
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -23,13 +26,16 @@ export function PaymentList() {
 
   const fetch = () => {
     setLoading(true);
-    api.get('/payments', { params: { page, per_page: 15, company_id: companyId || undefined } })
-      .then(({ data: res }) => { setData(res.data); setMeta(res.meta || {}); })
+    api.get('/payments', { params: { page, per_page: perPage, company_id: companyId || undefined } })
+      .then(({ data: res }) => {
+        const n = normalizePaginatedResponse(res);
+        setData(n.data);
+        setMeta({ current_page: n.current_page, last_page: n.last_page, per_page: n.per_page, total: n.total });
+      })
       .catch(() => toast.error('Failed to load'))
       .finally(() => setLoading(false));
   };
-  useEffect(() => fetch(), [page]);
-  useEffect(() => { setPage(1); fetch(); }, [companyId]);
+  useEffect(() => fetch(), [page, perPage, companyId]);
   useRefreshOnSameMenuClick(fetch);
 
   const deletePayment = (id) => {
@@ -57,17 +63,19 @@ export function PaymentList() {
       </div>
       <Card>
         <div className="mb-4">
-          <FormSelect options={[{ value: '', label: 'All companies' }, ...companies.map((c) => ({ value: c.id, label: c.company_name }))]} value={companyId} onChange={(e) => setCompanyId(e.target.value)} />
+          <FormSelect options={[{ value: '', label: 'All companies' }, ...companies.map((c) => ({ value: c.id, label: c.company_name }))]} value={companyId} onChange={(e) => { setCompanyId(e.target.value); setPage(1); }} />
         </div>
         <Table columns={columns} data={data} isLoading={loading} />
-        {meta.last_page > 1 && (
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4 pt-4 border-t">
-            <span className="text-sm text-gray-500">Page {meta.current_page} of {meta.last_page}</span>
-            <div className="flex gap-2">
-              <Button variant="secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="flex-1 sm:flex-none">Previous</Button>
-              <Button variant="secondary" disabled={page >= meta.last_page} onClick={() => setPage((p) => p + 1)} className="flex-1 sm:flex-none">Next</Button>
-            </div>
-          </div>
+        {(meta.total > 0 || page > 1) && (
+          <TablePagination
+            page={meta.current_page}
+            lastPage={meta.last_page}
+            total={meta.total}
+            perPage={meta.per_page}
+            onPageChange={setPage}
+            onPerPageChange={(n) => { setPerPage(n); setPage(1); }}
+            disabled={loading}
+          />
         )}
       </Card>
       {addModalOpen && (

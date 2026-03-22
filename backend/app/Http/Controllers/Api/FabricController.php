@@ -11,16 +11,20 @@ use Illuminate\Http\Request;
 class FabricController extends Controller
 {
     /**
-     * Get all fabrics for a yarn order.
-     * GET /fabrics/yarn-order/:yarnOrderId
+     * Get fabrics for a yarn order (paginated).
+     * GET /fabrics/yarn-order/:yarnOrderId?page=&per_page=
      */
-    public function indexByYarnOrder(string $yarnOrderId): JsonResponse
+    public function indexByYarnOrder(Request $request, string $yarnOrderId): JsonResponse
     {
         if (! YarnOrder::where('id', $yarnOrderId)->exists()) {
             return response()->json(['message' => 'Yarn order not found.'], 404);
         }
-        $fabrics = Fabric::where('yarn_order_id', $yarnOrderId)->orderBy('id')->get();
-        return response()->json(['data' => $fabrics]);
+        $perPage = $this->clampPerPageLarge($request, 25, 200);
+        $fabrics = Fabric::where('yarn_order_id', $yarnOrderId)
+            ->orderBy('id')
+            ->paginate($perPage);
+
+        return $this->paginatedResponse($fabrics, $fabrics->items());
     }
 
     /**

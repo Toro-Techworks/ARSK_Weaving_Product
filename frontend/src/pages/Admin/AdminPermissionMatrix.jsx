@@ -7,6 +7,7 @@ import Button from '../../components/Button';
 import { usePagePermission } from '../../hooks/usePagePermission';
 import { useRefreshOnSameMenuClick } from '../../hooks/useRefreshOnSameMenuClick';
 import { useAuth } from '../../context/AuthContext';
+import { fetchAllPaginated } from '../../utils/pagination';
 
 const DEFAULT_USER_COLUMN_WIDTH = 240;
 const DEFAULT_MENU_CELL_WIDTH = 72;
@@ -91,12 +92,11 @@ export function AdminPermissionMatrix() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [usersRes, menusRes, mappingRes] = await Promise.all([
-        api.get('/permissions/users'),
+      const [userList, menusRes, mappingRes] = await Promise.all([
+        fetchAllPaginated(api, '/permissions/users', { perPage: 200 }),
         api.get('/permissions/menus'),
         api.get('/permissions/user-menu'),
       ]);
-      const userList = usersRes.data.data || [];
       const menuList = menusRes.data.data || [];
       const mapping = mappingRes.data.data || [];
 

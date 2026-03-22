@@ -12,22 +12,17 @@ class LoomController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $perPage = $request->input('per_page', 15);
+        $perPage = $this->clampPerPage($request, 10, 100);
         $looms = Loom::query()
             ->when($request->search, fn ($q) => $q->where('loom_number', 'like', "%{$request->search}%")
                 ->orWhere('location', 'like', "%{$request->search}%"))
             ->orderBy('loom_number')
             ->paginate($perPage);
 
-        return response()->json([
-            'data' => LoomResource::collection($looms),
-            'meta' => [
-                'current_page' => $looms->currentPage(),
-                'last_page' => $looms->lastPage(),
-                'per_page' => $looms->perPage(),
-                'total' => $looms->total(),
-            ],
-        ]);
+        return $this->paginatedResponse(
+            $looms,
+            LoomResource::collection($looms->items())->resolve()
+        );
     }
 
     public function store(Request $request): JsonResponse

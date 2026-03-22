@@ -12,7 +12,7 @@ class PaymentController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $perPage = $request->input('per_page', 15);
+        $perPage = $this->clampPerPage($request, 10, 100);
         $payments = Payment::with(['company'])
             ->when($request->company_id, fn ($q) => $q->where('company_id', $request->company_id))
             ->when($request->date_from, fn ($q) => $q->whereDate('payment_date', '>=', $request->date_from))
@@ -20,15 +20,10 @@ class PaymentController extends Controller
             ->orderBy('payment_date', 'desc')
             ->paginate($perPage);
 
-        return response()->json([
-            'data' => PaymentResource::collection($payments),
-            'meta' => [
-                'current_page' => $payments->currentPage(),
-                'last_page' => $payments->lastPage(),
-                'per_page' => $payments->perPage(),
-                'total' => $payments->total(),
-            ],
-        ]);
+        return $this->paginatedResponse(
+            $payments,
+            PaymentResource::collection($payments->items())->resolve()
+        );
     }
 
     public function store(Request $request): JsonResponse

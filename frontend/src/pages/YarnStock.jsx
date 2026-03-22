@@ -9,6 +9,8 @@ import Button from '../components/Button';
 import { usePagePermission } from '../hooks/usePagePermission';
 import { useRefreshOnSameMenuClick } from '../hooks/useRefreshOnSameMenuClick';
 import { useAuth } from '../context/AuthContext';
+import { TablePagination } from '../components/TablePagination';
+import { normalizePaginatedResponse, fetchAllPaginated } from '../utils/pagination';
 
 function formatOrderDate(val) {
   if (!val) return '—';
@@ -21,15 +23,22 @@ export function YarnStockList() {
   const navigate = useNavigate();
   const { canEdit } = usePagePermission();
   const [orders, setOrders] = useState([]);
+  const [meta, setMeta] = useState({ current_page: 1, last_page: 1, per_page: 10, total: 0 });
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
   const [loading, setLoading] = useState(true);
 
   const fetch = useCallback(() => {
     setLoading(true);
-    api.get('/yarn-orders', { params: { per_page: 100 } })
-      .then(({ data }) => setOrders(data.data || []))
+    api.get('/yarn-orders', { params: { page, per_page: perPage } })
+      .then(({ data }) => {
+        const n = normalizePaginatedResponse(data);
+        setOrders(n.data);
+        setMeta({ current_page: n.current_page, last_page: n.last_page, per_page: n.per_page, total: n.total });
+      })
       .catch(() => toast.error('Failed to load yarn orders'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [page, perPage]);
   useEffect(() => fetch(), [fetch]);
   useRefreshOnSameMenuClick(fetch);
 
@@ -82,6 +91,17 @@ export function YarnStockList() {
             </tbody>
           </table>
         </div>
+        {(meta.total > 0 || page > 1) && (
+          <TablePagination
+            page={meta.current_page}
+            lastPage={meta.last_page}
+            total={meta.total}
+            perPage={meta.per_page}
+            onPageChange={setPage}
+            onPerPageChange={(n) => { setPerPage(n); setPage(1); }}
+            disabled={loading}
+          />
+        )}
       </Card>
     </div>
   );
@@ -257,15 +277,15 @@ export function YarnStockEntry() {
       setLoading(false);
       return;
     }
-    api.get('/yarn-receipts', { params: { per_page: 100, yarn_order_id: orderId } })
-      .then(({ data }) => setReceipts(data.data || []))
+    fetchAllPaginated(api, '/yarn-receipts', { perPage: 100, yarn_order_id: orderId })
+      .then(setReceipts)
       .catch(() => toast.error('Failed to load yarn receipts'))
       .finally(() => setLoading(false));
   };
 
   const fetchYarnOrders = () => {
-    api.get('/yarn-orders', { params: { per_page: 100 } })
-      .then(({ data }) => setYarnOrders(data.data || []))
+    fetchAllPaginated(api, '/yarn-orders', { perPage: 100 })
+      .then(setYarnOrders)
       .catch(() => toast.error('Failed to load yarn orders'));
   };
 
@@ -275,8 +295,8 @@ export function YarnStockEntry() {
       return;
     }
     setFabricsLoading(true);
-    api.get(`/fabrics/yarn-order/${yarnOrderId}`)
-      .then(({ data }) => setFabrics(data.data || []))
+    fetchAllPaginated(api, `/fabrics/yarn-order/${yarnOrderId}`, { perPage: 100 })
+      .then(setFabrics)
       .catch(() => toast.error('Failed to load fabric details'))
       .finally(() => setFabricsLoading(false));
   };
@@ -287,8 +307,8 @@ export function YarnStockEntry() {
       return;
     }
     setYarnRequirementsLoading(true);
-    api.get(`/yarn-requirements/yarn-order/${yarnOrderId}`)
-      .then(({ data }) => setYarnRequirements(data.data || []))
+    fetchAllPaginated(api, `/yarn-requirements/yarn-order/${yarnOrderId}`, { perPage: 100 })
+      .then(setYarnRequirements)
       .catch(() => toast.error('Failed to load yarn requirements'))
       .finally(() => setYarnRequirementsLoading(false));
   };

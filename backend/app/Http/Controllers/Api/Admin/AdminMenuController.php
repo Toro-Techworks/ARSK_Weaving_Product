@@ -57,22 +57,9 @@ class AdminMenuController extends Controller
     public function listFlat(Request $request): JsonResponse
     {
         $query = Menu::with('parent:id,menu_name')->orderBy('sort_order');
-        $perPage = $request->input('per_page');
-        if ($perPage !== null && $perPage !== '') {
-            $perPage = (int) $perPage;
-            $perPage = $perPage >= 1 && $perPage <= 100 ? $perPage : 10;
-            $menus = $query->paginate($perPage);
-            return response()->json([
-                'data' => $menus->items(),
-                'meta' => [
-                    'current_page' => $menus->currentPage(),
-                    'last_page' => $menus->lastPage(),
-                    'per_page' => $menus->perPage(),
-                    'total' => $menus->total(),
-                ],
-            ]);
-        }
-        $menus = $query->get();
-        return response()->json(['data' => $menus]);
+        $perPage = $this->clampPerPage($request, 10, 100);
+        $menus = $query->paginate($perPage);
+
+        return $this->paginatedResponse($menus, $menus->items());
     }
 }

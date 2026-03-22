@@ -13,6 +13,8 @@ import { LoomDailyEntry, ProductionReport } from './pages/LoomProduction';
 import { PaymentList } from './pages/Payments';
 import { ExpenseList } from './pages/Expenses';
 import { OrderSummaryReport, LoomEfficiencyReport } from './pages/Reports';
+import ProductionReportPage from './pages/ProductionReportPage';
+import YarnConsumptionReportPage from './pages/YarnConsumptionReportPage';
 import { Profile } from './pages/Settings';
 import { AdminUserList, AdminPermissionMatrix } from './pages/Admin';
 
@@ -75,6 +77,8 @@ function AppRoutes() {
 
       <Route path="/reports/order-summary" element={<ProtectedRoute><RequireViewPermission menuKey="reports.order_summary"><Layout><OrderSummaryReport /></Layout></RequireViewPermission></ProtectedRoute>} />
       <Route path="/reports/loom-efficiency" element={<ProtectedRoute><RequireViewPermission menuKey="reports.loom_efficiency"><Layout><LoomEfficiencyReport /></Layout></RequireViewPermission></ProtectedRoute>} />
+      <Route path="/reports/production" element={<ProtectedRoute><RequireViewPermission menuKey="reports.production"><Layout><ProductionReportPage /></Layout></RequireViewPermission></ProtectedRoute>} />
+      <Route path="/reports/yarn-consumption" element={<ProtectedRoute><RequireViewPermission menuKey="reports.yarn_consumption"><Layout><YarnConsumptionReportPage /></Layout></RequireViewPermission></ProtectedRoute>} />
 
       <Route path="/yarn-stock" element={<ProtectedRoute><RequireViewPermission menuKey="yarn_stock"><Layout><Suspense fallback={<PageLoader />}><YarnStockListLazy /></Suspense></Layout></RequireViewPermission></ProtectedRoute>} />
       <Route path="/yarn-stock/entry" element={<ProtectedRoute><RequireViewPermission menuKey="yarn_stock"><Layout><Suspense fallback={<PageLoader />}><YarnStockEntryLazy /></Suspense></Layout></RequireViewPermission></ProtectedRoute>} />

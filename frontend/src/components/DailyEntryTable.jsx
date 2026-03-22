@@ -3,6 +3,7 @@ import { Plus, Save, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import Button from './Button';
+import { fetchAllPaginated } from '../utils/pagination';
 import { EditableCell } from './EditableCell';
 
 const SHIFTS = [{ value: 'Day', label: 'Day' }, { value: 'Night', label: 'Night' }];
@@ -43,7 +44,7 @@ export function DailyEntryTable({ canEdit = true }) {
     const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     Promise.all([
       api.get('/looms-list').then((r) => r.data?.data || []),
-      api.get('/loom-entries', { params: { date_from: fiveDaysAgo, date_to: today, per_page: 500 } }).then((r) => r.data?.data || []),
+      fetchAllPaginated(api, '/loom-entries', { perPage: 100, date_from: fiveDaysAgo, date_to: today }),
     ])
       .then(([loomList, entries]) => {
         setLooms(loomList);

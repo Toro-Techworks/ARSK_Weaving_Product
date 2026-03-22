@@ -11,8 +11,7 @@ class YarnReceiptController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $perPage = (int) $request->input('per_page', 50);
-        $perPage = $perPage >= 1 && $perPage <= 100 ? $perPage : 50;
+        $perPage = $this->clampPerPage($request, 10, 100);
         $query = YarnReceipt::query()->orderBy('date', 'desc')->orderBy('id', 'desc');
         if ($request->filled('yarn_order_id')) {
             $query->where('yarn_order_id', $request->input('yarn_order_id'));
@@ -20,15 +19,8 @@ class YarnReceiptController extends Controller
             $query->with('yarnOrder');
         }
         $receipts = $query->paginate($perPage);
-        return response()->json([
-            'data' => $receipts->items(),
-            'meta' => [
-                'current_page' => $receipts->currentPage(),
-                'last_page' => $receipts->lastPage(),
-                'per_page' => $receipts->perPage(),
-                'total' => $receipts->total(),
-            ],
-        ]);
+
+        return $this->paginatedResponse($receipts, $receipts->items());
     }
 
     public function store(Request $request): JsonResponse
