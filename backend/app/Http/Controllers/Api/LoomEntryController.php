@@ -12,7 +12,7 @@ class LoomEntryController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $perPage = $request->input('per_page', 15);
+        $perPage = $this->clampPerPage($request, 10, 100);
         $entries = LoomEntry::with(['loom'])
             ->when($request->loom_id, fn ($q) => $q->where('loom_id', $request->loom_id))
             ->when($request->date_from, fn ($q) => $q->whereDate('date', '>=', $request->date_from))
@@ -21,15 +21,10 @@ class LoomEntryController extends Controller
             ->orderBy('loom_id')
             ->paginate($perPage);
 
-        return response()->json([
-            'data' => LoomEntryResource::collection($entries),
-            'meta' => [
-                'current_page' => $entries->currentPage(),
-                'last_page' => $entries->lastPage(),
-                'per_page' => $entries->perPage(),
-                'total' => $entries->total(),
-            ],
-        ]);
+        return $this->paginatedResponse(
+            $entries,
+            LoomEntryResource::collection($entries->items())->resolve()
+        );
     }
 
     public function store(Request $request): JsonResponse

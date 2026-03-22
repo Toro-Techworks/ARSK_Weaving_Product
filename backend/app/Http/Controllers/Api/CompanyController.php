@@ -12,22 +12,17 @@ class CompanyController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $perPage = $request->input('per_page', 15);
+        $perPage = $this->clampPerPage($request, 10, 100);
         $companies = Company::query()
             ->when($request->search, fn ($q) => $q->where('company_name', 'like', "%{$request->search}%")
                 ->orWhere('gst_number', 'like', "%{$request->search}%"))
             ->orderBy('company_name')
             ->paginate($perPage);
 
-        return response()->json([
-            'data' => CompanyResource::collection($companies),
-            'meta' => [
-                'current_page' => $companies->currentPage(),
-                'last_page' => $companies->lastPage(),
-                'per_page' => $companies->perPage(),
-                'total' => $companies->total(),
-            ],
-        ]);
+        return $this->paginatedResponse(
+            $companies,
+            CompanyResource::collection($companies->items())->resolve()
+        );
     }
 
     public function store(Request $request): JsonResponse

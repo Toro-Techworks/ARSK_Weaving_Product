@@ -10,13 +10,17 @@ use Illuminate\Http\Request;
 
 class YarnRequirementController extends Controller
 {
-    public function indexByYarnOrder(string $yarnOrderId): JsonResponse
+    public function indexByYarnOrder(Request $request, string $yarnOrderId): JsonResponse
     {
         if (! YarnOrder::where('id', $yarnOrderId)->exists()) {
             return response()->json(['message' => 'Yarn order not found.'], 404);
         }
-        $items = YarnRequirement::where('yarn_order_id', $yarnOrderId)->orderBy('id')->get();
-        return response()->json(['data' => $items]);
+        $perPage = $this->clampPerPageLarge($request, 25, 200);
+        $items = YarnRequirement::where('yarn_order_id', $yarnOrderId)
+            ->orderBy('id')
+            ->paginate($perPage);
+
+        return $this->paginatedResponse($items, $items->items());
     }
 
     public function store(Request $request): JsonResponse

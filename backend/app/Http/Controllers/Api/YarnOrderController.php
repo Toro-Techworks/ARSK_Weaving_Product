@@ -11,8 +11,7 @@ class YarnOrderController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $perPage = (int) $request->input('per_page', 50);
-        $perPage = $perPage >= 1 && $perPage <= 100 ? $perPage : 50;
+        $perPage = $this->clampPerPage($request, 10, 100);
         $q = YarnOrder::query()->orderBy('created_at', 'desc')->orderBy('id', 'desc');
         $search = $request->input('search');
         if ($search && is_string($search) && strlen(trim($search)) > 0) {
@@ -25,15 +24,8 @@ class YarnOrderController extends Controller
             });
         }
         $orders = $q->paginate($perPage);
-        return response()->json([
-            'data' => $orders->items(),
-            'meta' => [
-                'current_page' => $orders->currentPage(),
-                'last_page' => $orders->lastPage(),
-                'per_page' => $orders->perPage(),
-                'total' => $orders->total(),
-            ],
-        ]);
+
+        return $this->paginatedResponse($orders, $orders->items());
     }
 
     public function store(Request $request): JsonResponse

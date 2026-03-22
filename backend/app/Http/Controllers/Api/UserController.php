@@ -49,7 +49,7 @@ class UserController extends Controller
             return response()->json(['message' => 'Forbidden. Admin access required.'], 403);
         }
 
-        $perPage = $request->input('per_page', 15);
+        $perPage = $this->clampPerPage($request, 10, 100);
         $query = User::query();
 
         if ($request->user()->isAdmin()) {
@@ -65,15 +65,10 @@ class UserController extends Controller
 
         $users = $query->paginate($perPage);
 
-        return response()->json([
-            'data' => UserResource::collection($users),
-            'meta' => [
-                'current_page' => $users->currentPage(),
-                'last_page' => $users->lastPage(),
-                'per_page' => $users->perPage(),
-                'total' => $users->total(),
-            ],
-        ]);
+        return $this->paginatedResponse(
+            $users,
+            UserResource::collection($users->items())->resolve()
+        );
     }
 
     public function store(Request $request): JsonResponse

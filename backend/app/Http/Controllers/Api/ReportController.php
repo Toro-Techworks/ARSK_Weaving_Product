@@ -3,28 +3,59 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Exports\OrderSummaryReportExport;
+use App\Exports\LoomEfficiencyReportExport;
+use App\Exports\ProductionReportExport;
+use App\Exports\YarnConsumptionReportExport;
 use Carbon\Carbon;
+use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Maatwebsite\Excel\Facades\Excel;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class ReportController extends Controller
 {
     public function orderSummary(Request $request): JsonResponse
     {
-        $from = $request->input('date_from');
-        $to = $request->input('date_to');
+        $from = $request->input('date_from', Carbon::now()->subDays(30)->format('Y-m-d'));
+        $to = $request->input('date_to', Carbon::now()->format('Y-m-d'));
+        $orderFrom = $request->input('order_from');
 
-        $query = \App\Models\YarnOrder::query()
-            ->when($from, fn ($q) => $q->whereDate('created_at', '>=', $from))
-            ->when($to, fn ($q) => $q->whereDate('created_at', '<=', $to));
+        $perPage = (int) $request->input('per_page', 50);
+        $perPage = $perPage >= 1 && $perPage <= 200 ? $perPage : 50;
+        $page = max(1, (int) $request->input('page', 1));
 
-        $totalOrders = $query->count();
+        $query = DB::table('yarn_orders as yo')
+            ->whereBetween(DB::raw('DATE(yo.created_at)'), [$from, $to])
+            ->when($orderFrom, fn ($q) => $q->where('yo.order_from', $orderFrom))
+            ->select([
+                DB::raw('DATE(yo.created_at) as date'),
+                'yo.order_from',
+                DB::raw('COUNT(*) as total_orders'),
+            ])
+            ->groupBy([DB::raw('DATE(yo.created_at)'), 'yo.order_from'])
+            ->orderBy(DB::raw('DATE(yo.created_at)'), 'asc');
+
+        $items = $query->paginate($perPage, ['*'], 'page', $page);
 
         return response()->json([
             'period' => ['from' => $from, 'to' => $to],
-            'total_orders' => $totalOrders,
-            'by_status' => [],
-            'grand_total' => 0,
+            'filters' => ['order_from' => $orderFrom],
+            'data' => $items->items(),
+            'meta' => [
+                'current_page' => $items->currentPage(),
+                'last_page' => $items->lastPage(),
+                'per_page' => $items->perPage(),
+                'total' => $items->total(),
+            ],
+            'summary' => [
+                'total_orders' => (int) DB::table('yarn_orders as yo')
+                    ->whereBetween(DB::raw('DATE(yo.created_at)'), [$from, $to])
+                    ->when($orderFrom, fn ($q) => $q->where('yo.order_from', $orderFrom))
+                    ->count(),
+            ],
         ]);
     }
 
@@ -32,34 +63,535 @@ class ReportController extends Controller
     {
         $from = $request->input('date_from', Carbon::now()->startOfMonth()->format('Y-m-d'));
         $to = $request->input('date_to', Carbon::now()->format('Y-m-d'));
+        $loomId = $request->input('loom_id');
+        $perPage = (int) $request->input('per_page', 50);
+        $perPage = $perPage >= 1 && $perPage <= 200 ? $perPage : 50;
+        $page = max(1, (int) $request->input('page', 1));
 
-        $entries = \App\Models\LoomEntry::with('loom:id,loom_number')
-            ->select(['id', 'loom_id', 'date', 'meters_produced', 'rejected_meters', 'net_production'])
-            ->whereBetween('date', [$from, $to])
-            ->get();
+        $query = DB::table('loom_entries as le')
+            ->leftJoin('looms as l', 'l.id', '=', 'le.loom_id')
+            ->whereBetween('le.date', [$from, $to])
+            ->when($loomId, fn ($q) => $q->where('le.loom_id', $loomId))
+            ->select([
+                'le.loom_id',
+                'l.loom_number',
+                DB::raw('ROUND(SUM(le.meters_produced), 2) as total_meters_produced'),
+                DB::raw('ROUND(SUM(le.rejected_meters), 2) as total_rejected'),
+                DB::raw('ROUND(SUM(le.net_production), 2) as net_production'),
+                DB::raw('CASE WHEN SUM(le.meters_produced) > 0 THEN ROUND((1 - SUM(le.rejected_meters) / SUM(le.meters_produced)) * 100, 2) ELSE NULL END as efficiency_percentage'),
+                DB::raw('COUNT(DISTINCT le.date) as days_worked'),
+            ])
+            ->groupBy(['le.loom_id', 'l.loom_number'])
+            ->orderBy('l.loom_number', 'asc');
 
-        $byLoom = $entries->groupBy('loom_id')->map(function ($items, $loomId) {
-            $loom = $items->first()->loom;
-            $totalProduced = $items->sum('meters_produced');
-            $totalRejected = $items->sum('rejected_meters');
-            $net = $items->sum('net_production');
-            $efficiency = $totalProduced > 0
-                ? round((1 - $totalRejected / $totalProduced) * 100, 2)
-                : null;
-            return [
-                'loom_id' => (int) $loomId,
-                'loom_number' => $loom?->loom_number,
-                'total_meters_produced' => round($totalProduced, 2),
-                'total_rejected' => round($totalRejected, 2),
-                'net_production' => round($net, 2),
-                'efficiency_percentage' => $efficiency,
-                'days_worked' => $items->groupBy(fn ($e) => $e->date->format('Y-m-d'))->count(),
-            ];
-        })->values();
+        $items = $query->paginate($perPage, ['*'], 'page', $page);
 
         return response()->json([
             'period' => ['from' => $from, 'to' => $to],
-            'looms' => $byLoom,
+            'filters' => ['loom_id' => $loomId],
+            'looms' => $items->items(),
+            'meta' => [
+                'current_page' => $items->currentPage(),
+                'last_page' => $items->lastPage(),
+                'per_page' => $items->perPage(),
+                'total' => $items->total(),
+            ],
         ]);
+    }
+
+    public function orderSummaryExportExcel(Request $request)
+    {
+        $from = $request->input('date_from', Carbon::now()->subDays(30)->format('Y-m-d'));
+        $to = $request->input('date_to', Carbon::now()->format('Y-m-d'));
+        $orderFrom = $request->input('order_from');
+        $items = $this->getOrderSummaryItems($from, $to, $orderFrom);
+        return Excel::download(new OrderSummaryReportExport($items), 'order-summary-report.csv', \Maatwebsite\Excel\Excel::CSV);
+    }
+
+    public function orderSummaryExportPdf(Request $request): Response
+    {
+        $from = $request->input('date_from', Carbon::now()->subDays(30)->format('Y-m-d'));
+        $to = $request->input('date_to', Carbon::now()->format('Y-m-d'));
+        $orderFrom = $request->input('order_from');
+        $items = $this->getOrderSummaryItems($from, $to, $orderFrom);
+        $rows = '';
+        foreach ($items as $it) {
+            $rows .= '<tr><td style="padding:6px 8px;border:1px solid #e5e7eb;">' . e($it['date']) . '</td><td style="padding:6px 8px;border:1px solid #e5e7eb;">' . e($it['order_from'] ?? '-') . '</td><td style="padding:6px 8px;border:1px solid #e5e7eb;">' . e((string)$it['total_orders']) . '</td></tr>';
+        }
+        $pdf = Pdf::loadHTML('<html><body><h2>Order Summary Report</h2><table style="width:100%;border-collapse:collapse;"><thead><tr><th style="padding:6px 8px;border:1px solid #e5e7eb;background:#f9fafb;">Date</th><th style="padding:6px 8px;border:1px solid #e5e7eb;background:#f9fafb;">Order From</th><th style="padding:6px 8px;border:1px solid #e5e7eb;background:#f9fafb;">Total Orders</th></tr></thead><tbody>' . $rows . '</tbody></table></body></html>')->setPaper('a4', 'landscape');
+        return $pdf->download('order-summary-report.pdf');
+    }
+
+    public function loomEfficiencyExportExcel(Request $request)
+    {
+        $from = $request->input('date_from', Carbon::now()->startOfMonth()->format('Y-m-d'));
+        $to = $request->input('date_to', Carbon::now()->format('Y-m-d'));
+        $loomId = $request->input('loom_id');
+        $items = $this->getLoomEfficiencyItems($from, $to, $loomId);
+        return Excel::download(new LoomEfficiencyReportExport($items), 'loom-efficiency-report.csv', \Maatwebsite\Excel\Excel::CSV);
+    }
+
+    public function loomEfficiencyExportPdf(Request $request): Response
+    {
+        $from = $request->input('date_from', Carbon::now()->startOfMonth()->format('Y-m-d'));
+        $to = $request->input('date_to', Carbon::now()->format('Y-m-d'));
+        $loomId = $request->input('loom_id');
+        $items = $this->getLoomEfficiencyItems($from, $to, $loomId);
+        $rows = '';
+        foreach ($items as $it) {
+            $rows .= '<tr><td style="padding:6px 8px;border:1px solid #e5e7eb;">' . e($it['loom_number'] ?? '-') . '</td><td style="padding:6px 8px;border:1px solid #e5e7eb;">' . e((string)$it['net_production']) . '</td><td style="padding:6px 8px;border:1px solid #e5e7eb;">' . e($it['efficiency_percentage'] !== null ? (string)$it['efficiency_percentage'].'%' : '-') . '</td><td style="padding:6px 8px;border:1px solid #e5e7eb;">' . e((string)$it['days_worked']) . '</td></tr>';
+        }
+        $pdf = Pdf::loadHTML('<html><body><h2>Loom Efficiency Report</h2><table style="width:100%;border-collapse:collapse;"><thead><tr><th style="padding:6px 8px;border:1px solid #e5e7eb;background:#f9fafb;">Loom</th><th style="padding:6px 8px;border:1px solid #e5e7eb;background:#f9fafb;">Net Production</th><th style="padding:6px 8px;border:1px solid #e5e7eb;background:#f9fafb;">Efficiency</th><th style="padding:6px 8px;border:1px solid #e5e7eb;background:#f9fafb;">Days Worked</th></tr></thead><tbody>' . $rows . '</tbody></table></body></html>')->setPaper('a4', 'landscape');
+        return $pdf->download('loom-efficiency-report.pdf');
+    }
+
+    /**
+     * GET /reports/production
+     * Filters:
+     * - date_from, date_to (required for meaningful output)
+     * - loom_id (optional)
+     * - order_id (optional) => yarn_order_id
+     * - shift (optional) => Day/Night
+     */
+    public function production(Request $request): JsonResponse
+    {
+        $from = $request->input('date_from');
+        $to = $request->input('date_to');
+
+        $from = $from ?: Carbon::now()->subDays(30)->format('Y-m-d');
+        $to = $to ?: Carbon::now()->format('Y-m-d');
+
+        $loomId = $request->input('loom_id');
+        $orderId = $request->input('order_id');
+        $shift = $request->input('shift');
+
+        $perPage = (int) $request->input('per_page', 50);
+        $perPage = $perPage >= 1 && $perPage <= 200 ? $perPage : 50;
+        $page = (int) $request->input('page', 1);
+        $page = max(1, $page);
+
+        $fabricSub = DB::table('fabrics')
+            ->select([
+                'yarn_order_id',
+                DB::raw('MIN(design) as fabric_type'),
+            ])
+            ->groupBy('yarn_order_id');
+
+        $base = DB::table('loom_entries as le')
+            ->leftJoin('looms as l', 'l.id', '=', 'le.loom_id')
+            ->leftJoinSub($fabricSub, 'fabric', function ($join) {
+                $join->on('fabric.yarn_order_id', '=', 'le.yarn_order_id');
+            })
+            ->whereBetween('le.date', [$from, $to])
+            ->when($loomId, fn ($q) => $q->where('le.loom_id', $loomId))
+            ->when($orderId, fn ($q) => $q->where('le.yarn_order_id', $orderId))
+            ->when($shift, fn ($q) => $q->where('le.shift', $shift));
+
+        $query = $base->select([
+            'le.date as date',
+            'le.loom_id as loom_id',
+            'l.loom_number as loom_number',
+            'le.yarn_order_id as order_id',
+            'fabric.fabric_type as fabric_type',
+            'le.shift as shift',
+            DB::raw('SUM(le.meters_produced) as production_meters'),
+            DB::raw('CASE WHEN SUM(le.meters_produced) > 0 THEN ROUND((1 - (SUM(le.rejected_meters) / SUM(le.meters_produced))) * 100, 2) ELSE NULL END as efficiency_percentage'),
+        ])->groupBy([
+            'le.date',
+            'le.loom_id',
+            'l.loom_number',
+            'le.yarn_order_id',
+            'fabric.fabric_type',
+            'le.shift',
+        ])->orderBy('le.date', 'asc');
+
+        $items = $query->paginate($perPage, ['*'], 'page', $page);
+
+        return response()->json([
+            'period' => ['from' => $from, 'to' => $to],
+            'filters' => [
+                'loom_id' => $loomId,
+                'order_id' => $orderId,
+                'shift' => $shift,
+            ],
+            'data' => $items->items(),
+            'meta' => [
+                'current_page' => $items->currentPage(),
+                'last_page' => $items->lastPage(),
+                'per_page' => $items->perPage(),
+                'total' => $items->total(),
+            ],
+        ]);
+    }
+
+    public function productionExportExcel(Request $request)
+    {
+        $from = $request->input('date_from') ?: Carbon::now()->subDays(30)->format('Y-m-d');
+        $to = $request->input('date_to') ?: Carbon::now()->format('Y-m-d');
+
+        $loomId = $request->input('loom_id');
+        $orderId = $request->input('order_id');
+        $shift = $request->input('shift');
+
+        $items = $this->getProductionReportItems($from, $to, $loomId, $orderId, $shift);
+
+        // Note: This project environment may miss PHP zip/gd extensions.
+        // We export using CSV writer to keep it compatible with Excel.
+        return Excel::download(new ProductionReportExport($items), 'production-report.csv', \Maatwebsite\Excel\Excel::CSV);
+    }
+
+    public function productionExportPdf(Request $request): Response
+    {
+        $from = $request->input('date_from') ?: Carbon::now()->subDays(30)->format('Y-m-d');
+        $to = $request->input('date_to') ?: Carbon::now()->format('Y-m-d');
+
+        $loomId = $request->input('loom_id');
+        $orderId = $request->input('order_id');
+        $shift = $request->input('shift');
+
+        $items = $this->getProductionReportItems($from, $to, $loomId, $orderId, $shift);
+
+        $html = $this->buildProductionReportPdfHtml($items, $from, $to, $loomId, $orderId, $shift);
+        $pdf = Pdf::loadHTML($html)->setPaper('a4', 'landscape');
+
+        return $pdf->download('production-report.pdf');
+    }
+
+    public function yarnConsumptionOptions(Request $request): JsonResponse
+    {
+        $yarnTypeOptions = DB::table('yarn_receipts')->select('type as yarn_type')->distinct()->orderBy('type')->get();
+        $countOptions = DB::table('yarn_receipts')->select('count')->distinct()->orderBy('count')->get();
+
+        return response()->json([
+            'yarn_types' => $yarnTypeOptions->pluck('yarn_type')->filter()->values(),
+            'counts' => $countOptions->pluck('count')->filter()->values(),
+        ]);
+    }
+
+    public function yarnConsumption(Request $request): JsonResponse
+    {
+        $from = $request->input('date_from');
+        $to = $request->input('date_to');
+
+        $from = $from ?: Carbon::now()->subDays(30)->format('Y-m-d');
+        $to = $to ?: Carbon::now()->format('Y-m-d');
+
+        $yarnType = $request->input('yarn_type');
+        $count = $request->input('count');
+
+        $perPage = (int) $request->input('per_page', 50);
+        $perPage = $perPage >= 1 && $perPage <= 200 ? $perPage : 50;
+        $page = max(1, (int) $request->input('page', 1));
+
+        // Build receipts aggregate (issued) grouped by date + order + yarn attributes.
+        $receiptsAgg = DB::table('yarn_receipts as r')
+            ->select([
+                'r.date as date',
+                'r.yarn_order_id',
+                'r.type as yarn_type',
+                'r.count as count',
+                'r.content as content',
+                DB::raw('SUM(r.net_weight) as issued_qty'),
+            ])
+            ->whereBetween('r.date', [$from, $to])
+            ->when($yarnType, fn ($q) => $q->where('r.type', $yarnType))
+            ->when($count, fn ($q) => $q->where('r.count', $count))
+            ->groupBy(['r.date', 'r.yarn_order_id', 'r.type', 'r.count', 'r.content']);
+
+        // Build requirements aggregate (consumed) grouped by order + yarn attributes.
+        $reqAgg = DB::table('yarn_requirements as yr')
+            ->select([
+                'yr.yarn_order_id',
+                'yr.count as count',
+                'yr.content as content',
+                DB::raw('SUM(yr.required_weight) as consumed_qty'),
+            ])
+            ->groupBy(['yr.yarn_order_id', 'yr.count', 'yr.content']);
+
+        $query = DB::query()
+            ->fromSub($receiptsAgg, 'ri')
+            ->leftJoinSub($reqAgg, 'ra', function ($join) {
+                $join->on('ra.yarn_order_id', '=', 'ri.yarn_order_id')
+                    ->on('ra.count', '=', 'ri.count')
+                    ->on('ra.content', '=', 'ri.content');
+            })
+            ->select([
+                'ri.date as date',
+                'ri.yarn_type as yarn_type',
+                'ri.count as count',
+                DB::raw('ROUND(SUM(ri.issued_qty), 3) as issued_qty'),
+                DB::raw('ROUND(SUM(COALESCE(ra.consumed_qty, 0)), 3) as consumed_qty'),
+                DB::raw('ROUND(SUM(ri.issued_qty) - SUM(COALESCE(ra.consumed_qty, 0)), 3) as balance'),
+                DB::raw('CASE WHEN SUM(ri.issued_qty) >= SUM(COALESCE(ra.consumed_qty, 0)) THEN 0 ELSE ROUND(SUM(COALESCE(ra.consumed_qty, 0)) - SUM(ri.issued_qty), 3) END as waste'),
+            ])
+            ->groupBy(['ri.date', 'ri.yarn_type', 'ri.count'])
+            ->orderBy('ri.date', 'asc')
+            ->orderBy('ri.yarn_type', 'asc');
+
+        $items = $query->paginate($perPage, ['*'], 'page', $page);
+
+        return response()->json([
+            'period' => ['from' => $from, 'to' => $to],
+            'filters' => ['yarn_type' => $yarnType, 'count' => $count],
+            'data' => $items->items(),
+            'meta' => [
+                'current_page' => $items->currentPage(),
+                'last_page' => $items->lastPage(),
+                'per_page' => $items->perPage(),
+                'total' => $items->total(),
+            ],
+        ]);
+    }
+
+    public function yarnConsumptionExportExcel(Request $request)
+    {
+        $from = $request->input('date_from') ?: Carbon::now()->subDays(30)->format('Y-m-d');
+        $to = $request->input('date_to') ?: Carbon::now()->format('Y-m-d');
+
+        $yarnType = $request->input('yarn_type');
+        $count = $request->input('count');
+
+        // Export needs all rows (avoid pagination).
+        $items = $this->getYarnConsumptionItems($from, $to, $yarnType, $count);
+
+        return Excel::download(new YarnConsumptionReportExport($items), 'yarn-consumption-report.csv', \Maatwebsite\Excel\Excel::CSV);
+    }
+
+    public function yarnConsumptionExportPdf(Request $request): Response
+    {
+        $from = $request->input('date_from') ?: Carbon::now()->subDays(30)->format('Y-m-d');
+        $to = $request->input('date_to') ?: Carbon::now()->format('Y-m-d');
+
+        $yarnType = $request->input('yarn_type');
+        $count = $request->input('count');
+
+        $items = $this->getYarnConsumptionItems($from, $to, $yarnType, $count);
+
+        $html = $this->buildYarnConsumptionReportPdfHtml($items, $from, $to, $yarnType, $count);
+        $pdf = Pdf::loadHTML($html)->setPaper('a4', 'landscape');
+        return $pdf->download('yarn-consumption-report.pdf');
+    }
+
+    private function getProductionReportItems(string $from, string $to, $loomId, $orderId, $shift): array
+    {
+        $fabricSub = DB::table('fabrics')
+            ->select([
+                'yarn_order_id',
+                DB::raw('MIN(design) as fabric_type'),
+            ])
+            ->groupBy('yarn_order_id');
+
+        $query = DB::table('loom_entries as le')
+            ->leftJoin('looms as l', 'l.id', '=', 'le.loom_id')
+            ->leftJoinSub($fabricSub, 'fabric', function ($join) {
+                $join->on('fabric.yarn_order_id', '=', 'le.yarn_order_id');
+            })
+            ->whereBetween('le.date', [$from, $to])
+            ->when($loomId, fn ($q) => $q->where('le.loom_id', $loomId))
+            ->when($orderId, fn ($q) => $q->where('le.yarn_order_id', $orderId))
+            ->when($shift, fn ($q) => $q->where('le.shift', $shift))
+            ->select([
+                'le.date as date',
+                'le.loom_id as loom_id',
+                'l.loom_number as loom_number',
+                'le.yarn_order_id as order_id',
+                'fabric.fabric_type as fabric_type',
+                'le.shift as shift',
+                DB::raw('SUM(le.meters_produced) as production_meters'),
+                DB::raw('CASE WHEN SUM(le.meters_produced) > 0 THEN ROUND((1 - (SUM(le.rejected_meters) / SUM(le.meters_produced))) * 100, 2) ELSE NULL END as efficiency_percentage'),
+            ])->groupBy([
+                'le.date',
+                'le.loom_id',
+                'l.loom_number',
+                'le.yarn_order_id',
+                'fabric.fabric_type',
+                'le.shift',
+            ])->orderBy('le.date', 'asc');
+
+        return $query->get()->map(fn ($row) => (array) $row)->values()->all();
+    }
+
+    private function getOrderSummaryItems(string $from, string $to, $orderFrom): array
+    {
+        return DB::table('yarn_orders as yo')
+            ->whereBetween(DB::raw('DATE(yo.created_at)'), [$from, $to])
+            ->when($orderFrom, fn ($q) => $q->where('yo.order_from', $orderFrom))
+            ->select([
+                DB::raw('DATE(yo.created_at) as date'),
+                'yo.order_from',
+                DB::raw('COUNT(*) as total_orders'),
+            ])
+            ->groupBy([DB::raw('DATE(yo.created_at)'), 'yo.order_from'])
+            ->orderBy(DB::raw('DATE(yo.created_at)'), 'asc')
+            ->get()
+            ->map(fn ($r) => (array) $r)
+            ->values()
+            ->all();
+    }
+
+    private function getLoomEfficiencyItems(string $from, string $to, $loomId): array
+    {
+        return DB::table('loom_entries as le')
+            ->leftJoin('looms as l', 'l.id', '=', 'le.loom_id')
+            ->whereBetween('le.date', [$from, $to])
+            ->when($loomId, fn ($q) => $q->where('le.loom_id', $loomId))
+            ->select([
+                'le.loom_id',
+                'l.loom_number',
+                DB::raw('ROUND(SUM(le.meters_produced), 2) as total_meters_produced'),
+                DB::raw('ROUND(SUM(le.rejected_meters), 2) as total_rejected'),
+                DB::raw('ROUND(SUM(le.net_production), 2) as net_production'),
+                DB::raw('CASE WHEN SUM(le.meters_produced) > 0 THEN ROUND((1 - SUM(le.rejected_meters) / SUM(le.meters_produced)) * 100, 2) ELSE NULL END as efficiency_percentage'),
+                DB::raw('COUNT(DISTINCT le.date) as days_worked'),
+            ])
+            ->groupBy(['le.loom_id', 'l.loom_number'])
+            ->orderBy('l.loom_number', 'asc')
+            ->get()
+            ->map(fn ($r) => (array) $r)
+            ->values()
+            ->all();
+    }
+
+    private function buildProductionReportPdfHtml(array $items, string $from, string $to, $loomId, $orderId, $shift): string
+    {
+        $filterBits = [
+            'From: ' . $from,
+            'To: ' . $to,
+            $loomId ? 'Loom: ' . $loomId : null,
+            $orderId ? 'Order: ' . $orderId : null,
+            $shift ? 'Shift: ' . $shift : null,
+        ];
+        $filterBits = array_values(array_filter($filterBits));
+
+        $rowsHtml = '';
+        foreach ($items as $it) {
+            $rowsHtml .= '<tr>'
+                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)$it['date']) . '</td>'
+                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)$it['loom_number']) . '</td>'
+                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)$it['order_id']) . '</td>'
+                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)round((float)$it['production_meters'], 2)) . '</td>'
+                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . ($it['efficiency_percentage'] !== null ? htmlspecialchars((string)$it['efficiency_percentage'] . '%') : '-') . '</td>'
+                . '</tr>';
+        }
+
+        return '
+        <html>
+          <head><style>
+            body{font-family: DejaVu Sans, Arial, sans-serif; font-size: 12px;}
+            h2{margin:0 0 10px 0;}
+            table{width:100%;border-collapse:collapse;}
+            th{background:#f9fafb;border:1px solid #e5e7eb;padding:6px 8px;text-align:left;}
+          </style></head>
+          <body>
+            <h2>Production Report</h2>
+            <div style="margin-bottom:10px;color:#374151;">
+              ' . implode(' &nbsp; | &nbsp; ', array_map(fn($b)=>htmlspecialchars($b), $filterBits)) . '
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th><th>Loom</th><th>Order</th><th>Production (m)</th><th>Efficiency %</th>
+                </tr>
+              </thead>
+              <tbody>' . $rowsHtml . '</tbody>
+            </table>
+          </body>
+        </html>';
+    }
+
+    private function getYarnConsumptionItems(string $from, string $to, $yarnType, $count): array
+    {
+        $receiptsAgg = DB::table('yarn_receipts as r')
+            ->select([
+                'r.date as date',
+                'r.yarn_order_id',
+                'r.type as yarn_type',
+                'r.count as count',
+                'r.content as content',
+                DB::raw('SUM(r.net_weight) as issued_qty'),
+            ])
+            ->whereBetween('r.date', [$from, $to])
+            ->when($yarnType, fn ($q) => $q->where('r.type', $yarnType))
+            ->when($count, fn ($q) => $q->where('r.count', $count))
+            ->groupBy(['r.date', 'r.yarn_order_id', 'r.type', 'r.count', 'r.content']);
+
+        $reqAgg = DB::table('yarn_requirements as yr')
+            ->select([
+                'yr.yarn_order_id',
+                'yr.count as count',
+                'yr.content as content',
+                DB::raw('SUM(yr.required_weight) as consumed_qty'),
+            ])
+            ->groupBy(['yr.yarn_order_id', 'yr.count', 'yr.content']);
+
+        $query = DB::query()
+            ->fromSub($receiptsAgg, 'ri')
+            ->leftJoinSub($reqAgg, 'ra', function ($join) {
+                $join->on('ra.yarn_order_id', '=', 'ri.yarn_order_id')
+                    ->on('ra.count', '=', 'ri.count')
+                    ->on('ra.content', '=', 'ri.content');
+            })
+            ->select([
+                'ri.date as date',
+                'ri.yarn_type as yarn_type',
+                'ri.count as count',
+                DB::raw('ROUND(SUM(ri.issued_qty), 3) as issued_qty'),
+                DB::raw('ROUND(SUM(COALESCE(ra.consumed_qty, 0)), 3) as consumed_qty'),
+                DB::raw('ROUND(SUM(ri.issued_qty) - SUM(COALESCE(ra.consumed_qty, 0)), 3) as balance'),
+                DB::raw('CASE WHEN SUM(ri.issued_qty) >= SUM(COALESCE(ra.consumed_qty, 0)) THEN 0 ELSE ROUND(SUM(COALESCE(ra.consumed_qty, 0)) - SUM(ri.issued_qty), 3) END as waste'),
+            ])
+            ->groupBy(['ri.date', 'ri.yarn_type', 'ri.count'])
+            ->orderBy('ri.date', 'asc')
+            ->orderBy('ri.yarn_type', 'asc');
+
+        return $query->get()->map(fn ($row) => (array) $row)->values()->all();
+    }
+
+    private function buildYarnConsumptionReportPdfHtml(array $items, string $from, string $to, $yarnType, $count): string
+    {
+        $filterBits = [
+            'From: ' . $from,
+            'To: ' . $to,
+            $yarnType ? 'Yarn Type: ' . $yarnType : null,
+            $count ? 'Count: ' . $count : null,
+        ];
+        $filterBits = array_values(array_filter($filterBits));
+
+        $rowsHtml = '';
+        foreach ($items as $it) {
+            $rowsHtml .= '<tr>'
+                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)$it['date']) . '</td>'
+                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)$it['yarn_type']) . '</td>'
+                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)$it['count']) . '</td>'
+                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)round((float)$it['issued_qty'], 3)) . '</td>'
+                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)round((float)$it['consumed_qty'], 3)) . '</td>'
+                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)round((float)$it['balance'], 3)) . '</td>'
+                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)round((float)$it['waste'], 3)) . '</td>'
+                . '</tr>';
+        }
+
+        return '
+        <html>
+          <head><style>
+            body{font-family: DejaVu Sans, Arial, sans-serif; font-size: 12px;}
+            h2{margin:0 0 10px 0;}
+            table{width:100%;border-collapse:collapse;}
+            th{background:#f9fafb;border:1px solid #e5e7eb;padding:6px 8px;text-align:left;}
+          </style></head>
+          <body>
+            <h2>Yarn Consumption Report</h2>
+            <div style="margin-bottom:10px;color:#374151;">
+              ' . implode(' &nbsp; | &nbsp; ', array_map(fn($b)=>htmlspecialchars($b), $filterBits)) . '
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th><th>Yarn</th><th>Count</th><th>Issued</th><th>Consumed</th><th>Balance</th><th>Waste</th>
+                </tr>
+              </thead>
+              <tbody>' . $rowsHtml . '</tbody>
+            </table>
+          </body>
+        </html>';
     }
 }

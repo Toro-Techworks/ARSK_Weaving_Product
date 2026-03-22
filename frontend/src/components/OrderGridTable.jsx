@@ -3,7 +3,9 @@ import { Plus, Save, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import Button from './Button';
+import { TablePagination } from './TablePagination';
 import { formatOrderId } from '../utils/formatOrderId';
+import { normalizePaginatedResponse } from '../utils/pagination';
 
 const EMPTY_ROW = () => ({
   rowId: 0,
@@ -25,6 +27,9 @@ export function OrderGridTable({ canEdit = true }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(new Set()); // rowId-field
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
+  const [orderMeta, setOrderMeta] = useState({ current_page: 1, last_page: 1, per_page: 10, total: 0 });
 
   const wrapRef = useRef(null);
   const nextRowId = useRef(0);
@@ -32,14 +37,20 @@ export function OrderGridTable({ canEdit = true }) {
   const loadData = useCallback(() => {
     setLoading(true);
     Promise.all([
-      api.get('/yarn-orders', { params: { per_page: 200, page: 1 } }).then((r) => r.data?.data || []),
+      api.get('/yarn-orders', { params: { page, per_page: perPage } }).then((r) => normalizePaginatedResponse(r.data)),
       api.get('/looms-list').then((r) => r.data?.data || []).catch(() => []),
       api.get('/companies-list').then((r) => r.data?.data || []).catch(() => []),
     ])
-      .then(([orders, loomList, companyList]) => {
+      .then(([ordersPage, loomList, companyList]) => {
         setLooms(loomList);
         setCompanies(companyList);
-        const normalized = (orders || []).map((o) => ({
+        setOrderMeta({
+          current_page: ordersPage.current_page,
+          last_page: ordersPage.last_page,
+          per_page: ordersPage.per_page,
+          total: ordersPage.total,
+        });
+        const normalized = (ordersPage.data || []).map((o) => ({
           rowId: nextRowId.current++,
           id: o.id,
           loom_id: o.loom_id != null ? String(o.loom_id) : '',
@@ -57,7 +68,7 @@ export function OrderGridTable({ canEdit = true }) {
       })
       .catch(() => toast.error('Failed to load orders'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [page, perPage]);
 
   useEffect(() => loadData(), [loadData]);
 
@@ -330,7 +341,17 @@ export function OrderGridTable({ canEdit = true }) {
           </table>
         </div>
       </div>
-
+      {(orderMeta.total > 0 || page > 1) && (
+        <TablePagination
+          page={orderMeta.current_page}
+          lastPage={orderMeta.last_page}
+          total={orderMeta.total}
+          perPage={orderMeta.per_page}
+          onPageChange={setPage}
+          onPerPageChange={(n) => { setPerPage(n); setPage(1); }}
+          disabled={loading || saving}
+        />
+      )}
     </div>
   );
 }

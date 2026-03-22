@@ -8,14 +8,18 @@ import { useRefreshOnSameMenuClick } from '../../hooks/useRefreshOnSameMenuClick
 import { Card } from '../../components/Card';
 import { FormInput, FormSelect } from '../../components/FormInput';
 import Button from '../../components/Button';
+import { TablePagination } from '../../components/TablePagination';
+import { normalizePaginatedResponse, fetchAllPaginated } from '../../utils/pagination';
 
 export function AdminUserList() {
   const { user: currentUser } = useAuth();
   const { canEdit: pageCanEdit } = usePagePermission();
   const [users, setUsers] = useState([]);
-  const [meta, setMeta] = useState({});
+  const [meta, setMeta] = useState({ current_page: 1, last_page: 1, per_page: 10, total: 0 });
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
+  const [perPage, setPerPage] = useState(10);
+  const [searchInput, setSearchInput] = useState('');
+  const [searchApplied, setSearchApplied] = useState('');
   const [loading, setLoading] = useState(true);
   const [editModal, setEditModal] = useState(null);
   const [resetPasswordUser, setResetPasswordUser] = useState(null);
@@ -23,10 +27,11 @@ export function AdminUserList() {
 
   const fetchUsers = () => {
     setLoading(true);
-    api.get('/users', { params: { page, per_page: 15, search: search || undefined } })
+    api.get('/users', { params: { page, per_page: perPage, search: searchApplied || undefined } })
       .then(({ data }) => {
-        setUsers(data.data);
-        setMeta(data.meta || {});
+        const n = normalizePaginatedResponse(data);
+        setUsers(n.data);
+        setMeta({ current_page: n.current_page, last_page: n.last_page, per_page: n.per_page, total: n.total });
       })
       .catch(() => toast.error('Failed to load users'))
       .finally(() => setLoading(false));
@@ -34,13 +39,13 @@ export function AdminUserList() {
 
   useEffect(() => {
     fetchUsers();
-  }, [page]);
+  }, [page, perPage, searchApplied]);
   useRefreshOnSameMenuClick(fetchUsers);
 
   const handleSearch = (e) => {
     e.preventDefault();
+    setSearchApplied(searchInput.trim());
     setPage(1);
-    fetchUsers();
   };
 
   const handleDisable = (u) => {
@@ -98,8 +103,8 @@ export function AdminUserList() {
             type="search"
             placeholder="Search by name or username..."
             className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
           />
           <Button type="submit">Search</Button>
         </form>
@@ -164,12 +169,16 @@ export function AdminUserList() {
           </table>
         </div>
 
-        {meta.last_page > 1 && (
-          <div className="mt-4 flex justify-center gap-2">
-            <Button variant="secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-            <span className="py-2 text-sm text-gray-600">Page {meta.current_page} of {meta.last_page}</span>
-            <Button variant="secondary" disabled={page >= meta.last_page} onClick={() => setPage((p) => p + 1)}>Next</Button>
-          </div>
+        {(meta.total > 0 || page > 1) && (
+          <TablePagination
+            page={meta.current_page}
+            lastPage={meta.last_page}
+            total={meta.total}
+            perPage={meta.per_page}
+            onPageChange={setPage}
+            onPerPageChange={(n) => { setPerPage(n); setPage(1); }}
+            disabled={loading}
+          />
         )}
       </Card>
 
@@ -214,7 +223,9 @@ function CreateUserModal({ currentUser, onClose, onSuccess }) {
   });
 
   useEffect(() => {
-    api.get('/roles').then(({ data }) => setRoles(data.data || [])).catch(() => {});
+    fetchAllPaginated(api, '/roles', { perPage: 100 })
+      .then(setRoles)
+      .catch(() => {});
   }, []);
 
   const roleOptions = roles.map((r) => ({ value: String(r.id), label: (r.role_name || '').replace(/_/g, ' ') }));
@@ -295,7 +306,9 @@ function EditUserModal({ user, onClose, onSaved, canAssignRole }) {
   const [loading, setLoading] = useState(false);
 
   React.useEffect(() => {
-    api.get('/roles').then(({ data }) => setRoles(data.data || [])).catch(() => {});
+    fetchAllPaginated(api, '/roles', { perPage: 100 })
+      .then(setRoles)
+      .catch(() => {});
   }, []);
 
   const handleSubmit = async (e) => {

@@ -15,6 +15,8 @@ export const pathToMenuKey = {
   '/expenses': 'expenses',
   '/reports/order-summary': 'reports.order_summary',
   '/reports/loom-efficiency': 'reports.loom_efficiency',
+  '/reports/production': 'reports.production',
+  '/reports/yarn-consumption': 'reports.yarn_consumption',
   '/yarn-stock': 'yarn_stock',
   '/yarn-stock/entry': 'yarn_stock',
   '/admin/users': 'admin.users',

@@ -12,7 +12,7 @@ class ExpenseController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $perPage = $request->input('per_page', 15);
+        $perPage = $this->clampPerPage($request, 10, 100);
         $expenses = Expense::query()
             ->when($request->category, fn ($q) => $q->where('category', $request->category))
             ->when($request->date_from, fn ($q) => $q->whereDate('date', '>=', $request->date_from))
@@ -20,15 +20,10 @@ class ExpenseController extends Controller
             ->orderBy('date', 'desc')
             ->paginate($perPage);
 
-        return response()->json([
-            'data' => ExpenseResource::collection($expenses),
-            'meta' => [
-                'current_page' => $expenses->currentPage(),
-                'last_page' => $expenses->lastPage(),
-                'per_page' => $expenses->perPage(),
-                'total' => $expenses->total(),
-            ],
-        ]);
+        return $this->paginatedResponse(
+            $expenses,
+            ExpenseResource::collection($expenses->items())->resolve()
+        );
     }
 
     public function store(Request $request): JsonResponse

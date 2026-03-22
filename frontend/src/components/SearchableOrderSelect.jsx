@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Search, X } from 'lucide-react';
 import api from '../api/client';
 import { formatOrderId } from '../utils/formatOrderId';
+import { normalizePaginatedResponse } from '../utils/pagination';
 
 /**
  * Searchable yarn order dropdown. Search by PO number, customer, or order ID.
@@ -23,7 +24,7 @@ export function SearchableOrderSelect({ label, value, onChange, placeholder = 'S
     }
     setLoading(true);
     api.get('/yarn-orders', { params: { search: search.trim(), per_page: 15 } })
-      .then(({ data: res }) => setOptions(res.data || []))
+      .then(({ data: res }) => setOptions(normalizePaginatedResponse(res).data))
       .catch(() => setOptions([]))
       .finally(() => setLoading(false));
   };
