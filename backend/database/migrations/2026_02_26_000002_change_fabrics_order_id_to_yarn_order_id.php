@@ -6,8 +6,22 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    /**
+     * Legacy: older installs created `fabrics` with order_id → orders.
+     * Fresh installs use yarn_order_id from 2026_02_26_000001 — this migration no-ops.
+     */
     public function up(): void
     {
+        if (! Schema::hasTable('fabrics')) {
+            return;
+        }
+        if (Schema::hasColumn('fabrics', 'yarn_order_id')) {
+            return;
+        }
+        if (! Schema::hasColumn('fabrics', 'order_id')) {
+            return;
+        }
+
         Schema::table('fabrics', function (Blueprint $table) {
             $table->dropForeign(['order_id']);
             $table->dropColumn('order_id');
@@ -19,6 +33,17 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (! Schema::hasTable('fabrics')) {
+            return;
+        }
+        if (! Schema::hasColumn('fabrics', 'yarn_order_id') || Schema::hasColumn('fabrics', 'order_id')) {
+            return;
+        }
+        if (! Schema::hasTable('orders')) {
+            // Cannot restore order_id FK after orders table was dropped
+            return;
+        }
+
         Schema::table('fabrics', function (Blueprint $table) {
             $table->dropForeign(['yarn_order_id']);
             $table->dropColumn('yarn_order_id');

@@ -6,6 +6,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      // Optional: route only dashboard to Express (must be BEFORE `/api`)
+      // '/api/dashboard': { target: 'http://localhost:3001', changeOrigin: true },
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,

@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   useReducedMotionConfig,
@@ -13,8 +14,11 @@ export function AnimatedModal({ open, onClose, children, className = '', maxWidt
   const contentVariants = reduceMotion ? reducedMotionModalContentVariants : modalContentVariants;
   // Responsive: 90% viewport on mobile, then respect maxWidth (e.g. max-w-lg = 512px) on sm+
   const responsiveWidth = `w-[90vw] sm:w-full ${maxWidth}`;
+  const modalRoot = typeof document !== 'undefined' ? document.body : null;
 
-  return (
+  if (!modalRoot) return null;
+
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
@@ -42,6 +46,8 @@ export function AnimatedModal({ open, onClose, children, className = '', maxWidt
         </motion.div>
       )}
     </AnimatePresence>
+    ,
+    modalRoot
   );
 }
 

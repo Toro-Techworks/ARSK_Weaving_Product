@@ -21,6 +21,8 @@ export const pathToMenuKey = {
   '/yarn-stock/entry': 'yarn_stock',
   '/admin/users': 'admin.users',
   '/admin/permissions': 'admin.permissions',
+  '/admin/weaving-units': 'admin.weaving_units',
+  '/admin/weavers': 'admin.weavers',
   '/settings/profile': 'settings.profile',
 };
 

@@ -10,7 +10,8 @@ return new class extends Migration
     {
         Schema::create('fabrics', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('order_id')->constrained('orders')->cascadeOnDelete();
+            // yarn_orders must exist (2026_02_25_000001); legacy `orders` table is removed earlier (2026_02_23_100010).
+            $table->foreignId('yarn_order_id')->constrained('yarn_orders')->cascadeOnDelete();
             $table->string('description', 255)->nullable();
             $table->string('design', 255)->nullable();
             $table->string('weave_technique', 255)->nullable();
