@@ -23,7 +23,8 @@ class ReportController extends Controller
         $to = $request->input('date_to', Carbon::now()->format('Y-m-d'));
         $orderFrom = $request->input('order_from');
 
-        $perPage = 1000000;
+        $perPage = (int) $request->input('per_page', 50);
+        $perPage = $perPage >= 1 && $perPage <= 200 ? $perPage : 50;
         $page = max(1, (int) $request->input('page', 1));
 
         $query = DB::table('yarn_orders as yo')
@@ -63,7 +64,8 @@ class ReportController extends Controller
         $from = $request->input('date_from', Carbon::now()->startOfMonth()->format('Y-m-d'));
         $to = $request->input('date_to', Carbon::now()->format('Y-m-d'));
         $loomId = $request->input('loom_id');
-        $perPage = 1000000;
+        $perPage = (int) $request->input('per_page', 50);
+        $perPage = $perPage >= 1 && $perPage <= 200 ? $perPage : 50;
         $page = max(1, (int) $request->input('page', 1));
 
         $query = DB::table('loom_entries as le')
@@ -163,7 +165,8 @@ class ReportController extends Controller
         $orderId = $request->input('order_id');
         $shift = $request->input('shift');
 
-        $perPage = 1000000;
+        $perPage = (int) $request->input('per_page', 50);
+        $perPage = $perPage >= 1 && $perPage <= 200 ? $perPage : 50;
         $page = (int) $request->input('page', 1);
         $page = max(1, $page);
 
@@ -291,7 +294,8 @@ class ReportController extends Controller
         $yarnType = $request->input('yarn_type');
         $count = $request->input('count');
 
-        $perPage = 1000000;
+        $perPage = (int) $request->input('per_page', 50);
+        $perPage = $perPage >= 1 && $perPage <= 200 ? $perPage : 50;
         $page = max(1, (int) $request->input('page', 1));
 
         // Build receipts aggregate (issued) grouped by date + order + yarn attributes.

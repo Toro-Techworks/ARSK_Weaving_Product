@@ -9,19 +9,23 @@ use Illuminate\Http\Request;
 trait FormatsPaginatedResponses
 {
     /**
-     * Return a very large page size so endpoints effectively return all rows.
+     * Clamp per_page from request (default 10, max 100).
      */
     protected function clampPerPage(Request $request, int $default = 10, int $max = 100): int
     {
-        return 1000000;
+        $v = (int) $request->input('per_page', $default);
+
+        return $v >= 1 && $v <= $max ? $v : $default;
     }
 
     /**
-     * Keep large and standard behavior aligned: fetch all rows.
+     * Larger page size for dropdowns / grids that need more rows in one request (still capped).
      */
     protected function clampPerPageLarge(Request $request, int $default = 50, int $max = 200): int
     {
-        return 1000000;
+        $v = (int) $request->input('per_page', $default);
+
+        return $v >= 1 && $v <= $max ? $v : $default;
     }
 
     /**
