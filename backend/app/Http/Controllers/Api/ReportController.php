@@ -23,8 +23,7 @@ class ReportController extends Controller
         $to = $request->input('date_to', Carbon::now()->format('Y-m-d'));
         $orderFrom = $request->input('order_from');
 
-        $perPage = (int) $request->input('per_page', 50);
-        $perPage = $perPage >= 1 && $perPage <= 200 ? $perPage : 50;
+        $perPage = 1000000;
         $page = max(1, (int) $request->input('page', 1));
 
         $query = DB::table('yarn_orders as yo')
@@ -64,8 +63,7 @@ class ReportController extends Controller
         $from = $request->input('date_from', Carbon::now()->startOfMonth()->format('Y-m-d'));
         $to = $request->input('date_to', Carbon::now()->format('Y-m-d'));
         $loomId = $request->input('loom_id');
-        $perPage = (int) $request->input('per_page', 50);
-        $perPage = $perPage >= 1 && $perPage <= 200 ? $perPage : 50;
+        $perPage = 1000000;
         $page = max(1, (int) $request->input('page', 1));
 
         $query = DB::table('loom_entries as le')
@@ -165,8 +163,7 @@ class ReportController extends Controller
         $orderId = $request->input('order_id');
         $shift = $request->input('shift');
 
-        $perPage = (int) $request->input('per_page', 50);
-        $perPage = $perPage >= 1 && $perPage <= 200 ? $perPage : 50;
+        $perPage = 1000000;
         $page = (int) $request->input('page', 1);
         $page = max(1, $page);
 
@@ -179,6 +176,9 @@ class ReportController extends Controller
 
         $base = DB::table('loom_entries as le')
             ->leftJoin('looms as l', 'l.id', '=', 'le.loom_id')
+            ->leftJoin('yarn_orders as yo', 'yo.id', '=', 'le.yarn_order_id')
+            ->leftJoin('weavers as w1', 'w1.id', '=', 'le.weaver1_id')
+            ->leftJoin('weavers as w2', 'w2.id', '=', 'le.weaver2_id')
             ->leftJoinSub($fabricSub, 'fabric', function ($join) {
                 $join->on('fabric.yarn_order_id', '=', 'le.yarn_order_id');
             })
@@ -192,8 +192,14 @@ class ReportController extends Controller
             'le.loom_id as loom_id',
             'l.loom_number as loom_number',
             'le.yarn_order_id as order_id',
+            'yo.order_from as order_from',
+            'yo.customer as customer',
             'fabric.fabric_type as fabric_type',
             'le.shift as shift',
+            'le.weaver1_id as weaver1_id',
+            'le.weaver2_id as weaver2_id',
+            'w1.weaver_name as weaver1_name',
+            'w2.weaver_name as weaver2_name',
             DB::raw('SUM(le.meters_produced) as production_meters'),
             DB::raw('CASE WHEN SUM(le.meters_produced) > 0 THEN ROUND((1 - (SUM(le.rejected_meters) / SUM(le.meters_produced))) * 100, 2) ELSE NULL END as efficiency_percentage'),
         ])->groupBy([
@@ -201,8 +207,14 @@ class ReportController extends Controller
             'le.loom_id',
             'l.loom_number',
             'le.yarn_order_id',
+            'yo.order_from',
+            'yo.customer',
             'fabric.fabric_type',
             'le.shift',
+            'le.weaver1_id',
+            'le.weaver2_id',
+            'w1.weaver_name',
+            'w2.weaver_name',
         ])->orderBy('le.date', 'asc');
 
         $items = $query->paginate($perPage, ['*'], 'page', $page);
@@ -279,8 +291,7 @@ class ReportController extends Controller
         $yarnType = $request->input('yarn_type');
         $count = $request->input('count');
 
-        $perPage = (int) $request->input('per_page', 50);
-        $perPage = $perPage >= 1 && $perPage <= 200 ? $perPage : 50;
+        $perPage = 1000000;
         $page = max(1, (int) $request->input('page', 1));
 
         // Build receipts aggregate (issued) grouped by date + order + yarn attributes.
@@ -383,6 +394,9 @@ class ReportController extends Controller
 
         $query = DB::table('loom_entries as le')
             ->leftJoin('looms as l', 'l.id', '=', 'le.loom_id')
+            ->leftJoin('yarn_orders as yo', 'yo.id', '=', 'le.yarn_order_id')
+            ->leftJoin('weavers as w1', 'w1.id', '=', 'le.weaver1_id')
+            ->leftJoin('weavers as w2', 'w2.id', '=', 'le.weaver2_id')
             ->leftJoinSub($fabricSub, 'fabric', function ($join) {
                 $join->on('fabric.yarn_order_id', '=', 'le.yarn_order_id');
             })
@@ -395,8 +409,14 @@ class ReportController extends Controller
                 'le.loom_id as loom_id',
                 'l.loom_number as loom_number',
                 'le.yarn_order_id as order_id',
+                'yo.order_from as order_from',
+                'yo.customer as customer',
                 'fabric.fabric_type as fabric_type',
                 'le.shift as shift',
+                'le.weaver1_id as weaver1_id',
+                'le.weaver2_id as weaver2_id',
+                'w1.weaver_name as weaver1_name',
+                'w2.weaver_name as weaver2_name',
                 DB::raw('SUM(le.meters_produced) as production_meters'),
                 DB::raw('CASE WHEN SUM(le.meters_produced) > 0 THEN ROUND((1 - (SUM(le.rejected_meters) / SUM(le.meters_produced))) * 100, 2) ELSE NULL END as efficiency_percentage'),
             ])->groupBy([
@@ -404,8 +424,14 @@ class ReportController extends Controller
                 'le.loom_id',
                 'l.loom_number',
                 'le.yarn_order_id',
+                'yo.order_from',
+                'yo.customer',
                 'fabric.fabric_type',
                 'le.shift',
+                'le.weaver1_id',
+                'le.weaver2_id',
+                'w1.weaver_name',
+                'w2.weaver_name',
             ])->orderBy('le.date', 'asc');
 
         return $query->get()->map(fn ($row) => (array) $row)->values()->all();
@@ -465,10 +491,12 @@ class ReportController extends Controller
 
         $rowsHtml = '';
         foreach ($items as $it) {
+            $party = trim((string)($it['order_from'] ?? '')) ?: trim((string)($it['customer'] ?? ''));
             $rowsHtml .= '<tr>'
                 . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)$it['date']) . '</td>'
                 . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)$it['loom_number']) . '</td>'
                 . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)$it['order_id']) . '</td>'
+                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars($party !== '' ? $party : '-') . '</td>'
                 . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)round((float)$it['production_meters'], 2)) . '</td>'
                 . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . ($it['efficiency_percentage'] !== null ? htmlspecialchars((string)$it['efficiency_percentage'] . '%') : '-') . '</td>'
                 . '</tr>';
@@ -490,7 +518,7 @@ class ReportController extends Controller
             <table>
               <thead>
                 <tr>
-                  <th>Date</th><th>Loom</th><th>Order</th><th>Production (m)</th><th>Efficiency %</th>
+                  <th>Date</th><th>Loom</th><th>Order</th><th>Party (company)</th><th>Production (m)</th><th>Efficiency %</th>
                 </tr>
               </thead>
               <tbody>' . $rowsHtml . '</tbody>

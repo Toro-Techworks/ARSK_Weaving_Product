@@ -88,6 +88,8 @@ export const MENU_KEY_TO_ICON_NAME = {
   admin_panel: 'Shield',
   'admin.users': 'Users',
   'admin.permissions': 'Lock',
+  'admin.weaving_units': 'Factory',
+  'admin.weavers': 'Users',
 
   settings: 'User',
   'settings.profile': 'User',

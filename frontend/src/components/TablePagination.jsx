@@ -1,5 +1,6 @@
 import React from 'react';
 import Button from './Button';
+import SearchableSelect from './ui/SearchableSelect';
 
 const PER_PAGE_OPTIONS = [10, 25, 50];
 
@@ -53,18 +54,16 @@ export function TablePagination({
         {showPerPageSelector && onPerPageChange && (
           <label className="inline-flex items-center gap-2">
             <span className="text-gray-500 whitespace-nowrap">Rows per page</span>
-            <select
-              value={String(safePerPage)}
-              onChange={(e) => onPerPageChange(Number(e.target.value))}
-              disabled={disabled}
-              className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-gray-900 focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none"
-            >
-              {PER_PAGE_OPTIONS.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
+            <div className="min-w-[110px]">
+              <SearchableSelect
+                options={PER_PAGE_OPTIONS.map((n) => ({ value: String(n), label: String(n) }))}
+                value={String(safePerPage)}
+                onChange={(v) => onPerPageChange(Number(v))}
+                placeholder="Rows"
+                isClearable={false}
+                isDisabled={disabled}
+              />
+            </div>
           </label>
         )}
       </div>

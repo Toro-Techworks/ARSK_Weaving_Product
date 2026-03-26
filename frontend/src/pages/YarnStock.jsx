@@ -11,6 +11,7 @@ import { useRefreshOnSameMenuClick } from '../hooks/useRefreshOnSameMenuClick';
 import { useAuth } from '../context/AuthContext';
 import { TablePagination } from '../components/TablePagination';
 import { normalizePaginatedResponse, fetchAllPaginated } from '../utils/pagination';
+import SearchableSelect from '../components/ui/SearchableSelect';
 
 function formatOrderDate(val) {
   if (!val) return '—';
@@ -874,19 +875,16 @@ export function YarnStockEntry() {
                         />
                       </td>
                       <td className="p-0 align-top">
-                        <select
-                          ref={(el) => { cellRefs.current[`${rowIndex}-type`] = el; }}
-                          value={row.type}
-                          onChange={(e) => handleCellChange(rowIndex, 'type', e.target.value)}
-                          onKeyDown={(e) => { if (e.key === 'Tab') { e.preventDefault(); moveFocus(rowIndex, 'type', 'next'); } if (e.key === 'Enter') moveFocus(rowIndex, 'type', 'down'); }}
-                          onFocus={() => setActiveCell({ rowIndex, colKey: 'type' })}
-                          className="w-full min-w-[80px] px-2 py-1.5 text-sm border-0 border-b border-transparent focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none rounded bg-transparent"
-                          readOnly={!canEdit}
-                          disabled={!canEdit}
-                        >
-                          <option value="">—</option>
-                          {TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                        </select>
+                        <div className="min-w-[120px] px-1 py-0.5">
+                          <SearchableSelect
+                            options={TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                            value={row.type}
+                            onChange={(v) => handleCellChange(rowIndex, 'type', v || '')}
+                            placeholder="Type"
+                            isDisabled={!canEdit}
+                            menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
+                          />
+                        </div>
                       </td>
                       <td className="p-0 align-top">
                         <input
