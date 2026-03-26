@@ -13,6 +13,8 @@ use App\Http\Controllers\Api\PermissionController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\WeaverController;
+use App\Http\Controllers\Api\WeavingUnitController;
 use App\Http\Controllers\Api\YarnOrderController;
 use App\Http\Controllers\Api\YarnReceiptController;
 use App\Http\Controllers\Api\YarnRequirementController;
@@ -30,6 +32,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::apiResource('companies', CompanyController::class);
     Route::get('/companies-list', [CompanyController::class, 'list']);
+    Route::apiResource('weaving-units', WeavingUnitController::class);
+    Route::apiResource('weavers', WeaverController::class);
 
     Route::apiResource('looms', LoomController::class);
     Route::get('/looms-list', [LoomController::class, 'list']);

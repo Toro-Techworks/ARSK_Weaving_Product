@@ -228,15 +228,15 @@ export default function Layout({ children }) {
         <div className={`min-w-0 ${collapsed ? 'flex justify-center' : ''}`}>
           {!collapsed ? (
             <div>
-              <div className="font-bold text-xl tracking-tight text-white leading-none">TORO ERP</div>
+              <div className="font-bold text-xl tracking-tight text-white leading-none">ARSK ERP</div>
               <p className="text-[11px] font-medium text-white/50 uppercase tracking-widest mt-1.5">Weaving</p>
             </div>
           ) : (
             <div
               className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center text-xs font-bold text-white ring-1 ring-white/20"
-              title="TORO ERP"
+              title="ARSK ERP"
             >
-              T
+              A
             </div>
           )}
         </div>
@@ -259,7 +259,7 @@ export default function Layout({ children }) {
           </button>
         </div>
       </div>
-      <nav className="flex-1 overflow-y-auto overflow-x-hidden p-3 space-y-1.5">
+      <nav className="sidebar-scroll flex-1 overflow-y-auto overflow-x-hidden p-3 space-y-1.5 min-h-0">
         {navItems.length > 0 ? (
           navItems.map((item) => {
             if (item.children?.length > 0) {
@@ -335,6 +335,7 @@ export default function Layout({ children }) {
       <aside
         style={{ backgroundColor: sidebarBg }}
         className={`
+          sidebar
           fixed lg:relative inset-y-0 left-0 z-40 flex flex-col text-white transition-all duration-300 ease-out shrink-0 h-screen
           shadow-[4px_0_24px_-4px_rgba(60,58,143,0.35)]
           w-64
@@ -360,7 +361,7 @@ export default function Layout({ children }) {
             <h1 className="text-sm sm:text-base font-semibold text-slate-800 truncate">
               Weaving Production Management
             </h1>
-            <p className="text-xs text-slate-500 truncate hidden sm:block">TORO ERP · Operations</p>
+            <p className="text-xs text-slate-500 truncate hidden sm:block">ARSK ERP · Operations</p>
           </div>
         </header>
         <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8 min-h-0">

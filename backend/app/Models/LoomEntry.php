@@ -16,8 +16,12 @@ class LoomEntry extends Model
         'date',
         'shift',
         'meters_produced',
+        'production',
         'rejected_meters',
         'operator_name',
+        'weaver1_id',
+        'weaver2_id',
+        'remarks',
         'net_production',
         'efficiency_percentage',
     ];
@@ -26,6 +30,8 @@ class LoomEntry extends Model
         'date' => 'date',
         'meters_produced' => 'decimal:2',
         'rejected_meters' => 'decimal:2',
+        'weaver1_id' => 'integer',
+        'weaver2_id' => 'integer',
         'net_production' => 'decimal:2',
         'efficiency_percentage' => 'decimal:2',
     ];
@@ -49,5 +55,15 @@ class LoomEntry extends Model
     public function yarnOrder(): BelongsTo
     {
         return $this->belongsTo(YarnOrder::class);
+    }
+
+    public function weaver1(): BelongsTo
+    {
+        return $this->belongsTo(Weaver::class, 'weaver1_id');
+    }
+
+    public function weaver2(): BelongsTo
+    {
+        return $this->belongsTo(Weaver::class, 'weaver2_id');
     }
 }

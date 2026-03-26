@@ -17,6 +17,8 @@ import ProductionReportPage from './pages/ProductionReportPage';
 import YarnConsumptionReportPage from './pages/YarnConsumptionReportPage';
 import { Profile } from './pages/Settings';
 import { AdminUserList, AdminPermissionMatrix } from './pages/Admin';
+import { WeavingUnitList } from './pages/WeavingUnits';
+import { WeaverList } from './pages/Weavers';
 
 const YarnStockListLazy = lazy(() => import('./pages/YarnStock').then(m => ({ default: m.YarnStockList })));
 const YarnStockEntryLazy = lazy(() => import('./pages/YarnStock').then(m => ({ default: m.YarnStockEntry })));
@@ -86,6 +88,8 @@ function AppRoutes() {
 
       <Route path="/admin/users" element={<ProtectedRoute roles={['super_admin', 'admin']}><RequireViewPermission menuKey="admin.users"><Layout><Suspense fallback={<PageLoader />}><AdminUserListLazy /></Suspense></Layout></RequireViewPermission></ProtectedRoute>} />
       <Route path="/admin/permissions" element={<ProtectedRoute roles={['super_admin']}><RequireViewPermission menuKey="admin.permissions"><Layout><Suspense fallback={<PageLoader />}><AdminPermissionMatrixLazy /></Suspense></Layout></RequireViewPermission></ProtectedRoute>} />
+      <Route path="/admin/weaving-units" element={<ProtectedRoute roles={['super_admin', 'admin']}><RequireViewPermission menuKey="admin.weaving_units"><Layout><WeavingUnitList /></Layout></RequireViewPermission></ProtectedRoute>} />
+      <Route path="/admin/weavers" element={<ProtectedRoute roles={['super_admin', 'admin']}><RequireViewPermission menuKey="admin.weavers"><Layout><WeaverList /></Layout></RequireViewPermission></ProtectedRoute>} />
       <Route path="/settings/profile" element={<ProtectedRoute><Layout><Profile /></Layout></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />

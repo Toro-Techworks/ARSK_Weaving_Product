@@ -19,25 +19,6 @@ const PURPLE_LIGHT = '#8b87d9';
 const PURPLE_MUTED = '#c4c2eb';
 const ROSE = '#e11d48';
 
-const MONTH_DATA = [
-  { name: 'Jan', profit: 4200, expenses: 2400 },
-  { name: 'Feb', profit: 3800, expenses: 2100 },
-  { name: 'Mar', profit: 5100, expenses: 2600 },
-  { name: 'Apr', profit: 4700, expenses: 2300 },
-  { name: 'May', profit: 6200, expenses: 2800 },
-  { name: 'Jun', profit: 5800, expenses: 2500 },
-];
-
-const WEEK_DATA = [
-  { name: 'Mon', profit: 820, expenses: 410 },
-  { name: 'Tue', profit: 910, expenses: 380 },
-  { name: 'Wed', profit: 760, expenses: 520 },
-  { name: 'Thu', profit: 1050, expenses: 440 },
-  { name: 'Fri', profit: 980, expenses: 490 },
-  { name: 'Sat', profit: 640, expenses: 320 },
-  { name: 'Sun', profit: 520, expenses: 280 },
-];
-
 function PeriodToggle({ value, onChange }) {
   const btn = (key, label) => (
     <button
@@ -69,9 +50,36 @@ function ChartCardHeader({ title, right }) {
   );
 }
 
-export function ProfitExpenseBarCard() {
+const defaultMonth = () =>
+  Array.from({ length: 6 }, (_, i) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - (5 - i));
+    return { name: d.toLocaleString('en', { month: 'short' }), profit: 0, expenses: 0 };
+  });
+
+const defaultWeek = () => {
+  const out = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    out.push({ name: d.toLocaleString('en', { weekday: 'short' }), profit: 0, expenses: 0 });
+  }
+  return out;
+};
+
+/**
+ * @param {{ monthData?: array, weekData?: array }} props — from API `charts.profit_expense_*`
+ */
+export function ProfitExpenseBarCard({ monthData, weekData }) {
   const [period, setPeriod] = useState('month');
-  const data = period === 'month' ? MONTH_DATA : WEEK_DATA;
+  const data =
+    period === 'month'
+      ? monthData?.length
+        ? monthData
+        : defaultMonth()
+      : weekData?.length
+        ? weekData
+        : defaultWeek();
 
   return (
     <motion.div
@@ -108,22 +116,29 @@ export function ProfitExpenseBarCard() {
 
 const DONUT_COLORS = [PURPLE, PURPLE_LIGHT, ROSE];
 
-export function LoomDonutCard({ runningPct, failurePct }) {
+const EMPTY_DIST = { running_pct: 0, stopped_pct: 0, failure_pct: 0 };
+
+/**
+ * @param {{ distribution?: { month?: object, week?: object } }} props — API `charts.loom_distribution`
+ */
+export function LoomDonutCard({ distribution }) {
   const [period, setPeriod] = useState('month');
 
+  const slice = period === 'month' ? distribution?.month : distribution?.week;
   const { r, s, f } = useMemo(() => {
-    const bump = period === 'week' ? 4 : 0;
-    const fail = Math.min(12, Math.max(3, failurePct));
-    const run = Math.min(92, Math.max(0, runningPct + bump * 0.15));
-    const st = Math.max(0, 100 - run - fail);
-    return { r: run, s: st, f: fail };
-  }, [period, runningPct, failurePct]);
+    const d = { ...EMPTY_DIST, ...slice };
+    return {
+      r: Math.round(Number(d.running_pct) * 10) / 10,
+      s: Math.round(Number(d.stopped_pct) * 10) / 10,
+      f: Math.round(Number(d.failure_pct) * 10) / 10,
+    };
+  }, [slice]);
 
   const pieData = useMemo(
     () => [
-      { name: 'Loom running', value: Math.round(r * 10) / 10 },
-      { name: 'Loom stopped', value: Math.round(s * 10) / 10 },
-      { name: 'Failure', value: Math.round(f * 10) / 10 },
+      { name: 'Loom running', value: r },
+      { name: 'Loom stopped', value: s },
+      { name: 'Failure', value: f },
     ],
     [r, s, f]
   );
@@ -137,9 +152,6 @@ export function LoomDonutCard({ runningPct, failurePct }) {
     >
       <ChartCardHeader title="Loom run %" right={<PeriodToggle value={period} onChange={setPeriod} />} />
       <div className="p-4 sm:p-6">
-        <p className="text-xs text-slate-500 mb-2 sm:hidden">
-          {period === 'month' ? 'Monthly view' : 'Weekly view'} (illustrative split)
-        </p>
         <div className="h-[280px] w-full min-h-[240px]">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>

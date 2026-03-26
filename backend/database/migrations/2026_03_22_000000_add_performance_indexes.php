@@ -9,7 +9,7 @@ return new class extends Migration
 {
     /**
      * Add indexes for frequently filtered/sorted columns to improve query performance.
-     * Skips FK columns that already have indexes.
+     * Runs after fabrics, yarn_receipts, yarn_requirements tables exist (see 2026_02_26+).
      */
     public function up(): void
     {
@@ -35,6 +35,9 @@ return new class extends Migration
 
     private function addIndex(string $table, string $column, string $name): void
     {
+        if (!Schema::hasTable($table)) {
+            return;
+        }
         $exists = DB::selectOne("
             SELECT 1 FROM information_schema.statistics
             WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?
@@ -59,6 +62,9 @@ return new class extends Migration
             'menus' => ['idx_menus_status', 'idx_menus_sort_order'],
         ];
         foreach ($drops as $table => $indexes) {
+            if (!Schema::hasTable($table)) {
+                continue;
+            }
             foreach ($indexes as $idx) {
                 Schema::table($table, fn (Blueprint $t) => $t->dropIndex($idx));
             }

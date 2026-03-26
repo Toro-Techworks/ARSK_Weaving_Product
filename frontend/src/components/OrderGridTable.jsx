@@ -1,14 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Save, Trash2 } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Pencil, Plus, Trash2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import Button from './Button';
+import { FormInput, FormSelect } from './FormInput';
 import { TablePagination } from './TablePagination';
 import { formatOrderId } from '../utils/formatOrderId';
 import { normalizePaginatedResponse } from '../utils/pagination';
+import { AnimatedModal } from './AnimatedModal';
 
 const EMPTY_ROW = () => ({
-  rowId: 0,
   id: null,
   loom_id: '',
   order_from: '',
@@ -20,30 +21,57 @@ const EMPTY_ROW = () => ({
   delivery_date: '',
 });
 
+const EMPTY_FILTERS = {
+  order_id: '',
+  loom_id: '',
+  order_from: '',
+  customer: '',
+  design: '',
+  po_number: '',
+};
+
+function buildOrderListParams(page, perPage, applied) {
+  const params = { page, per_page: perPage };
+  const a = applied || EMPTY_FILTERS;
+  if (a.order_id?.trim()) params.filter_order_id = a.order_id.trim();
+  if (a.loom_id) params.filter_loom_id = a.loom_id;
+  if (a.order_from?.trim()) params.filter_order_from = a.order_from.trim();
+  if (a.customer?.trim()) params.filter_customer = a.customer.trim();
+  if (a.design?.trim()) params.filter_design = a.design.trim();
+  if (a.po_number?.trim()) params.filter_po_number = a.po_number.trim();
+  return params;
+}
+
 export function OrderGridTable({ canEdit = true }) {
   const [rows, setRows] = useState([]);
   const [looms, setLooms] = useState([]);
   const [companies, setCompanies] = useState([]);
+  const [weavingUnits, setWeavingUnits] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [dirty, setDirty] = useState(new Set()); // rowId-field
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [orderMeta, setOrderMeta] = useState({ current_page: 1, last_page: 1, per_page: 10, total: 0 });
-
-  const wrapRef = useRef(null);
-  const nextRowId = useRef(0);
+  const [filterDraft, setFilterDraft] = useState(() => ({ ...EMPTY_FILTERS }));
+  const [filterApplied, setFilterApplied] = useState(() => ({ ...EMPTY_FILTERS }));
+  const [bootstrapped, setBootstrapped] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalSaving, setModalSaving] = useState(false);
+  const [editingOrderId, setEditingOrderId] = useState(null);
+  const [form, setForm] = useState(() => EMPTY_ROW());
 
   const loadData = useCallback(() => {
     setLoading(true);
+    const listParams = buildOrderListParams(page, perPage, filterApplied);
     Promise.all([
-      api.get('/yarn-orders', { params: { page, per_page: perPage } }).then((r) => normalizePaginatedResponse(r.data)),
+      api.get('/yarn-orders', { params: listParams }).then((r) => normalizePaginatedResponse(r.data)),
       api.get('/looms-list').then((r) => r.data?.data || []).catch(() => []),
       api.get('/companies-list').then((r) => r.data?.data || []).catch(() => []),
+      api.get('/weaving-units', { params: { page: 1, per_page: 500 } }).then((r) => normalizePaginatedResponse(r.data).data || []).catch(() => []),
     ])
-      .then(([ordersPage, loomList, companyList]) => {
+      .then(([ordersPage, loomList, companyList, weavingUnitList]) => {
         setLooms(loomList);
         setCompanies(companyList);
+        setWeavingUnits(weavingUnitList);
         setOrderMeta({
           current_page: ordersPage.current_page,
           last_page: ordersPage.last_page,
@@ -51,7 +79,6 @@ export function OrderGridTable({ canEdit = true }) {
           total: ordersPage.total,
         });
         const normalized = (ordersPage.data || []).map((o) => ({
-          rowId: nextRowId.current++,
           id: o.id,
           loom_id: o.loom_id != null ? String(o.loom_id) : '',
           order_from: o.order_from ?? '',
@@ -64,11 +91,26 @@ export function OrderGridTable({ canEdit = true }) {
           _created_at: o.created_at,
         }));
         setRows(normalized);
-        setDirty(new Set());
+        setBootstrapped(true);
       })
       .catch(() => toast.error('Failed to load orders'))
       .finally(() => setLoading(false));
-  }, [page, perPage]);
+  }, [page, perPage, filterApplied]);
+
+  const applyFilters = () => {
+    setFilterApplied({ ...filterDraft });
+    setPage(1);
+  };
+
+  const clearFilters = () => {
+    setFilterDraft({ ...EMPTY_FILTERS });
+    setFilterApplied({ ...EMPTY_FILTERS });
+    setPage(1);
+  };
+
+  const setDraft = (patch) => {
+    setFilterDraft((prev) => ({ ...prev, ...patch }));
+  };
 
   useEffect(() => loadData(), [loadData]);
 
@@ -82,97 +124,101 @@ export function OrderGridTable({ canEdit = true }) {
     [looms]
   );
 
-  const addRow = () => {
-    const r = EMPTY_ROW();
-    r.rowId = nextRowId.current++;
-    setRows((prev) => [...prev, r]);
+  const weavingUnitOptions = useMemo(
+    () => (weavingUnits || [])
+      .map((u) => u.company_name || '')
+      .filter(Boolean)
+      .map((name) => ({ value: name, label: name })),
+    [weavingUnits]
+  );
+
+  const openCreateModal = () => {
+    setEditingOrderId(null);
+    setForm({ ...EMPTY_ROW(), customer: 'NA' });
+    setModalOpen(true);
   };
 
-  const updateCell = (rowId, field, value) => {
-    setRows((prev) => prev.map((r) => (r.rowId !== rowId ? r : { ...r, [field]: value })));
-    setDirty((prev) => new Set(prev).add(`${rowId}-${field}`));
+  const openEditModal = (row) => {
+    setEditingOrderId(row.id);
+    setForm({
+      id: row.id,
+      loom_id: row.loom_id ?? '',
+      order_from: row.order_from ?? '',
+      customer: row.customer ?? '',
+      weaving_unit: row.weaving_unit ?? '',
+      design: row.design ?? '',
+      po_number: row.po_number ?? '',
+      po_date: row.po_date ?? '',
+      delivery_date: row.delivery_date ?? '',
+    });
+    setModalOpen(true);
   };
 
-  const deleteRow = async (rowId) => {
-    const row = rows.find((r) => r.rowId === rowId);
-    if (!row) return;
+  const closeModal = () => {
+    if (modalSaving) return;
+    setModalOpen(false);
+  };
+
+  const deleteRow = async (row) => {
+    if (!row?.id) return;
     if (!window.confirm('Delete this order?')) return;
-    if (!row.id) {
-      setRows((prev) => prev.filter((r) => r.rowId !== rowId));
-      return;
-    }
     try {
       await api.delete(`/yarn-orders/${row.id}`);
       toast.success('Deleted');
-      setRows((prev) => prev.filter((r) => r.rowId !== rowId));
+      loadData();
     } catch (e) {
       toast.error(e.response?.data?.message || 'Delete failed');
     }
   };
 
-  const saveAll = async () => {
-    setSaving(true);
+  const saveOrder = async (e) => {
+    e.preventDefault();
+    setModalSaving(true);
     try {
-      for (const r of rows) {
-        const payload = {
-          // IMPORTANT: Do not assign loom while creating a new order.
-          // Loom assignment is handled from Loom screen / by editing an existing order.
-          loom_id: r.id ? (r.loom_id ? Number(r.loom_id) : null) : null,
-          order_from: r.order_from || null,
-          customer: r.customer || null,
-          weaving_unit: r.weaving_unit || null,
-          design: r.design || null,
-          po_number: r.po_number || null,
-          po_date: r.po_date || null,
-          delivery_date: r.delivery_date || null,
-        };
+      const payload = {
+        // New orders should not be assigned to a loom directly.
+        loom_id: editingOrderId ? (form.loom_id ? Number(form.loom_id) : null) : null,
+        order_from: form.order_from || null,
+        customer: form.customer || null,
+        weaving_unit: form.weaving_unit || null,
+        design: form.design || null,
+        po_number: form.po_number || null,
+        po_date: form.po_date || null,
+        delivery_date: form.delivery_date || null,
+      };
 
-        // skip totally empty new rows
-        const hasAny =
-          payload.loom_id != null ||
-          payload.order_from ||
-          payload.customer ||
-          payload.weaving_unit ||
-          payload.design ||
-          payload.po_number ||
-          payload.po_date ||
-          payload.delivery_date;
-        if (!hasAny) continue;
+      const hasAny =
+        payload.loom_id != null ||
+        payload.order_from ||
+        payload.customer ||
+        payload.weaving_unit ||
+        payload.design ||
+        payload.po_number ||
+        payload.po_date ||
+        payload.delivery_date;
 
-        if (r.id) {
-          await api.put(`/yarn-orders/${r.id}`, payload);
-        } else {
-          await api.post('/yarn-orders', payload);
-        }
+      if (!editingOrderId && !hasAny) {
+        toast.error('Enter at least one value to create an order');
+        return;
       }
-      toast.success('Saved');
-      setDirty(new Set());
+
+      if (editingOrderId) {
+        await api.put(`/yarn-orders/${editingOrderId}`, payload);
+        toast.success('Order updated');
+      } else {
+        await api.post('/yarn-orders', payload);
+        toast.success('Order created');
+      }
+      closeModal();
       loadData();
     } catch (e) {
-      toast.error(e.response?.data?.message || 'Save failed');
+      toast.error(e.response?.data?.message || (editingOrderId ? 'Update failed' : 'Create failed'));
     } finally {
-      setSaving(false);
+      setModalSaving(false);
     }
   };
 
-  const handleKeyDown = (e) => {
-    if (!wrapRef.current) return;
-    if (e.key !== 'Tab' && e.key !== 'Enter') return;
-    e.preventDefault();
-    const inputs = Array.from(wrapRef.current.querySelectorAll('input, select'));
-    const i = inputs.indexOf(document.activeElement);
-    if (i < 0) return;
-    if (e.key === 'Tab') {
-      inputs[i + 1]?.focus();
-    } else {
-      const activeRow = parseInt(document.activeElement.getAttribute('data-row'), 10);
-      const activeCol = document.activeElement.getAttribute('data-col');
-      const nextTarget = wrapRef.current.querySelector(`[data-row=\"${activeRow + 1}\"][data-col=\"${activeCol}\"]`);
-      (nextTarget || inputs[i + 1])?.focus();
-    }
-  };
-
-  if (loading) {
+  if (!bootstrapped && loading) {
     return (
       <div className="flex items-center justify-center py-16">
         <div className="animate-spin rounded-full h-10 w-10 border-2 border-brand border-t-transparent" />
@@ -181,32 +227,93 @@ export function OrderGridTable({ canEdit = true }) {
   }
 
   return (
-    <div className="space-y-3" ref={wrapRef}>
+    <div className="space-y-3">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Orders (Yarn Orders)</h2>
         {canEdit && (
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={addRow} className="gap-1.5">
-              <Plus className="w-4 h-4" /> Add Row
-            </Button>
-            <Button onClick={saveAll} disabled={saving} className="gap-1.5">
-              <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save All'}
-            </Button>
-          </div>
+          <Button onClick={openCreateModal} className="gap-1.5">
+            <Plus className="w-4 h-4" /> Create Order
+          </Button>
         )}
       </div>
 
-      <div className="border border-gray-200 rounded-lg overflow-hidden bg-white max-h-[calc(100vh-12rem)] flex flex-col">
+      <form
+        className="rounded-lg border border-gray-200 bg-white p-4 space-y-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          applyFilters();
+        }}
+      >
+        <div className="text-sm font-medium text-gray-700">Filter orders</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+          <FormInput
+            label="Order ID"
+            placeholder="e.g. ORD-… or id"
+            value={filterDraft.order_id}
+            onChange={(e) => setDraft({ order_id: e.target.value })}
+            className="!mb-0"
+          />
+          <FormSelect
+            label="Loom"
+            emptyLabel="All looms"
+            value={filterDraft.loom_id}
+            onChange={(e) => setDraft({ loom_id: e.target.value })}
+            options={loomOptions}
+            className="!mb-0"
+          />
+          <FormInput
+            label="Order from"
+            placeholder="Company name"
+            value={filterDraft.order_from}
+            onChange={(e) => setDraft({ order_from: e.target.value })}
+            className="!mb-0"
+          />
+          <FormInput
+            label="Customer"
+            placeholder="Customer"
+            value={filterDraft.customer}
+            onChange={(e) => setDraft({ customer: e.target.value })}
+            className="!mb-0"
+          />
+          <FormInput
+            label="Design"
+            placeholder="Design"
+            value={filterDraft.design}
+            onChange={(e) => setDraft({ design: e.target.value })}
+            className="!mb-0"
+          />
+          <FormInput
+            label="PO number"
+            placeholder="PO number"
+            value={filterDraft.po_number}
+            onChange={(e) => setDraft({ po_number: e.target.value })}
+            className="!mb-0"
+          />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" disabled={loading}>
+            Apply filters
+          </Button>
+          <Button type="button" variant="secondary" onClick={clearFilters} disabled={loading}>
+            Clear
+          </Button>
+        </div>
+      </form>
+
+      <div className="relative border border-gray-200 rounded-lg overflow-hidden bg-white max-h-[calc(100vh-12rem)] flex flex-col">
+        {loading && bootstrapped && (
+          <div className="absolute inset-0 z-20 bg-white/60 flex items-center justify-center pointer-events-none">
+            <div className="animate-spin rounded-full h-9 w-9 border-2 border-brand border-t-transparent" />
+          </div>
+        )}
         <div className="overflow-auto min-h-0 flex-1">
           <table className="min-w-full border-collapse">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
                 <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap border-r border-gray-200">Order Id</th>
-                <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap border-r border-gray-200">Loom</th>
                 <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap border-r border-gray-200">Order From</th>
                 <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap border-r border-gray-200">Customer</th>
                 <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap border-r border-gray-200">Weaving Unit</th>
-                <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap border-r border-gray-200">Design</th>
                 <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap border-r border-gray-200">P.O Number</th>
                 <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap border-r border-gray-200">PO Date</th>
                 <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap border-r border-gray-200">Delivery Date</th>
@@ -214,125 +321,37 @@ export function OrderGridTable({ canEdit = true }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, rowIndex) => (
-                <tr key={r.rowId} className="border-b border-gray-100 hover:bg-gray-50/50">
+              {rows.map((r) => (
+                <tr key={r.id} className="border-b border-gray-100 hover:bg-gray-50/50">
                   <td className="px-2 py-1.5 text-sm text-gray-700 whitespace-nowrap border-r border-gray-100 bg-gray-50/50">
                     {r.id ? formatOrderId({ id: r.id, created_at: r._created_at }) : '—'}
                   </td>
-                  <td className="p-0 border-r border-gray-100">
-                    <select
-                      value={r.loom_id}
-                      onChange={(e) => updateCell(r.rowId, 'loom_id', e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      disabled={!canEdit || !r.id}
-                      className={`w-full min-w-[8rem] px-2 py-1.5 text-sm border-0 rounded focus:ring-2 focus:ring-brand/40 focus:bg-brand/5 bg-transparent disabled:bg-gray-50 ${dirty.has(`${r.rowId}-loom_id`) ? 'bg-amber-50' : ''}`}
-                      data-row={rowIndex}
-                      data-col="loom_id"
-                    >
-                      <option value="">{r.id ? '—' : 'Save order first'}</option>
-                      {loomOptions.map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="p-0 border-r border-gray-100">
-                    <select
-                      value={r.order_from || ''}
-                      onChange={(e) => updateCell(r.rowId, 'order_from', e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      disabled={!canEdit}
-                      className={`w-full min-w-[10rem] px-2 py-1.5 text-sm border-0 rounded focus:ring-2 focus:ring-brand/40 focus:bg-brand/5 bg-transparent disabled:bg-gray-50 ${dirty.has(`${r.rowId}-order_from`) ? 'bg-amber-50' : ''}`}
-                      data-row={rowIndex}
-                      data-col="order_from"
-                    >
-                      <option value="">—</option>
-                      {companyOptions.map((c) => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="p-0 border-r border-gray-100">
-                    <input
-                      value={r.customer}
-                      onChange={(e) => updateCell(r.rowId, 'customer', e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      disabled={!canEdit}
-                      className={`w-full min-w-[10rem] px-2 py-1.5 text-sm border-0 rounded focus:ring-2 focus:ring-brand/40 focus:bg-brand/5 bg-transparent disabled:bg-gray-50 ${dirty.has(`${r.rowId}-customer`) ? 'bg-amber-50' : ''}`}
-                      placeholder="Customer"
-                      data-row={rowIndex}
-                      data-col="customer"
-                    />
-                  </td>
-                  <td className="p-0 border-r border-gray-100">
-                    <input
-                      value={r.weaving_unit}
-                      onChange={(e) => updateCell(r.rowId, 'weaving_unit', e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      disabled={!canEdit}
-                      className={`w-full min-w-[10rem] px-2 py-1.5 text-sm border-0 rounded focus:ring-2 focus:ring-brand/40 focus:bg-brand/5 bg-transparent disabled:bg-gray-50 ${dirty.has(`${r.rowId}-weaving_unit`) ? 'bg-amber-50' : ''}`}
-                      placeholder="Weaving unit"
-                      data-row={rowIndex}
-                      data-col="weaving_unit"
-                    />
-                  </td>
-                  <td className="p-0 border-r border-gray-100">
-                    <input
-                      value={r.design}
-                      onChange={(e) => updateCell(r.rowId, 'design', e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      disabled={!canEdit}
-                      className={`w-full min-w-[10rem] px-2 py-1.5 text-sm border-0 rounded focus:ring-2 focus:ring-brand/40 focus:bg-brand/5 bg-transparent disabled:bg-gray-50 ${dirty.has(`${r.rowId}-design`) ? 'bg-amber-50' : ''}`}
-                      placeholder="Design"
-                      data-row={rowIndex}
-                      data-col="design"
-                    />
-                  </td>
-                  <td className="p-0 border-r border-gray-100">
-                    <input
-                      value={r.po_number}
-                      onChange={(e) => updateCell(r.rowId, 'po_number', e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      disabled={!canEdit}
-                      className={`w-full min-w-[9rem] px-2 py-1.5 text-sm border-0 rounded focus:ring-2 focus:ring-brand/40 focus:bg-brand/5 bg-transparent disabled:bg-gray-50 ${dirty.has(`${r.rowId}-po_number`) ? 'bg-amber-50' : ''}`}
-                      placeholder="PO number"
-                      data-row={rowIndex}
-                      data-col="po_number"
-                    />
-                  </td>
-                  <td className="p-0 border-r border-gray-100">
-                    <input
-                      type="date"
-                      value={r.po_date}
-                      onChange={(e) => updateCell(r.rowId, 'po_date', e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      disabled={!canEdit}
-                      className={`w-full min-w-[9rem] px-2 py-1.5 text-sm border-0 rounded focus:ring-2 focus:ring-brand/40 focus:bg-brand/5 bg-transparent disabled:bg-gray-50 ${dirty.has(`${r.rowId}-po_date`) ? 'bg-amber-50' : ''}`}
-                      data-row={rowIndex}
-                      data-col="po_date"
-                    />
-                  </td>
-                  <td className="p-0 border-r border-gray-100">
-                    <input
-                      type="date"
-                      value={r.delivery_date}
-                      onChange={(e) => updateCell(r.rowId, 'delivery_date', e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      disabled={!canEdit}
-                      className={`w-full min-w-[9rem] px-2 py-1.5 text-sm border-0 rounded focus:ring-2 focus:ring-brand/40 focus:bg-brand/5 bg-transparent disabled:bg-gray-50 ${dirty.has(`${r.rowId}-delivery_date`) ? 'bg-amber-50' : ''}`}
-                      data-row={rowIndex}
-                      data-col="delivery_date"
-                    />
-                  </td>
+                  <td className="px-2 py-1.5 text-sm text-gray-700 whitespace-nowrap border-r border-gray-100">{r.order_from || '—'}</td>
+                  <td className="px-2 py-1.5 text-sm text-gray-700 whitespace-nowrap border-r border-gray-100">{r.customer || '—'}</td>
+                  <td className="px-2 py-1.5 text-sm text-gray-700 whitespace-nowrap border-r border-gray-100">{r.weaving_unit || '—'}</td>
+                  <td className="px-2 py-1.5 text-sm text-gray-700 whitespace-nowrap border-r border-gray-100">{r.po_number || '—'}</td>
+                  <td className="px-2 py-1.5 text-sm text-gray-700 whitespace-nowrap border-r border-gray-100">{r.po_date || '—'}</td>
+                  <td className="px-2 py-1.5 text-sm text-gray-700 whitespace-nowrap border-r border-gray-100">{r.delivery_date || '—'}</td>
                   <td className="px-2 py-1.5 text-sm whitespace-nowrap">
                     {canEdit && (
-                      <button
-                        type="button"
-                        onClick={() => deleteRow(r.rowId)}
-                        className="inline-flex items-center gap-1.5 text-red-600 hover:text-red-700 hover:underline"
-                        title="Delete order"
-                      >
-                        <Trash2 className="w-4 h-4" /> Delete
-                      </button>
+                      <div className="inline-flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(r)}
+                          className="inline-flex items-center gap-1.5 text-brand hover:underline"
+                          title="Edit order"
+                        >
+                          <Pencil className="w-4 h-4" /> Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteRow(r)}
+                          className="inline-flex items-center gap-1.5 text-red-600 hover:text-red-700 hover:underline"
+                          title="Delete order"
+                        >
+                          <Trash2 className="w-4 h-4" /> Delete
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -349,8 +368,72 @@ export function OrderGridTable({ canEdit = true }) {
           perPage={orderMeta.per_page}
           onPageChange={setPage}
           onPerPageChange={(n) => { setPerPage(n); setPage(1); }}
-          disabled={loading || saving}
+          disabled={loading || modalSaving}
         />
+      )}
+      {modalOpen && (
+        <AnimatedModal open onClose={closeModal} maxWidth="max-w-2xl">
+          <div className="sticky top-0 bg-white border-b border-gray-100 px-4 sm:px-6 py-4 flex items-center justify-between rounded-t-xl">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900">{editingOrderId ? 'Edit Order' : 'Create Order'}</h3>
+            <button type="button" onClick={closeModal} className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700" aria-label="Close">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <form onSubmit={saveOrder} className="p-4 sm:p-6 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormSelect
+                label="Order from"
+                emptyLabel="Select company"
+                options={companyOptions.map((c) => ({ value: c, label: c }))}
+                value={form.order_from}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setForm((prev) => ({
+                    ...prev,
+                    order_from: value,
+                    customer: value === 'ARSK' ? '' : 'NA',
+                  }));
+                }}
+              />
+              <FormInput
+                label="Customer"
+                value={form.customer}
+                onChange={(e) => setForm((prev) => ({ ...prev, customer: e.target.value }))}
+                disabled={form.order_from !== 'ARSK'}
+              />
+              <FormSelect
+                label="Weaving Unit"
+                emptyLabel="Select weaving unit"
+                options={weavingUnitOptions}
+                value={form.weaving_unit}
+                onChange={(e) => setForm((prev) => ({ ...prev, weaving_unit: e.target.value }))}
+              />
+              <FormInput
+                label="P.O Number"
+                value={form.po_number}
+                onChange={(e) => setForm((prev) => ({ ...prev, po_number: e.target.value }))}
+              />
+              <FormInput
+                label="PO Date"
+                type="date"
+                value={form.po_date}
+                onChange={(e) => setForm((prev) => ({ ...prev, po_date: e.target.value }))}
+              />
+              <FormInput
+                label="Delivery Date"
+                type="date"
+                value={form.delivery_date}
+                onChange={(e) => setForm((prev) => ({ ...prev, delivery_date: e.target.value }))}
+              />
+            </div>
+            <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end pt-2">
+              <Button type="button" variant="secondary" onClick={closeModal}>Cancel</Button>
+              <Button type="submit" disabled={modalSaving}>
+                {modalSaving ? 'Saving...' : editingOrderId ? 'Update Order' : 'Create Order'}
+              </Button>
+            </div>
+          </form>
+        </AnimatedModal>
       )}
     </div>
   );

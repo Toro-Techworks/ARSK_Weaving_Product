@@ -6,6 +6,7 @@ import Button from './Button';
 import { TablePagination } from './TablePagination';
 import { formatOrderId } from '../utils/formatOrderId';
 import { normalizePaginatedResponse, fetchAllPaginated } from '../utils/pagination';
+import SearchableSelect from './ui/SearchableSelect';
 
 function orderLabel(o) {
   if (!o) return '';
@@ -240,34 +241,27 @@ export function LoomGridTable({ canEdit = true }) {
                     />
                   </td>
                   <td className="p-0 border-r border-gray-100">
-                    <select
-                      value={r.status}
-                      onChange={(e) => updateCell(r.rowId, 'status', e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      disabled={!canEdit}
-                      className={`w-full min-w-[7rem] px-2 py-1.5 text-sm border-0 rounded focus:ring-2 focus:ring-brand/40 focus:bg-brand/5 bg-transparent disabled:bg-gray-50 ${dirty.has(`${r.rowId}-status`) ? 'bg-amber-50' : ''}`}
-                      data-row={rowIndex}
-                      data-col="status"
-                    >
-                      <option value="Active">Active</option>
-                      <option value="Inactive">Inactive</option>
-                    </select>
+                    <div className={`min-w-[9rem] p-1 ${dirty.has(`${r.rowId}-status`) ? 'bg-amber-50' : ''}`}>
+                      <SearchableSelect
+                        options={[{ value: 'Active', label: 'Active' }, { value: 'Inactive', label: 'Inactive' }]}
+                        value={r.status}
+                        onChange={(v) => updateCell(r.rowId, 'status', v || 'Active')}
+                        placeholder="Status"
+                        isClearable={false}
+                        isDisabled={!canEdit}
+                      />
+                    </div>
                   </td>
                   <td className="p-0 border-r border-gray-100">
-                    <select
-                      value={r.yarn_order_id ?? ''}
-                      onChange={(e) => updateCell(r.rowId, 'yarn_order_id', e.target.value ? Number(e.target.value) : null)}
-                      onKeyDown={handleKeyDown}
-                      disabled={!canEdit}
-                      className={`w-full min-w-[16rem] px-2 py-1.5 text-sm border-0 rounded focus:ring-2 focus:ring-brand/40 focus:bg-brand/5 bg-transparent disabled:bg-gray-50 ${dirty.has(`${r.rowId}-yarn_order_id`) ? 'bg-amber-50' : ''}`}
-                      data-row={rowIndex}
-                      data-col="yarn_order_id"
-                    >
-                      <option value="">—</option>
-                      {orderOptions.map((o) => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
+                    <div className={`min-w-[16rem] p-1 ${dirty.has(`${r.rowId}-yarn_order_id`) ? 'bg-amber-50' : ''}`}>
+                      <SearchableSelect
+                        options={orderOptions.map((o) => ({ value: String(o.value), label: o.label }))}
+                        value={r.yarn_order_id == null ? '' : String(r.yarn_order_id)}
+                        onChange={(v) => updateCell(r.rowId, 'yarn_order_id', v ? Number(v) : null)}
+                        placeholder="Select order"
+                        isDisabled={!canEdit}
+                      />
+                    </div>
                   </td>
                   <td className="px-2 py-1.5 text-sm whitespace-nowrap">
                     {canEdit && (

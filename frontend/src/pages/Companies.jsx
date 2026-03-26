@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import { Card } from '../components/Card';
@@ -54,8 +54,8 @@ export function CompanyList() {
 
   const columns = [
     { key: 'company_name', label: 'Company Name' },
-    { key: 'gst_number', label: 'GST No.' },
     { key: 'contact_person', label: 'Contact' },
+    { key: 'gst_number', label: 'GST No.' },
     { key: 'phone', label: 'Phone' },
     ...(canEdit ? [{
       key: 'actions',
@@ -103,6 +103,7 @@ export function CompanyList() {
       )}
       {editCompany && (
         <CompanyEditModal
+          key={editCompany.id}
           company={editCompany}
           onClose={() => setEditCompany(null)}
           onSuccess={() => { setEditCompany(null); fetch(); }}
@@ -115,6 +116,28 @@ export function CompanyList() {
 function normalizePhone(v) {
   const digits = String(v || '').replace(/\D/g, '');
   return digits.slice(0, 10);
+}
+
+/** Map API row (list or show) to edit form — list already returns full CompanyResource fields. */
+function companyRowToForm(c) {
+  if (!c) {
+    return {
+      company_name: '',
+      gst_number: '',
+      address: '',
+      contact_person: '',
+      phone: '',
+      payment_terms: '',
+    };
+  }
+  return {
+    company_name: c.company_name ?? '',
+    gst_number: c.gst_number ?? '',
+    address: c.address ?? '',
+    contact_person: c.contact_person ?? '',
+    phone: normalizePhone(c.phone),
+    payment_terms: c.payment_terms ?? '',
+  };
 }
 
 function isValidPhone(v) {
@@ -174,8 +197,8 @@ function CompanyAddModal({ onClose, onSuccess }) {
                 onChange={(e) => setForm({ ...form, phone: normalizePhone(e.target.value) })}
                 inputMode="numeric"
                 maxLength={10}
-                pattern="\\d{10}"
-                placeholder="10-digit phone"
+                placeholder="10-digit phone (optional)"
+                title="Up to 10 digits; leave blank if not applicable"
                 className="!mb-0"
               />
             </div>
@@ -201,16 +224,11 @@ function CompanyAddModal({ onClose, onSuccess }) {
 }
 
 function CompanyEditModal({ company, onClose, onSuccess }) {
-  const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({
-    company_name: '', gst_number: '', address: '', contact_person: '', phone: '', payment_terms: '',
-  });
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState(() => companyRowToForm(company));
 
-  useEffect(() => {
-    if (company?.id) {
-      api.get(`/companies/${company.id}`).then(({ data }) => setForm(data.data || {})).catch(() => toast.error('Failed to load'));
-    }
-  }, [company?.id]);
+  // Row from grid already includes full CompanyResource; no extra fetch — form is instant.
+  // If the list API is ever trimmed, reintroduce a background GET here and merge into form.
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -219,11 +237,11 @@ function CompanyEditModal({ company, onClose, onSuccess }) {
       toast.error('Phone number must be exactly 10 digits');
       return;
     }
-    setLoading(true);
+    setSaving(true);
     api.put(`/companies/${company.id}`, { ...form, phone })
       .then(() => { toast.success('Company updated'); onSuccess?.(); })
       .catch((err) => toast.error(err.response?.data?.message || 'Failed'))
-      .finally(() => setLoading(false));
+      .finally(() => setSaving(false));
   };
 
   const fieldClass = 'space-y-1.5';
@@ -259,8 +277,8 @@ function CompanyEditModal({ company, onClose, onSuccess }) {
                 onChange={(e) => setForm({ ...form, phone: normalizePhone(e.target.value) })}
                 inputMode="numeric"
                 maxLength={10}
-                pattern="\\d{10}"
-                placeholder="10-digit phone"
+                placeholder="10-digit phone (optional)"
+                title="Up to 10 digits; leave blank if not applicable"
                 className="!mb-0"
               />
             </div>
@@ -278,7 +296,7 @@ function CompanyEditModal({ company, onClose, onSuccess }) {
         </div>
         <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end pt-4 border-t border-gray-100">
           <Button type="button" variant="secondary" onClick={onClose} className="w-full sm:w-auto">Cancel</Button>
-          <Button type="submit" disabled={loading} className="w-full sm:w-auto">{loading ? 'Saving...' : 'Update Company'}</Button>
+          <Button type="submit" disabled={saving} className="w-full sm:w-auto">{saving ? 'Saving...' : 'Update Company'}</Button>
         </div>
       </form>
     </AnimatedModal>
@@ -352,8 +370,8 @@ export function CompanyForm({ id, onSuccess }) {
                 onChange={(e) => setForm({ ...form, phone: normalizePhone(e.target.value) })}
                 inputMode="numeric"
                 maxLength={10}
-                pattern="\\d{10}"
-                placeholder="10-digit phone"
+                placeholder="10-digit phone (optional)"
+                title="Up to 10 digits; leave blank if not applicable"
                 className="!mb-0"
               />
             </div>

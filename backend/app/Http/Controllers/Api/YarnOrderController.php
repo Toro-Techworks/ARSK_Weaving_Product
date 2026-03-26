@@ -15,7 +15,7 @@ class YarnOrderController extends Controller
         $q = YarnOrder::query()->orderBy('created_at', 'desc')->orderBy('id', 'desc');
         $search = $request->input('search');
         if ($search && is_string($search) && strlen(trim($search)) > 0) {
-            $term = '%' . trim($search) . '%';
+            $term = '%' . $this->escapeLike(trim($search)) . '%';
             $q->where(function ($query) use ($term) {
                 $query->where('po_number', 'like', $term)
                     ->orWhere('customer', 'like', $term)
@@ -23,9 +23,51 @@ class YarnOrderController extends Controller
                     ->orWhereRaw('CAST(id AS CHAR) LIKE ?', [$term]);
             });
         }
+
+        $this->applyColumnFilters($q, $request);
+
         $orders = $q->paginate($perPage);
 
         return $this->paginatedResponse($orders, $orders->items());
+    }
+
+    /** Escape % and _ for LIKE patterns. */
+    private function escapeLike(string $value): string
+    {
+        return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $value);
+    }
+
+    /**
+     * Optional filters (AND): filter_order_id, filter_loom_id, filter_order_from,
+     * filter_customer, filter_design, filter_po_number.
+     */
+    private function applyColumnFilters($query, Request $request): void
+    {
+        $oid = $request->input('filter_order_id');
+        if ($oid !== null && $oid !== '' && is_string($oid) && strlen(trim($oid)) > 0) {
+            $v = trim($oid);
+            $like = '%' . $this->escapeLike($v) . '%';
+            $query->whereRaw('CAST(id AS CHAR) LIKE ?', [$like]);
+        }
+
+        $loomId = $request->input('filter_loom_id');
+        if ($loomId !== null && $loomId !== '' && is_numeric($loomId)) {
+            $query->where('loom_id', (int) $loomId);
+        }
+
+        $map = [
+            'filter_order_from' => 'order_from',
+            'filter_customer' => 'customer',
+            'filter_design' => 'design',
+            'filter_po_number' => 'po_number',
+        ];
+        foreach ($map as $param => $column) {
+            $val = $request->input($param);
+            if ($val !== null && $val !== '' && is_string($val) && strlen(trim($val)) > 0) {
+                $like = '%' . $this->escapeLike(trim($val)) . '%';
+                $query->where($column, 'like', $like);
+            }
+        }
     }
 
     public function store(Request $request): JsonResponse
