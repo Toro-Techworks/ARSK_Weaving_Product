@@ -56,16 +56,15 @@ Weaving production management software – full-stack ERP for textile units.
    ```
    App: http://localhost:5173
 
-### Default logins (after seed)
+### Default logins (after `php artisan db:seed`)
 
-| Role   | Email                        | Password |
-|--------|------------------------------|----------|
-| Owner  | owner@toroproduction.com     | password |
-| Accountant | accountant@toroproduction.com | password |
-| Supervisor | supervisor@toroproduction.com | password |
-| Data Entry | dataentry@toroproduction.com  | password |
+| Role        | Username     | Password |
+|-------------|--------------|----------|
+| Super Admin | `superadmin` | password |
+| Admin       | `admin`      | password |
+| User        | `user`       | password |
 
-**User Management** is restricted to **Owner** role.
+Log in with **username** (not email). Menus and permissions are seeded by `MenusSeeder`.
 
 ## Features
 

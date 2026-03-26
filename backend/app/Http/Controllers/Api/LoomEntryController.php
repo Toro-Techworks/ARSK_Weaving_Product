@@ -13,7 +13,7 @@ class LoomEntryController extends Controller
     public function index(Request $request): JsonResponse
     {
         $perPage = $this->clampPerPage($request, 10, 100);
-        $entries = LoomEntry::with(['loom'])
+        $entries = LoomEntry::with(['loom', 'weaver1', 'weaver2'])
             ->when($request->loom_id, fn ($q) => $q->where('loom_id', $request->loom_id))
             ->when($request->date_from, fn ($q) => $q->whereDate('date', '>=', $request->date_from))
             ->when($request->date_to, fn ($q) => $q->whereDate('date', '<=', $request->date_to))
@@ -35,19 +35,26 @@ class LoomEntryController extends Controller
             'date' => 'required|date',
             'shift' => 'required|string|max:50',
             'meters_produced' => 'required|numeric|min:0',
+            'production' => 'nullable|numeric|min:0',
             'rejected_meters' => 'nullable|numeric|min:0',
             'operator_name' => 'nullable|string|max:255',
+            'weaver1_id' => 'nullable|exists:weavers,id',
+            'weaver2_id' => 'nullable|exists:weavers,id',
+            'remarks' => 'nullable|string',
         ]);
 
+        if (array_key_exists('production', $validated) && !array_key_exists('meters_produced', $validated)) {
+            $validated['meters_produced'] = $validated['production'];
+        }
         $validated['rejected_meters'] = $validated['rejected_meters'] ?? 0;
 
         $entry = LoomEntry::create($validated);
-        return response()->json(['data' => new LoomEntryResource($entry->load(['loom']))], 201);
+        return response()->json(['data' => new LoomEntryResource($entry->load(['loom', 'weaver1', 'weaver2']))], 201);
     }
 
     public function show(LoomEntry $loomEntry): JsonResponse
     {
-        $loomEntry->load(['loom', 'yarnOrder']);
+        $loomEntry->load(['loom', 'yarnOrder', 'weaver1', 'weaver2']);
         return response()->json(['data' => new LoomEntryResource($loomEntry)]);
     }
 
@@ -59,12 +66,20 @@ class LoomEntryController extends Controller
             'date' => 'sometimes|required|date',
             'shift' => 'sometimes|required|string|max:50',
             'meters_produced' => 'sometimes|required|numeric|min:0',
+            'production' => 'nullable|numeric|min:0',
             'rejected_meters' => 'nullable|numeric|min:0',
             'operator_name' => 'nullable|string|max:255',
+            'weaver1_id' => 'nullable|exists:weavers,id',
+            'weaver2_id' => 'nullable|exists:weavers,id',
+            'remarks' => 'nullable|string',
         ]);
 
+        if (array_key_exists('production', $validated) && !array_key_exists('meters_produced', $validated)) {
+            $validated['meters_produced'] = $validated['production'];
+        }
+
         $loomEntry->update($validated);
-        return response()->json(['data' => new LoomEntryResource($loomEntry->fresh(['loom']))]);
+        return response()->json(['data' => new LoomEntryResource($loomEntry->fresh(['loom', 'weaver1', 'weaver2']))]);
     }
 
     public function destroy(LoomEntry $loomEntry): JsonResponse

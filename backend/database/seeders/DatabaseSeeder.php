@@ -12,14 +12,13 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call(RolesSeeder::class);
-        $this->call(MenusSeeder::class);
 
         $superAdminRoleId = Role::where('role_name', 'super_admin')->value('id');
         $adminRoleId = Role::where('role_name', 'admin')->value('id');
         $userRoleId = Role::where('role_name', 'user')->value('id');
 
         User::updateOrCreate(
-            ['email' => 'superadmin@toroproduction.com'],
+            ['username' => 'superadmin'],
             [
                 'name' => 'Super Admin',
                 'password' => Hash::make('password'),
@@ -29,7 +28,7 @@ class DatabaseSeeder extends Seeder
         );
 
         User::updateOrCreate(
-            ['email' => 'admin@toroproduction.com'],
+            ['username' => 'admin'],
             [
                 'name' => 'Admin',
                 'password' => Hash::make('password'),
@@ -39,7 +38,7 @@ class DatabaseSeeder extends Seeder
         );
 
         User::updateOrCreate(
-            ['email' => 'user@toroproduction.com'],
+            ['username' => 'user'],
             [
                 'name' => 'User',
                 'password' => Hash::make('password'),
@@ -47,5 +46,8 @@ class DatabaseSeeder extends Seeder
                 'status' => 'active',
             ]
         );
+
+        // Menus + user_menu_permissions (requires users)
+        $this->call(MenusSeeder::class);
     }
 }

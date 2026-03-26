@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Menu;
+use App\Models\User;
 use App\Services\MenuService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class AdminMenuController extends Controller
 {
@@ -35,6 +37,7 @@ class AdminMenuController extends Controller
         $validated['status'] = $validated['status'] ?? 'active';
         $validated['sort_order'] = $validated['sort_order'] ?? 0;
         $menu = Menu::create($validated);
+        $this->clearMenuCacheForAllUsers();
         return response()->json(['data' => $menu], 201);
     }
 
@@ -51,6 +54,7 @@ class AdminMenuController extends Controller
         ]);
 
         $menu->update($validated);
+        $this->clearMenuCacheForAllUsers();
         return response()->json(['data' => $menu->fresh()]);
     }
 
@@ -61,5 +65,13 @@ class AdminMenuController extends Controller
         $menus = $query->paginate($perPage);
 
         return $this->paginatedResponse($menus, $menus->items());
+    }
+
+    private function clearMenuCacheForAllUsers(): void
+    {
+        $userIds = User::query()->pluck('id');
+        foreach ($userIds as $id) {
+            Cache::forget('user_menus_' . $id);
+        }
     }
 }

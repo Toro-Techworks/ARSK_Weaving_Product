@@ -16,7 +16,7 @@
 
 ---
 
-## 2. Database indexes (migration `2026_02_23_100009_add_performance_indexes`)
+## 2. Database indexes (migration `2026_03_22_000000_add_performance_indexes`)
 
 Indexes added for frequently filtered/sorted columns:
 
@@ -95,7 +95,7 @@ Run: `php artisan migrate`
 ## 8. Files changed (summary)
 
 **Backend**
-- `database/migrations/2026_02_23_100009_add_performance_indexes.php` (new)
+- `database/migrations/2026_03_22_000000_add_performance_indexes.php` (runs after `fabrics` / `yarn_receipts` / `yarn_requirements` exist)
 - `app/Services/MenuService.php` (select columns)
 - `app/Http/Controllers/Api/MenuController.php` (cache)
 - `app/Http/Controllers/Api/CompanyController.php` (list select)

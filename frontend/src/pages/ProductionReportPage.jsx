@@ -1,12 +1,17 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import { Card } from '../components/Card';
 import Button from '../components/Button';
 import { FormInput, FormSelect } from '../components/FormInput';
-import { Table } from '../components/Table';
+import { ProductionPivotTable } from '../components/ProductionPivotTable';
 import { formatOrderId } from '../utils/formatOrderId';
 import { fetchAllPaginated } from '../utils/pagination';
+import {
+  applyMatrixDraft,
+  buildProductionPivotBundle,
+  matrixDraftKey,
+} from '../utils/productionPivotReport';
 import { LineChart as LineChartIcon, Download } from 'lucide-react';
 
 function LineChart({ points }) {
@@ -59,7 +64,8 @@ function downloadBlob(blob, filename, type = blob.type || 'application/octet-str
 }
 
 export function ProductionReportPage() {
-  const [from, setFrom] = useState(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));
+  /** Default 7-day window (inclusive) for Production matrix columns and initial fetch */
+  const [from, setFrom] = useState(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
   const [loomId, setLoomId] = useState('');
   const [orderId, setOrderId] = useState('');
@@ -67,12 +73,10 @@ export function ProductionReportPage() {
 
   const [looms, setLooms] = useState([]);
   const [orders, setOrders] = useState([]);
-  const [data, setData] = useState([]);
-  const [meta, setMeta] = useState(null);
+  const [rawRows, setRawRows] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [page, setPage] = useState(1);
-  const perPage = 50;
-  const didInit = useRef(false);
+  /** Local edits on the matrix (party text + shift meters); not persisted until a save API exists */
+  const [matrixDraft, setMatrixDraft] = useState(() => ({ party: {}, meters: {} }));
 
   const fetchOptions = useCallback(async () => {
     const [loomList, orderList] = await Promise.all([
@@ -91,26 +95,22 @@ export function ProductionReportPage() {
   );
 
   const generate = async () => {
+    if (!from || !to) {
+      toast.error('Choose from and to dates');
+      return;
+    }
     setLoading(true);
     try {
-      const res = await api.get('/reports/production', {
-        params: {
-          date_from: from || undefined,
-          date_to: to || undefined,
-          loom_id: loomId || undefined,
-          order_id: orderId || undefined,
-          shift: shift || undefined,
-          per_page: perPage,
-          page,
-        },
+      const items = await fetchAllPaginated(api, '/reports/production', {
+        perPage: 200,
+        date_from: from,
+        date_to: to,
+        ...(loomId ? { loom_id: loomId } : {}),
+        ...(orderId ? { order_id: orderId } : {}),
+        ...(shift ? { shift } : {}),
       });
-      const items = res.data?.data || [];
-      const withKey = items.map((r) => ({
-        ...r,
-        row_key: `${r.date || ''}-${r.loom_id || ''}-${r.order_id || ''}-${r.shift || ''}`,
-      }));
-      setData(withKey);
-      setMeta(res.data?.meta || null);
+      setRawRows(items);
+      setMatrixDraft({ party: {}, meters: {} });
     } catch (e) {
       toast.error('Failed to load production report');
     } finally {
@@ -119,43 +119,52 @@ export function ProductionReportPage() {
   };
 
   useEffect(() => {
-    if (from && to) {
-      setPage(1);
-      generate();
-      didInit.current = true;
-    }
+    if (from && to) generate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    // Regenerate when page changes (but only after initial mount).
-    if (!didInit.current) return;
-    if (from && to) generate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  /** All looms from master list (or single loom when filtered) so the matrix lists every loom, not only those with rows in range */
+  const allLoomsForPivot = useMemo(() => {
+    const list = loomId ? looms.filter((l) => String(l.id) === String(loomId)) : looms;
+    return list.map((l) => ({ id: l.id, loom_number: l.loom_number }));
+  }, [looms, loomId]);
+
+  const pivotBundle = useMemo(
+    () => buildProductionPivotBundle(rawRows, from, to, allLoomsForPivot.length ? allLoomsForPivot : null),
+    [rawRows, from, to, allLoomsForPivot]
+  );
+
+  const displayBundle = useMemo(
+    () => applyMatrixDraft(pivotBundle, matrixDraft),
+    [pivotBundle, matrixDraft]
+  );
+
+  const matrixOrderOptions = useMemo(
+    () => orders.map((o) => ({ value: String(o.id), label: formatOrderId(o) })),
+    [orders]
+  );
+
+  const onMatrixPartyChange = useCallback((loomId, slotKey, value) => {
+    const k = matrixDraftKey(String(loomId), slotKey);
+    setMatrixDraft((d) => ({ ...d, party: { ...d.party, [k]: value } }));
+  }, []);
+
+  const onMatrixMetersChange = useCallback((loomId, slotKey, raw) => {
+    const k = matrixDraftKey(String(loomId), slotKey);
+    setMatrixDraft((d) => ({ ...d, meters: { ...d.meters, [k]: raw } }));
+  }, []);
 
   const chartPoints = useMemo(() => {
     const map = new Map();
-    (data || []).forEach((row) => {
-      const key = row.date;
+    (rawRows || []).forEach((row) => {
+      const key = String(row.date || '').slice(0, 10);
+      if (!key) return;
       map.set(key, (map.get(key) || 0) + Number(row.production_meters || 0));
     });
     return Array.from(map.entries())
       .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
       .map(([x, y]) => ({ x, y }));
-  }, [data]);
-
-  const columns = [
-    { key: 'date', label: 'Date', render: (v) => v || '-' },
-    { key: 'loom_number', label: 'Loom', render: (v) => v || '-' },
-    {
-      key: 'order_id',
-      label: 'Order',
-      render: (v) => (v ? formatOrderId(v) : '-'),
-    },
-    { key: 'production_meters', label: 'Production', render: (v) => Number(v ?? 0).toLocaleString() },
-    { key: 'efficiency_percentage', label: 'Efficiency', render: (v) => (v != null ? `${Number(v).toFixed(2)}%` : '-') },
-  ];
+  }, [rawRows]);
 
   const exportExcel = async () => {
     try {
@@ -203,14 +212,7 @@ export function ProductionReportPage() {
           <FormSelect label="Order" value={orderId} onChange={(e) => setOrderId(e.target.value)} options={orderOptions} emptyLabel="All" />
           <FormSelect label="Shift (optional)" value={shift} onChange={(e) => setShift(e.target.value)} options={[{ value: 'Day', label: 'Day' }, { value: 'Night', label: 'Night' }]} emptyLabel="All" />
           <div className="flex items-end">
-            <Button
-              onClick={() => {
-                if (page !== 1) setPage(1);
-                else generate();
-              }}
-              disabled={loading}
-              className="gap-2 w-full"
-            >
+            <Button onClick={generate} disabled={loading} className="gap-2 w-full">
               <LineChartIcon className="w-4 h-4" /> {loading ? 'Generating...' : 'Generate'}
             </Button>
           </div>
@@ -218,40 +220,28 @@ export function ProductionReportPage() {
       </Card>
 
       <div className="mt-4">
-        <Card title="Report">
-          <div className="overflow-x-auto">
-            {loading ? (
-              <div className="py-12 flex justify-center"><div className="animate-spin rounded-full h-10 w-10 border-2 border-brand border-t-transparent" /></div>
-            ) : (
-              <Table columns={columns} data={data} keyField="row_key" emptyMessage="No production data found." />
-            )}
-          </div>
+        <Card
+          title="Production matrix"
+          subtitle={
+            !loading && rawRows.length > 0
+              ? `${rawRows.length} source row${rawRows.length === 1 ? '' : 's'} · ${pivotBundle.loomBlocks.length} loom${pivotBundle.loomBlocks.length === 1 ? '' : 's'}`
+              : undefined
+          }
+        >
+          {loading ? (
+            <div className="py-16 flex justify-center">
+              <div className="animate-spin rounded-full h-10 w-10 border-2 border-brand border-t-transparent" />
+            </div>
+          ) : (
+            <ProductionPivotTable
+              bundle={displayBundle}
+              orderOptions={matrixOrderOptions}
+              onPartyChange={onMatrixPartyChange}
+              onMetersChange={onMatrixMetersChange}
+            />
+          )}
         </Card>
       </div>
-
-      {meta && meta.last_page > 1 && (
-        <div className="mt-4 flex items-center justify-between gap-3">
-          <span className="text-sm text-gray-500">
-            Page {meta.current_page} of {meta.last_page}
-          </span>
-          <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => p - 1)}
-            >
-              Previous
-            </Button>
-            <Button
-              variant="secondary"
-              disabled={page >= meta.last_page}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
-            </Button>
-          </div>
-        </div>
-      )}
 
       <Card title="Production vs Date" className="mt-4">
         {chartPoints.length ? <LineChart points={chartPoints} /> : <p className="text-gray-500">No chart data.</p>}

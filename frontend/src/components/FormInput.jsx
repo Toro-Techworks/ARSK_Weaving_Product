@@ -1,4 +1,5 @@
 import React from 'react';
+import SearchableSelect from './ui/SearchableSelect';
 
 export function FormInput({
   label,
@@ -30,6 +31,16 @@ export function FormInput({
 
 export function FormSelect({ label, error, required, options, emptyLabel = 'Select...', className = '', ...props }) {
   const id = props.id || props.name;
+  const {
+    value = '',
+    onChange,
+    isClearable = true,
+    isDisabled = false,
+    loadOptions,
+    defaultOptions = true,
+    ...rest
+  } = props;
+
   return (
     <div className={className}>
       {label && (
@@ -38,16 +49,20 @@ export function FormSelect({ label, error, required, options, emptyLabel = 'Sele
           {required && <span className="text-red-500"> *</span>}
         </label>
       )}
-      <select
-        id={id}
-        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 focus:border-brand focus:ring-1 focus:ring-brand focus:outline-none"
-        {...props}
-      >
-        <option value="">{emptyLabel}</option>
-        {options?.map((opt) => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
-        ))}
-      </select>
+      <SearchableSelect
+        options={options || []}
+        value={value}
+        onChange={(nextValue) => {
+          if (typeof onChange === 'function') {
+            onChange({ target: { value: nextValue } });
+          }
+        }}
+        placeholder={emptyLabel}
+        isClearable={isClearable}
+        isDisabled={isDisabled || rest.disabled}
+        loadOptions={loadOptions}
+        defaultOptions={defaultOptions}
+      />
       {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
     </div>
   );
