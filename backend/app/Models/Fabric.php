@@ -12,7 +12,9 @@ class Fabric extends Model
 
     protected $fillable = [
         'yarn_order_id',
+        'loom_id',
         'description',
+        'colour',
         'design',
         'weave_technique',
         'warp_count',
@@ -24,6 +26,7 @@ class Fabric extends Model
         'con_on_loom_reed',
         'con_on_loom_pick',
         'gsm_required',
+        'actual_gsm',
         'required_width',
         'po_quantity',
         'price_per_metre',
@@ -36,6 +39,7 @@ class Fabric extends Model
         'con_on_loom_reed' => 'decimal:3',
         'con_on_loom_pick' => 'decimal:3',
         'gsm_required' => 'decimal:3',
+        'actual_gsm' => 'decimal:3',
         'required_width' => 'decimal:3',
         'po_quantity' => 'decimal:3',
         'price_per_metre' => 'decimal:2',
@@ -45,5 +49,10 @@ class Fabric extends Model
     public function yarnOrder(): BelongsTo
     {
         return $this->belongsTo(YarnOrder::class);
+    }
+
+    public function loom(): BelongsTo
+    {
+        return $this->belongsTo(Loom::class);
     }
 }

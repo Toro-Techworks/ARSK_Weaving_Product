@@ -13,10 +13,10 @@ class LoomEntry extends Model
     protected $fillable = [
         'loom_id',
         'yarn_order_id',
+        'fabric_id',
         'date',
         'shift',
         'meters_produced',
-        'production',
         'rejected_meters',
         'operator_name',
         'weaver1_id',
@@ -32,6 +32,7 @@ class LoomEntry extends Model
         'rejected_meters' => 'decimal:2',
         'weaver1_id' => 'integer',
         'weaver2_id' => 'integer',
+        'fabric_id' => 'integer',
         'net_production' => 'decimal:2',
         'efficiency_percentage' => 'decimal:2',
     ];
@@ -55,6 +56,11 @@ class LoomEntry extends Model
     public function yarnOrder(): BelongsTo
     {
         return $this->belongsTo(YarnOrder::class);
+    }
+
+    public function fabric(): BelongsTo
+    {
+        return $this->belongsTo(Fabric::class);
     }
 
     public function weaver1(): BelongsTo

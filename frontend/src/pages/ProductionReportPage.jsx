@@ -7,12 +7,10 @@ import { FormInput, FormSelect } from '../components/FormInput';
 import { ProductionPivotTable } from '../components/ProductionPivotTable';
 import { formatOrderId } from '../utils/formatOrderId';
 import { fetchAllPaginated } from '../utils/pagination';
-import {
-  applyMatrixDraft,
-  buildProductionPivotBundle,
-  matrixDraftKey,
-} from '../utils/productionPivotReport';
+import { buildProductionPivotBundle } from '../utils/productionPivotReport';
 import { LineChart as LineChartIcon, Download } from 'lucide-react';
+import { GENERIC_CODE_TYPES, FALLBACK_SHIFT_OPTIONS } from '../constants/genericCodeTypes';
+import { useGenericCode } from '../hooks/useGenericCode';
 
 function LineChart({ points }) {
   const safe = points?.length ? points : [];
@@ -64,6 +62,9 @@ function downloadBlob(blob, filename, type = blob.type || 'application/octet-str
 }
 
 export function ProductionReportPage() {
+  const { options: shiftFilterOptions } = useGenericCode(GENERIC_CODE_TYPES.SHIFT, {
+    fallback: FALLBACK_SHIFT_OPTIONS,
+  });
   /** Default 7-day window (inclusive) for Production matrix columns and initial fetch */
   const [from, setFrom] = useState(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
@@ -75,8 +76,6 @@ export function ProductionReportPage() {
   const [orders, setOrders] = useState([]);
   const [rawRows, setRawRows] = useState([]);
   const [loading, setLoading] = useState(false);
-  /** Local edits on the matrix (party text + shift meters); not persisted until a save API exists */
-  const [matrixDraft, setMatrixDraft] = useState(() => ({ party: {}, meters: {} }));
 
   const fetchOptions = useCallback(async () => {
     const [loomList, orderList] = await Promise.all([
@@ -110,7 +109,6 @@ export function ProductionReportPage() {
         ...(shift ? { shift } : {}),
       });
       setRawRows(items);
-      setMatrixDraft({ party: {}, meters: {} });
     } catch (e) {
       toast.error('Failed to load production report');
     } finally {
@@ -134,26 +132,6 @@ export function ProductionReportPage() {
     [rawRows, from, to, allLoomsForPivot]
   );
 
-  const displayBundle = useMemo(
-    () => applyMatrixDraft(pivotBundle, matrixDraft),
-    [pivotBundle, matrixDraft]
-  );
-
-  const matrixOrderOptions = useMemo(
-    () => orders.map((o) => ({ value: String(o.id), label: formatOrderId(o) })),
-    [orders]
-  );
-
-  const onMatrixPartyChange = useCallback((loomId, slotKey, value) => {
-    const k = matrixDraftKey(String(loomId), slotKey);
-    setMatrixDraft((d) => ({ ...d, party: { ...d.party, [k]: value } }));
-  }, []);
-
-  const onMatrixMetersChange = useCallback((loomId, slotKey, raw) => {
-    const k = matrixDraftKey(String(loomId), slotKey);
-    setMatrixDraft((d) => ({ ...d, meters: { ...d.meters, [k]: raw } }));
-  }, []);
-
   const chartPoints = useMemo(() => {
     const map = new Map();
     (rawRows || []).forEach((row) => {
@@ -172,7 +150,7 @@ export function ProductionReportPage() {
         params: { date_from: from, date_to: to, loom_id: loomId || undefined, order_id: orderId || undefined, shift: shift || undefined },
         responseType: 'blob',
       });
-      downloadBlob(res.data, 'production-report.csv', res.headers['content-type']);
+      downloadBlob(res.data, 'production-report.xlsx', res.headers['content-type'] || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     } catch (e) {
       toast.error('Excel export failed');
     }
@@ -210,7 +188,7 @@ export function ProductionReportPage() {
           <FormInput type="date" label="To Date" value={to} onChange={(e) => setTo(e.target.value)} />
           <FormSelect label="Loom" value={loomId} onChange={(e) => setLoomId(e.target.value)} options={looms.map((l) => ({ value: String(l.id), label: l.loom_number }))} emptyLabel="All" />
           <FormSelect label="Order" value={orderId} onChange={(e) => setOrderId(e.target.value)} options={orderOptions} emptyLabel="All" />
-          <FormSelect label="Shift (optional)" value={shift} onChange={(e) => setShift(e.target.value)} options={[{ value: 'Day', label: 'Day' }, { value: 'Night', label: 'Night' }]} emptyLabel="All" />
+          <FormSelect label="Shift (optional)" value={shift} onChange={(e) => setShift(e.target.value)} options={shiftFilterOptions} emptyLabel="All" />
           <div className="flex items-end">
             <Button onClick={generate} disabled={loading} className="gap-2 w-full">
               <LineChartIcon className="w-4 h-4" /> {loading ? 'Generating...' : 'Generate'}
@@ -233,12 +211,7 @@ export function ProductionReportPage() {
               <div className="animate-spin rounded-full h-10 w-10 border-2 border-brand border-t-transparent" />
             </div>
           ) : (
-            <ProductionPivotTable
-              bundle={displayBundle}
-              orderOptions={matrixOrderOptions}
-              onPartyChange={onMatrixPartyChange}
-              onMetersChange={onMatrixMetersChange}
-            />
+            <ProductionPivotTable bundle={pivotBundle} />
           )}
         </Card>
       </div>

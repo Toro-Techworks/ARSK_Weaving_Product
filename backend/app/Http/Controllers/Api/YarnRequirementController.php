@@ -34,6 +34,7 @@ class YarnRequirementController extends Controller
             'required_weight' => 'nullable|numeric',
         ]);
         $item = YarnRequirement::create($validated);
+
         return response()->json(['data' => $item], 201);
     }
 
@@ -47,12 +48,14 @@ class YarnRequirementController extends Controller
             'required_weight' => 'nullable|numeric',
         ]);
         $yarnRequirement->update($validated);
+
         return response()->json(['data' => $yarnRequirement->fresh()]);
     }
 
     public function destroy(YarnRequirement $yarnRequirement): JsonResponse
     {
         $yarnRequirement->delete();
+
         return response()->json(['message' => 'Deleted']);
     }
 
@@ -77,18 +80,22 @@ class YarnRequirementController extends Controller
         YarnRequirement::where('yarn_order_id', $yarnOrderId)->delete();
 
         $created = [];
-        foreach ($validated['yarn_requirements'] as $row) {
-            $item = YarnRequirement::create([
-                'yarn_order_id' => $yarnOrderId,
-                'yarn_requirement' => $row['yarn_requirement'] ?? null,
-                'colour' => $row['colour'] ?? null,
-                'count' => $row['count'] ?? null,
-                'content' => $row['content'] ?? null,
-                'required_weight' => isset($row['required_weight']) ? (float) $row['required_weight'] : null,
-            ]);
-            $created[] = $item;
-        }
+        YarnRequirement::withoutEvents(function () use ($validated, $yarnOrderId, &$created) {
+            foreach ($validated['yarn_requirements'] as $row) {
+                $item = YarnRequirement::create([
+                    'yarn_order_id' => $yarnOrderId,
+                    'yarn_requirement' => $row['yarn_requirement'] ?? null,
+                    'colour' => $row['colour'] ?? null,
+                    'count' => $row['count'] ?? null,
+                    'content' => $row['content'] ?? null,
+                    'required_weight' => isset($row['required_weight']) ? (float) $row['required_weight'] : null,
+                ]);
+                $created[] = $item;
+            }
+        });
 
-        return response()->json(['data' => $created, 'message' => count($created) . ' requirement(s) saved'], 201);
+        log_audit('yarn_requirements', 'update', $yarnOrderId, 'Bulk replaced '.count($created).' yarn requirement(s) for order #'.$yarnOrderId);
+
+        return response()->json(['data' => $created, 'message' => count($created).' requirement(s) saved'], 201);
     }
 }

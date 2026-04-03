@@ -6,6 +6,7 @@ use App\Models\Menu;
 use App\Models\User;
 use App\Models\UserMenuPermission;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Cache;
 
 class MenusSeeder extends Seeder
 {
@@ -49,7 +50,6 @@ class MenusSeeder extends Seeder
         foreach ([
             ['menu_key' => 'loom_production.looms', 'menu_name' => 'Looms', 'route_path' => '/loom-production/looms', 'sort_order' => 10],
             ['menu_key' => 'loom_production.daily', 'menu_name' => 'Daily Entry', 'route_path' => '/loom-production/daily', 'sort_order' => 20],
-            ['menu_key' => 'loom_production.report', 'menu_name' => 'Production Report', 'route_path' => '/loom-production/report', 'sort_order' => 30],
         ] as $row) {
             $menu = Menu::updateOrCreate(
                 ['menu_key' => $row['menu_key']],
@@ -92,6 +92,7 @@ class MenusSeeder extends Seeder
             ['menu_key' => 'admin.permissions', 'menu_name' => 'User Permissions', 'route_path' => '/admin/permissions', 'icon' => 'ClipboardList', 'sort_order' => 20],
             ['menu_key' => 'admin.weaving_units', 'menu_name' => 'Weaving Unit', 'route_path' => '/admin/weaving-units', 'icon' => 'Factory', 'sort_order' => 30],
             ['menu_key' => 'admin.weavers', 'menu_name' => 'Weavers', 'route_path' => '/admin/weavers', 'icon' => 'Users', 'sort_order' => 40],
+            ['menu_key' => 'admin.master_settings', 'menu_name' => 'Master Settings', 'route_path' => '/admin/master-settings', 'icon' => 'Settings', 'sort_order' => 50],
         ] as $row) {
             $menu = Menu::updateOrCreate(
                 ['menu_key' => $row['menu_key']],
@@ -108,6 +109,17 @@ class MenusSeeder extends Seeder
         }
 
         $this->syncUserMenuPermissions();
+        $this->clearUserMenusCache();
+    }
+
+    /**
+     * MenuController caches GET /menus/user per user; invalidate after menu/permission changes.
+     */
+    private function clearUserMenusCache(): void
+    {
+        foreach (User::query()->pluck('id') as $id) {
+            Cache::forget('user_menus_'.$id);
+        }
     }
 
     private function syncUserMenuPermissions(): void

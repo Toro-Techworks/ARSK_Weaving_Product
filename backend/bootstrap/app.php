@@ -11,20 +11,24 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
-->withMiddleware(function (Middleware $middleware) {
+    ->withBroadcasting(
+        __DIR__.'/../routes/channels.php',
+        // web + sanctum: cookie/session + Bearer token auth for /broadcasting/auth (Echo private channels).
+        ['middleware' => ['web', 'auth:sanctum']]
+    )
+    ->withMiddleware(function (Middleware $middleware) {
+        // Prevent redirect to login route for API requests
+        $middleware->redirectGuestsTo(fn () => null);
 
-    // Prevent redirect to login route for API requests
-    $middleware->redirectGuestsTo(fn () => null);
+        $middleware->api(prepend: [
+            \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+        ]);
 
-    $middleware->api(prepend: [
-        \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
-    ]);
-
-    $middleware->alias([
-        'role' => \App\Http\Middleware\CheckRole::class,
-        'menu.permission' => \App\Http\Middleware\CheckMenuPermission::class,
-    ]);
-})
+        $middleware->alias([
+            'role' => \App\Http\Middleware\CheckRole::class,
+            'menu.permission' => \App\Http\Middleware\CheckMenuPermission::class,
+        ]);
+    })
     ->withExceptions(function (Exceptions $exceptions) {
         //
     })

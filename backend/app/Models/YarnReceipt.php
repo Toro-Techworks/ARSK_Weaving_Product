@@ -10,6 +10,7 @@ class YarnReceipt extends Model
     use HasFactory;
 
     const TYPE_CONE = 'Cone';
+
     const TYPE_HANK = 'Hank';
 
     protected $fillable = [
@@ -17,7 +18,6 @@ class YarnReceipt extends Model
         'dc_no',
         'vehicle_details',
         'date',
-        'yarn',
         'count',
         'content',
         'colour',

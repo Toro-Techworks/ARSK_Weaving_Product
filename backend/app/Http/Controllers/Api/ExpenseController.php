@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ExpenseResource;
 use App\Models\Expense;
+use App\Models\GenericCode;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -29,13 +30,14 @@ class ExpenseController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'category' => 'required|in:Electricity,Labour,Maintenance,Yarn',
+            'category' => GenericCode::validationRule('expense_category', true),
             'amount' => 'required|numeric|min:0',
             'date' => 'required|date',
             'notes' => 'nullable|string',
         ]);
 
         $expense = Expense::create($validated);
+
         return response()->json(['data' => new ExpenseResource($expense)], 201);
     }
 
@@ -47,19 +49,21 @@ class ExpenseController extends Controller
     public function update(Request $request, Expense $expense): JsonResponse
     {
         $validated = $request->validate([
-            'category' => 'sometimes|required|in:Electricity,Labour,Maintenance,Yarn',
+            'category' => array_merge(['sometimes', 'required'], array_slice(GenericCode::validationRule('expense_category', true), 1)),
             'amount' => 'sometimes|required|numeric|min:0',
             'date' => 'sometimes|required|date',
             'notes' => 'nullable|string',
         ]);
 
         $expense->update($validated);
+
         return response()->json(['data' => new ExpenseResource($expense->fresh())]);
     }
 
     public function destroy(Expense $expense): JsonResponse
     {
         $expense->delete();
+
         return response()->json(['message' => 'Expense deleted successfully']);
     }
 }

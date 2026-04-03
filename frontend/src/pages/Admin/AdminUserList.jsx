@@ -9,7 +9,10 @@ import { Card } from '../../components/Card';
 import { FormInput, FormSelect } from '../../components/FormInput';
 import Button from '../../components/Button';
 import { TablePagination } from '../../components/TablePagination';
-import { normalizePaginatedResponse, fetchAllPaginated } from '../../utils/pagination';
+import { normalizePaginatedResponse } from '../../utils/pagination';
+import { GENERIC_CODE_TYPES, FALLBACK_USER_STATUS } from '../../constants/genericCodeTypes';
+import { useGenericCode } from '../../hooks/useGenericCode';
+import { useAssignableRoleSelectOptions } from '../../hooks/useAssignableRoleSelectOptions';
 
 export function AdminUserList() {
   const { user: currentUser } = useAuth();
@@ -211,7 +214,12 @@ export function AdminUserList() {
 }
 
 function CreateUserModal({ currentUser, onClose, onSuccess }) {
-  const [roles, setRoles] = useState([]);
+  const { options: userStatusOptions } = useGenericCode(GENERIC_CODE_TYPES.USER_STATUS, {
+    fallback: FALLBACK_USER_STATUS,
+  });
+  const { roleSelectOptions: filteredRoleOptions } = useAssignableRoleSelectOptions({
+    currentUserRole: currentUser?.role ?? '',
+  });
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     name: '',
@@ -221,17 +229,6 @@ function CreateUserModal({ currentUser, onClose, onSuccess }) {
     role_id: '',
     status: 'active',
   });
-
-  useEffect(() => {
-    fetchAllPaginated(api, '/roles', { perPage: 100 })
-      .then(setRoles)
-      .catch(() => {});
-  }, []);
-
-  const roleOptions = roles.map((r) => ({ value: String(r.id), label: (r.role_name || '').replace(/_/g, ' ') }));
-  const filteredRoleOptions = currentUser?.role === 'super_admin'
-    ? roleOptions
-    : roleOptions.filter((r) => (r.label || '').toLowerCase() === 'user');
 
   useEffect(() => {
     if (form.role_id === '' && filteredRoleOptions.length > 0) {
@@ -256,7 +253,6 @@ function CreateUserModal({ currentUser, onClose, onSuccess }) {
     }
   };
 
-  const STATUSES = [{ value: 'active', label: 'Active' }, { value: 'disabled', label: 'Disabled' }];
   const fieldClass = 'space-y-1.5';
 
   return (
@@ -287,7 +283,7 @@ function CreateUserModal({ currentUser, onClose, onSuccess }) {
               <FormSelect label="Role" required options={filteredRoleOptions} value={form.role_id} onChange={(e) => setForm((f) => ({ ...f, role_id: e.target.value }))} className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormSelect label="Status" options={STATUSES} value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} className="!mb-0" />
+              <FormSelect label="Status" options={userStatusOptions} value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} className="!mb-0" />
             </div>
           </div>
           <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end pt-4 border-t border-gray-100">
@@ -301,15 +297,15 @@ function CreateUserModal({ currentUser, onClose, onSuccess }) {
 }
 
 function EditUserModal({ user, onClose, onSaved, canAssignRole }) {
-  const [roles, setRoles] = useState([]);
+  const { options: userStatusOptions } = useGenericCode(GENERIC_CODE_TYPES.USER_STATUS, {
+    fallback: FALLBACK_USER_STATUS,
+  });
+  const { roleSelectOptions } = useAssignableRoleSelectOptions({
+    currentUserRole: 'super_admin',
+    enabled: canAssignRole,
+  });
   const [form, setForm] = useState({ name: user.name, username: user.username, role_id: String(user.role_id || ''), status: user.status });
   const [loading, setLoading] = useState(false);
-
-  React.useEffect(() => {
-    fetchAllPaginated(api, '/roles', { perPage: 100 })
-      .then(setRoles)
-      .catch(() => {});
-  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -325,8 +321,6 @@ function EditUserModal({ user, onClose, onSaved, canAssignRole }) {
     }
   };
 
-  const roleOptions = roles.map((r) => ({ value: String(r.id), label: (r.role_name || '').replace(/_/g, ' ') }));
-
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
@@ -337,14 +331,14 @@ function EditUserModal({ user, onClose, onSaved, canAssignRole }) {
           {canAssignRole && (
             <FormSelect
               label="Role"
-              options={roleOptions}
+              options={roleSelectOptions}
               value={form.role_id}
               onChange={(e) => setForm((f) => ({ ...f, role_id: e.target.value }))}
             />
           )}
           <FormSelect
             label="Status"
-            options={[{ value: 'active', label: 'Active' }, { value: 'disabled', label: 'Disabled' }]}
+            options={userStatusOptions}
             value={form.status}
             onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
           />

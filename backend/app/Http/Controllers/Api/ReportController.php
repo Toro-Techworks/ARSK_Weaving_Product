@@ -2,18 +2,21 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
-use App\Exports\OrderSummaryReportExport;
 use App\Exports\LoomEfficiencyReportExport;
-use App\Exports\ProductionReportExport;
+use App\Exports\OrderSummaryReportExport;
+use App\Exports\ProductionMatrixXlsxExport;
 use App\Exports\YarnConsumptionReportExport;
+use App\Http\Controllers\Controller;
+use App\Models\Loom;
+use App\Support\ProductionMatrixReportBuilder;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
-use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Maatwebsite\Excel\Facades\Excel;
-use Barryvdh\DomPDF\Facade\Pdf;
 
 class ReportController extends Controller
 {
@@ -105,6 +108,7 @@ class ReportController extends Controller
         $to = $request->input('date_to', Carbon::now()->format('Y-m-d'));
         $orderFrom = $request->input('order_from');
         $items = $this->getOrderSummaryItems($from, $to, $orderFrom);
+
         return Excel::download(new OrderSummaryReportExport($items), 'order-summary-report.csv', \Maatwebsite\Excel\Excel::CSV);
     }
 
@@ -116,9 +120,10 @@ class ReportController extends Controller
         $items = $this->getOrderSummaryItems($from, $to, $orderFrom);
         $rows = '';
         foreach ($items as $it) {
-            $rows .= '<tr><td style="padding:6px 8px;border:1px solid #e5e7eb;">' . e($it['date']) . '</td><td style="padding:6px 8px;border:1px solid #e5e7eb;">' . e($it['order_from'] ?? '-') . '</td><td style="padding:6px 8px;border:1px solid #e5e7eb;">' . e((string)$it['total_orders']) . '</td></tr>';
+            $rows .= '<tr><td style="padding:6px 8px;border:1px solid #e5e7eb;">'.e($it['date']).'</td><td style="padding:6px 8px;border:1px solid #e5e7eb;">'.e($it['order_from'] ?? '-').'</td><td style="padding:6px 8px;border:1px solid #e5e7eb;">'.e((string) $it['total_orders']).'</td></tr>';
         }
-        $pdf = Pdf::loadHTML('<html><body><h2>Order Summary Report</h2><table style="width:100%;border-collapse:collapse;"><thead><tr><th style="padding:6px 8px;border:1px solid #e5e7eb;background:#f9fafb;">Date</th><th style="padding:6px 8px;border:1px solid #e5e7eb;background:#f9fafb;">Order From</th><th style="padding:6px 8px;border:1px solid #e5e7eb;background:#f9fafb;">Total Orders</th></tr></thead><tbody>' . $rows . '</tbody></table></body></html>')->setPaper('a4', 'landscape');
+        $pdf = Pdf::loadHTML('<html><body><h2>Order Summary Report</h2><table style="width:100%;border-collapse:collapse;"><thead><tr><th style="padding:6px 8px;border:1px solid #e5e7eb;background:#f9fafb;">Date</th><th style="padding:6px 8px;border:1px solid #e5e7eb;background:#f9fafb;">Order From</th><th style="padding:6px 8px;border:1px solid #e5e7eb;background:#f9fafb;">Total Orders</th></tr></thead><tbody>'.$rows.'</tbody></table></body></html>')->setPaper('a4', 'landscape');
+
         return $pdf->download('order-summary-report.pdf');
     }
 
@@ -128,6 +133,7 @@ class ReportController extends Controller
         $to = $request->input('date_to', Carbon::now()->format('Y-m-d'));
         $loomId = $request->input('loom_id');
         $items = $this->getLoomEfficiencyItems($from, $to, $loomId);
+
         return Excel::download(new LoomEfficiencyReportExport($items), 'loom-efficiency-report.csv', \Maatwebsite\Excel\Excel::CSV);
     }
 
@@ -139,9 +145,10 @@ class ReportController extends Controller
         $items = $this->getLoomEfficiencyItems($from, $to, $loomId);
         $rows = '';
         foreach ($items as $it) {
-            $rows .= '<tr><td style="padding:6px 8px;border:1px solid #e5e7eb;">' . e($it['loom_number'] ?? '-') . '</td><td style="padding:6px 8px;border:1px solid #e5e7eb;">' . e((string)$it['net_production']) . '</td><td style="padding:6px 8px;border:1px solid #e5e7eb;">' . e($it['efficiency_percentage'] !== null ? (string)$it['efficiency_percentage'].'%' : '-') . '</td><td style="padding:6px 8px;border:1px solid #e5e7eb;">' . e((string)$it['days_worked']) . '</td></tr>';
+            $rows .= '<tr><td style="padding:6px 8px;border:1px solid #e5e7eb;">'.e($it['loom_number'] ?? '-').'</td><td style="padding:6px 8px;border:1px solid #e5e7eb;">'.e((string) $it['net_production']).'</td><td style="padding:6px 8px;border:1px solid #e5e7eb;">'.e($it['efficiency_percentage'] !== null ? (string) $it['efficiency_percentage'].'%' : '-').'</td><td style="padding:6px 8px;border:1px solid #e5e7eb;">'.e((string) $it['days_worked']).'</td></tr>';
         }
-        $pdf = Pdf::loadHTML('<html><body><h2>Loom Efficiency Report</h2><table style="width:100%;border-collapse:collapse;"><thead><tr><th style="padding:6px 8px;border:1px solid #e5e7eb;background:#f9fafb;">Loom</th><th style="padding:6px 8px;border:1px solid #e5e7eb;background:#f9fafb;">Net Production</th><th style="padding:6px 8px;border:1px solid #e5e7eb;background:#f9fafb;">Efficiency</th><th style="padding:6px 8px;border:1px solid #e5e7eb;background:#f9fafb;">Days Worked</th></tr></thead><tbody>' . $rows . '</tbody></table></body></html>')->setPaper('a4', 'landscape');
+        $pdf = Pdf::loadHTML('<html><body><h2>Loom Efficiency Report</h2><table style="width:100%;border-collapse:collapse;"><thead><tr><th style="padding:6px 8px;border:1px solid #e5e7eb;background:#f9fafb;">Loom</th><th style="padding:6px 8px;border:1px solid #e5e7eb;background:#f9fafb;">Net Production</th><th style="padding:6px 8px;border:1px solid #e5e7eb;background:#f9fafb;">Efficiency</th><th style="padding:6px 8px;border:1px solid #e5e7eb;background:#f9fafb;">Days Worked</th></tr></thead><tbody>'.$rows.'</tbody></table></body></html>')->setPaper('a4', 'landscape');
+
         return $pdf->download('loom-efficiency-report.pdf');
     }
 
@@ -170,55 +177,7 @@ class ReportController extends Controller
         $page = (int) $request->input('page', 1);
         $page = max(1, $page);
 
-        $fabricSub = DB::table('fabrics')
-            ->select([
-                'yarn_order_id',
-                DB::raw('MIN(design) as fabric_type'),
-            ])
-            ->groupBy('yarn_order_id');
-
-        $base = DB::table('loom_entries as le')
-            ->leftJoin('looms as l', 'l.id', '=', 'le.loom_id')
-            ->leftJoin('yarn_orders as yo', 'yo.id', '=', 'le.yarn_order_id')
-            ->leftJoin('weavers as w1', 'w1.id', '=', 'le.weaver1_id')
-            ->leftJoin('weavers as w2', 'w2.id', '=', 'le.weaver2_id')
-            ->leftJoinSub($fabricSub, 'fabric', function ($join) {
-                $join->on('fabric.yarn_order_id', '=', 'le.yarn_order_id');
-            })
-            ->whereBetween('le.date', [$from, $to])
-            ->when($loomId, fn ($q) => $q->where('le.loom_id', $loomId))
-            ->when($orderId, fn ($q) => $q->where('le.yarn_order_id', $orderId))
-            ->when($shift, fn ($q) => $q->where('le.shift', $shift));
-
-        $query = $base->select([
-            'le.date as date',
-            'le.loom_id as loom_id',
-            'l.loom_number as loom_number',
-            'le.yarn_order_id as order_id',
-            'yo.order_from as order_from',
-            'yo.customer as customer',
-            'fabric.fabric_type as fabric_type',
-            'le.shift as shift',
-            'le.weaver1_id as weaver1_id',
-            'le.weaver2_id as weaver2_id',
-            'w1.weaver_name as weaver1_name',
-            'w2.weaver_name as weaver2_name',
-            DB::raw('SUM(le.meters_produced) as production_meters'),
-            DB::raw('CASE WHEN SUM(le.meters_produced) > 0 THEN ROUND((1 - (SUM(le.rejected_meters) / SUM(le.meters_produced))) * 100, 2) ELSE NULL END as efficiency_percentage'),
-        ])->groupBy([
-            'le.date',
-            'le.loom_id',
-            'l.loom_number',
-            'le.yarn_order_id',
-            'yo.order_from',
-            'yo.customer',
-            'fabric.fabric_type',
-            'le.shift',
-            'le.weaver1_id',
-            'le.weaver2_id',
-            'w1.weaver_name',
-            'w2.weaver_name',
-        ])->orderBy('le.date', 'asc');
+        $query = $this->buildProductionReportQuery($from, $to, $loomId, $orderId, $shift);
 
         $items = $query->paginate($perPage, ['*'], 'page', $page);
 
@@ -249,10 +208,15 @@ class ReportController extends Controller
         $shift = $request->input('shift');
 
         $items = $this->getProductionReportItems($from, $to, $loomId, $orderId, $shift);
+        $allLooms = $this->activeLoomsForProductionMatrix($loomId);
+        $bundle = ProductionMatrixReportBuilder::buildBundle($items, $from, $to, $allLooms);
+        $spec = ProductionMatrixReportBuilder::excelMatrixSpec($bundle);
 
-        // Note: This project environment may miss PHP zip/gd extensions.
-        // We export using CSV writer to keep it compatible with Excel.
-        return Excel::download(new ProductionReportExport($items), 'production-report.csv', \Maatwebsite\Excel\Excel::CSV);
+        return Excel::download(
+            new ProductionMatrixXlsxExport($spec['rows'], $spec['merges']),
+            'production-report.xlsx',
+            \Maatwebsite\Excel\Excel::XLSX
+        );
     }
 
     public function productionExportPdf(Request $request): Response
@@ -265,8 +229,11 @@ class ReportController extends Controller
         $shift = $request->input('shift');
 
         $items = $this->getProductionReportItems($from, $to, $loomId, $orderId, $shift);
+        $allLooms = $this->activeLoomsForProductionMatrix($loomId);
+        $bundle = ProductionMatrixReportBuilder::buildBundle($items, $from, $to, $allLooms);
 
-        $html = $this->buildProductionReportPdfHtml($items, $from, $to, $loomId, $orderId, $shift);
+        $filterLines = $this->productionMatrixFilterLines($from, $to, $loomId, $orderId, $shift);
+        $html = ProductionMatrixReportBuilder::toHtmlDocument($bundle, $filterLines);
         $pdf = Pdf::loadHTML($html)->setPaper('a4', 'landscape');
 
         return $pdf->download('production-report.pdf');
@@ -384,61 +351,166 @@ class ReportController extends Controller
 
         $html = $this->buildYarnConsumptionReportPdfHtml($items, $from, $to, $yarnType, $count);
         $pdf = Pdf::loadHTML($html)->setPaper('a4', 'landscape');
+
         return $pdf->download('yarn-consumption-report.pdf');
     }
 
     private function getProductionReportItems(string $from, string $to, $loomId, $orderId, $shift): array
     {
-        $fabricSub = DB::table('fabrics')
-            ->select([
-                'yarn_order_id',
-                DB::raw('MIN(design) as fabric_type'),
-            ])
-            ->groupBy('yarn_order_id');
+        return $this->buildProductionReportQuery($from, $to, $loomId, $orderId, $shift)
+            ->get()
+            ->map(fn ($row) => (array) $row)
+            ->values()
+            ->all();
+    }
 
-        $query = DB::table('loom_entries as le')
+    /** Whether `loom_entries.yarn_order_id` exists (listing avoids stale hasColumn edge cases). */
+    private function loomEntriesHasYarnOrderIdColumn(): bool
+    {
+        try {
+            return in_array('yarn_order_id', Schema::getColumnListing('loom_entries'), true);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * SQL expression for yarn order on a production row (not user input).
+     * Supports DBs with order only on looms, only on entries, or both (COALESCE).
+     */
+    private function productionYarnOrderKeySql(): ?string
+    {
+        $entryHas = $this->loomEntriesHasYarnOrderIdColumn();
+        $loomHas = Schema::hasColumn('looms', 'yarn_order_id');
+        if ($entryHas && $loomHas) {
+            return 'COALESCE(le.yarn_order_id, l.yarn_order_id)';
+        }
+        if ($entryHas) {
+            return 'le.yarn_order_id';
+        }
+        if ($loomHas) {
+            return 'l.yarn_order_id';
+        }
+
+        return null;
+    }
+
+    private function buildProductionReportQuery(string $from, string $to, $loomId, $orderId, $shift): \Illuminate\Database\Query\Builder
+    {
+        $keySql = $this->productionYarnOrderKeySql();
+        $fabricsHasSl = false;
+        try {
+            $fabricsHasSl = Schema::hasColumn('fabrics', 'sl_number');
+        } catch (\Throwable) {
+        }
+
+        $q = DB::table('loom_entries as le')
             ->leftJoin('looms as l', 'l.id', '=', 'le.loom_id')
-            ->leftJoin('yarn_orders as yo', 'yo.id', '=', 'le.yarn_order_id')
-            ->leftJoin('weavers as w1', 'w1.id', '=', 'le.weaver1_id')
+            ->leftJoin('fabrics as f_sl', 'f_sl.id', '=', 'le.fabric_id');
+
+        if ($keySql !== null) {
+            $q->leftJoin('yarn_orders as yo', function ($join) use ($keySql) {
+                $join->whereRaw("yo.id = ({$keySql})");
+            });
+        } else {
+            $q->leftJoin('yarn_orders as yo', function ($join) {
+                $join->whereRaw('0 = 1');
+            });
+        }
+
+        $q->leftJoin('weavers as w1', 'w1.id', '=', 'le.weaver1_id')
             ->leftJoin('weavers as w2', 'w2.id', '=', 'le.weaver2_id')
-            ->leftJoinSub($fabricSub, 'fabric', function ($join) {
-                $join->on('fabric.yarn_order_id', '=', 'le.yarn_order_id');
-            })
             ->whereBetween('le.date', [$from, $to])
             ->when($loomId, fn ($q) => $q->where('le.loom_id', $loomId))
-            ->when($orderId, fn ($q) => $q->where('le.yarn_order_id', $orderId))
-            ->when($shift, fn ($q) => $q->where('le.shift', $shift))
-            ->select([
-                'le.date as date',
-                'le.loom_id as loom_id',
-                'l.loom_number as loom_number',
-                'le.yarn_order_id as order_id',
-                'yo.order_from as order_from',
-                'yo.customer as customer',
-                'fabric.fabric_type as fabric_type',
-                'le.shift as shift',
-                'le.weaver1_id as weaver1_id',
-                'le.weaver2_id as weaver2_id',
-                'w1.weaver_name as weaver1_name',
-                'w2.weaver_name as weaver2_name',
-                DB::raw('SUM(le.meters_produced) as production_meters'),
-                DB::raw('CASE WHEN SUM(le.meters_produced) > 0 THEN ROUND((1 - (SUM(le.rejected_meters) / SUM(le.meters_produced))) * 100, 2) ELSE NULL END as efficiency_percentage'),
-            ])->groupBy([
-                'le.date',
-                'le.loom_id',
-                'l.loom_number',
-                'le.yarn_order_id',
-                'yo.order_from',
-                'yo.customer',
-                'fabric.fabric_type',
-                'le.shift',
-                'le.weaver1_id',
-                'le.weaver2_id',
-                'w1.weaver_name',
-                'w2.weaver_name',
-            ])->orderBy('le.date', 'asc');
+            ->when($orderId, function ($q) use ($keySql, $orderId) {
+                if ($keySql !== null) {
+                    $q->whereRaw("({$keySql}) = ?", [$orderId]);
+                } else {
+                    $q->whereRaw('0 = 1');
+                }
+            })
+            ->when($shift, fn ($q) => $q->where('le.shift', $shift));
 
-        return $query->get()->map(fn ($row) => (array) $row)->values()->all();
+        $orderIdSelect = $keySql !== null
+            ? DB::raw("({$keySql}) as order_id")
+            : DB::raw('CAST(NULL AS UNSIGNED) as order_id');
+
+        $groupOrderKey = $keySql !== null
+            ? [DB::raw('('.$keySql.')')]
+            : [DB::raw('CAST(NULL AS UNSIGNED)')];
+
+        $groupBy = array_merge([
+            'le.date',
+            'le.loom_id',
+            'l.loom_number',
+            'le.fabric_id',
+        ], $groupOrderKey, [
+            'yo.order_from',
+            'yo.customer',
+            'le.shift',
+            'le.weaver1_id',
+            'le.weaver2_id',
+            'w1.weaver_name',
+            'w2.weaver_name',
+        ]);
+
+        $fabricSlSelect = $fabricsHasSl
+            ? DB::raw('MAX(f_sl.sl_number) as fabric_sl')
+            : DB::raw('CAST(NULL AS CHAR) as fabric_sl');
+
+        return $q->select([
+            'le.date as date',
+            'le.loom_id as loom_id',
+            'l.loom_number as loom_number',
+            $orderIdSelect,
+            'yo.order_from as order_from',
+            'yo.customer as customer',
+            DB::raw('MAX(f_sl.design) as fabric_type'),
+            $fabricSlSelect,
+            'le.shift as shift',
+            'le.weaver1_id as weaver1_id',
+            'le.weaver2_id as weaver2_id',
+            'w1.weaver_name as weaver1_name',
+            'w2.weaver_name as weaver2_name',
+            DB::raw('SUM(le.meters_produced) as production_meters'),
+            DB::raw('CASE WHEN SUM(le.meters_produced) > 0 THEN ROUND((1 - (SUM(le.rejected_meters) / SUM(le.meters_produced))) * 100, 2) ELSE NULL END as efficiency_percentage'),
+        ])->groupBy($groupBy)->orderBy('le.date', 'asc');
+    }
+
+    /**
+     * Same loom scope as {@see LoomController::list()} for parity with the on-screen matrix.
+     *
+     * @return array<int, array{id: int, loom_number: string}>|null
+     */
+    private function activeLoomsForProductionMatrix($loomId): ?array
+    {
+        $q = Loom::query()->select(['id', 'loom_number'])->where('status', 'Active')->orderBy('loom_number');
+        if ($loomId) {
+            $q->where('id', $loomId);
+        }
+        $rows = $q->get();
+        if ($rows->isEmpty()) {
+            return null;
+        }
+
+        return $rows->map(fn ($l) => ['id' => $l->id, 'loom_number' => (string) $l->loom_number])->all();
+    }
+
+    /** @return string[] */
+    private function productionMatrixFilterLines(string $from, string $to, $loomId, $orderId, $shift): array
+    {
+        $lines = ['From: '.$from, 'To: '.$to];
+        if ($loomId) {
+            $lines[] = 'Loom ID: '.$loomId;
+        }
+        if ($orderId) {
+            $lines[] = 'Order ID: '.$orderId;
+        }
+        if ($shift) {
+            $lines[] = 'Shift: '.$shift;
+        }
+
+        return $lines;
     }
 
     private function getOrderSummaryItems(string $from, string $to, $orderFrom): array
@@ -480,55 +552,6 @@ class ReportController extends Controller
             ->map(fn ($r) => (array) $r)
             ->values()
             ->all();
-    }
-
-    private function buildProductionReportPdfHtml(array $items, string $from, string $to, $loomId, $orderId, $shift): string
-    {
-        $filterBits = [
-            'From: ' . $from,
-            'To: ' . $to,
-            $loomId ? 'Loom: ' . $loomId : null,
-            $orderId ? 'Order: ' . $orderId : null,
-            $shift ? 'Shift: ' . $shift : null,
-        ];
-        $filterBits = array_values(array_filter($filterBits));
-
-        $rowsHtml = '';
-        foreach ($items as $it) {
-            $party = trim((string)($it['order_from'] ?? '')) ?: trim((string)($it['customer'] ?? ''));
-            $rowsHtml .= '<tr>'
-                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)$it['date']) . '</td>'
-                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)$it['loom_number']) . '</td>'
-                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)$it['order_id']) . '</td>'
-                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars($party !== '' ? $party : '-') . '</td>'
-                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)round((float)$it['production_meters'], 2)) . '</td>'
-                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . ($it['efficiency_percentage'] !== null ? htmlspecialchars((string)$it['efficiency_percentage'] . '%') : '-') . '</td>'
-                . '</tr>';
-        }
-
-        return '
-        <html>
-          <head><style>
-            body{font-family: DejaVu Sans, Arial, sans-serif; font-size: 12px;}
-            h2{margin:0 0 10px 0;}
-            table{width:100%;border-collapse:collapse;}
-            th{background:#f9fafb;border:1px solid #e5e7eb;padding:6px 8px;text-align:left;}
-          </style></head>
-          <body>
-            <h2>Production Report</h2>
-            <div style="margin-bottom:10px;color:#374151;">
-              ' . implode(' &nbsp; | &nbsp; ', array_map(fn($b)=>htmlspecialchars($b), $filterBits)) . '
-            </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Date</th><th>Loom</th><th>Order</th><th>Party (company)</th><th>Production (m)</th><th>Efficiency %</th>
-                </tr>
-              </thead>
-              <tbody>' . $rowsHtml . '</tbody>
-            </table>
-          </body>
-        </html>';
     }
 
     private function getYarnConsumptionItems(string $from, string $to, $yarnType, $count): array
@@ -582,24 +605,24 @@ class ReportController extends Controller
     private function buildYarnConsumptionReportPdfHtml(array $items, string $from, string $to, $yarnType, $count): string
     {
         $filterBits = [
-            'From: ' . $from,
-            'To: ' . $to,
-            $yarnType ? 'Yarn Type: ' . $yarnType : null,
-            $count ? 'Count: ' . $count : null,
+            'From: '.$from,
+            'To: '.$to,
+            $yarnType ? 'Yarn Type: '.$yarnType : null,
+            $count ? 'Count: '.$count : null,
         ];
         $filterBits = array_values(array_filter($filterBits));
 
         $rowsHtml = '';
         foreach ($items as $it) {
             $rowsHtml .= '<tr>'
-                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)$it['date']) . '</td>'
-                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)$it['yarn_type']) . '</td>'
-                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)$it['count']) . '</td>'
-                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)round((float)$it['issued_qty'], 3)) . '</td>'
-                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)round((float)$it['consumed_qty'], 3)) . '</td>'
-                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)round((float)$it['balance'], 3)) . '</td>'
-                . '<td style="padding:6px 8px;border:1px solid #e5e7eb;">' . htmlspecialchars((string)round((float)$it['waste'], 3)) . '</td>'
-                . '</tr>';
+                .'<td style="padding:6px 8px;border:1px solid #e5e7eb;">'.htmlspecialchars((string) $it['date']).'</td>'
+                .'<td style="padding:6px 8px;border:1px solid #e5e7eb;">'.htmlspecialchars((string) $it['yarn_type']).'</td>'
+                .'<td style="padding:6px 8px;border:1px solid #e5e7eb;">'.htmlspecialchars((string) $it['count']).'</td>'
+                .'<td style="padding:6px 8px;border:1px solid #e5e7eb;">'.htmlspecialchars((string) round((float) $it['issued_qty'], 3)).'</td>'
+                .'<td style="padding:6px 8px;border:1px solid #e5e7eb;">'.htmlspecialchars((string) round((float) $it['consumed_qty'], 3)).'</td>'
+                .'<td style="padding:6px 8px;border:1px solid #e5e7eb;">'.htmlspecialchars((string) round((float) $it['balance'], 3)).'</td>'
+                .'<td style="padding:6px 8px;border:1px solid #e5e7eb;">'.htmlspecialchars((string) round((float) $it['waste'], 3)).'</td>'
+                .'</tr>';
         }
 
         return '
@@ -613,7 +636,7 @@ class ReportController extends Controller
           <body>
             <h2>Yarn Consumption Report</h2>
             <div style="margin-bottom:10px;color:#374151;">
-              ' . implode(' &nbsp; | &nbsp; ', array_map(fn($b)=>htmlspecialchars($b), $filterBits)) . '
+              '.implode(' &nbsp; | &nbsp; ', array_map(fn ($b) => htmlspecialchars($b), $filterBits)).'
             </div>
             <table>
               <thead>
@@ -621,7 +644,7 @@ class ReportController extends Controller
                   <th>Date</th><th>Yarn</th><th>Count</th><th>Issued</th><th>Consumed</th><th>Balance</th><th>Waste</th>
                 </tr>
               </thead>
-              <tbody>' . $rowsHtml . '</tbody>
+              <tbody>'.$rowsHtml.'</tbody>
             </table>
           </body>
         </html>';

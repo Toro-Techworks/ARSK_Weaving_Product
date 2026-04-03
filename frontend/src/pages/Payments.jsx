@@ -10,6 +10,12 @@ import { usePagePermission } from '../hooks/usePagePermission';
 import { useRefreshOnSameMenuClick } from '../hooks/useRefreshOnSameMenuClick';
 import { TablePagination } from '../components/TablePagination';
 import { normalizePaginatedResponse } from '../utils/pagination';
+import {
+  GENERIC_CODE_TYPES,
+  FALLBACK_PAYMENT_MODES,
+  FALLBACK_PAYMENT_RECORD_STATUS,
+} from '../constants/genericCodeTypes';
+import { useGenericCode } from '../hooks/useGenericCode';
 
 export function PaymentList() {
   const { canEdit } = usePagePermission();
@@ -128,16 +134,12 @@ function PaymentAddModal({ onClose, onSuccess }) {
               <FormInput label="Amount" type="number" step="0.01" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormSelect label="Mode" options={[{ value: 'Cash', label: 'Cash' }, { value: 'Bank', label: 'Bank' }, { value: 'UPI', label: 'UPI' }]} value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })} className="!mb-0" />
+              <FormSelect label="Mode" options={modeOptions} value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })} className="!mb-0" />
             </div>
             <div className={fieldClass}>
               <FormSelect
                 label="Status"
-                options={[
-                  { value: 'open', label: 'Open' },
-                  { value: 'running', label: 'Running' },
-                  { value: 'closed', label: 'Closed' },
-                ]}
+                options={statusOptions}
                 value={form.status}
                 onChange={(e) => setForm({ ...form, status: e.target.value })}
                 className="!mb-0"

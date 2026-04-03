@@ -3,23 +3,25 @@ import { useNavigate, Navigate, Link } from 'react-router-dom';
 import { UserPlus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../api/client';
-import { fetchAllPaginated } from '../../utils/pagination';
 import { useAuth } from '../../context/AuthContext';
 import { usePagePermission } from '../../hooks/usePagePermission';
 import { Card } from '../../components/Card';
 import { FormInput, FormSelect } from '../../components/FormInput';
 import Button from '../../components/Button';
-
-const STATUSES = [
-  { value: 'active', label: 'Active' },
-  { value: 'disabled', label: 'Disabled' },
-];
+import { GENERIC_CODE_TYPES, FALLBACK_USER_STATUS } from '../../constants/genericCodeTypes';
+import { useGenericCode } from '../../hooks/useGenericCode';
+import { useAssignableRoleSelectOptions } from '../../hooks/useAssignableRoleSelectOptions';
 
 export function AdminCreateUser() {
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
   const { canEdit } = usePagePermission();
-  const [roles, setRoles] = useState([]);
+  const { options: userStatusOptions } = useGenericCode(GENERIC_CODE_TYPES.USER_STATUS, {
+    fallback: FALLBACK_USER_STATUS,
+  });
+  const { roleSelectOptions: filteredRoleOptions } = useAssignableRoleSelectOptions({
+    currentUserRole: currentUser?.role ?? '',
+  });
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     name: '',
@@ -29,15 +31,6 @@ export function AdminCreateUser() {
     role_id: '',
     status: 'active',
   });
-
-  React.useEffect(() => {
-    fetchAllPaginated(api, '/roles', { perPage: 100 }).then(setRoles).catch(() => {});
-  }, []);
-
-  const roleOptions = roles.map((r) => ({ value: String(r.id), label: (r.role_name || '').replace(/_/g, ' ') }));
-  const filteredRoleOptions = currentUser?.role === 'super_admin'
-    ? roleOptions
-    : roleOptions.filter((r) => (r.label || '').toLowerCase() === 'user');
 
   React.useEffect(() => {
     if (form.role_id === '' && filteredRoleOptions.length > 0) {
@@ -101,7 +94,7 @@ export function AdminCreateUser() {
               <FormSelect label="Role" required options={filteredRoleOptions} value={form.role_id} onChange={(e) => setForm((f) => ({ ...f, role_id: e.target.value }))} className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormSelect label="Status" options={STATUSES} value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} className="!mb-0" />
+              <FormSelect label="Status" options={userStatusOptions} value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} className="!mb-0" />
             </div>
           </div>
           <div className="mt-6 pt-6 border-t border-gray-100 flex flex-col sm:flex-row sm:items-center gap-3">

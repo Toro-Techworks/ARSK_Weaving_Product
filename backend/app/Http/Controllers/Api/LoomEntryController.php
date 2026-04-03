@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\LoomEntryResource;
+use App\Models\GenericCode;
 use App\Models\LoomEntry;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -32,8 +33,9 @@ class LoomEntryController extends Controller
         $validated = $request->validate([
             'loom_id' => 'required|exists:looms,id',
             'yarn_order_id' => 'nullable|exists:yarn_orders,id',
+            'fabric_id' => 'nullable|exists:fabrics,id',
             'date' => 'required|date',
-            'shift' => 'required|string|max:50',
+            'shift' => GenericCode::validationRule('shift', true),
             'meters_produced' => 'required|numeric|min:0',
             'production' => 'nullable|numeric|min:0',
             'rejected_meters' => 'nullable|numeric|min:0',
@@ -43,18 +45,21 @@ class LoomEntryController extends Controller
             'remarks' => 'nullable|string',
         ]);
 
-        if (array_key_exists('production', $validated) && !array_key_exists('meters_produced', $validated)) {
+        if (array_key_exists('production', $validated) && ! array_key_exists('meters_produced', $validated)) {
             $validated['meters_produced'] = $validated['production'];
         }
         $validated['rejected_meters'] = $validated['rejected_meters'] ?? 0;
+        unset($validated['production']);
 
         $entry = LoomEntry::create($validated);
+
         return response()->json(['data' => new LoomEntryResource($entry->load(['loom', 'weaver1', 'weaver2']))], 201);
     }
 
     public function show(LoomEntry $loomEntry): JsonResponse
     {
         $loomEntry->load(['loom', 'yarnOrder', 'weaver1', 'weaver2']);
+
         return response()->json(['data' => new LoomEntryResource($loomEntry)]);
     }
 
@@ -63,8 +68,9 @@ class LoomEntryController extends Controller
         $validated = $request->validate([
             'loom_id' => 'sometimes|required|exists:looms,id',
             'yarn_order_id' => 'nullable|exists:yarn_orders,id',
+            'fabric_id' => 'nullable|exists:fabrics,id',
             'date' => 'sometimes|required|date',
-            'shift' => 'sometimes|required|string|max:50',
+            'shift' => array_merge(['sometimes', 'required'], array_slice(GenericCode::validationRule('shift', true), 1)),
             'meters_produced' => 'sometimes|required|numeric|min:0',
             'production' => 'nullable|numeric|min:0',
             'rejected_meters' => 'nullable|numeric|min:0',
@@ -74,17 +80,20 @@ class LoomEntryController extends Controller
             'remarks' => 'nullable|string',
         ]);
 
-        if (array_key_exists('production', $validated) && !array_key_exists('meters_produced', $validated)) {
+        if (array_key_exists('production', $validated) && ! array_key_exists('meters_produced', $validated)) {
             $validated['meters_produced'] = $validated['production'];
         }
+        unset($validated['production']);
 
         $loomEntry->update($validated);
+
         return response()->json(['data' => new LoomEntryResource($loomEntry->fresh(['loom', 'weaver1', 'weaver2']))]);
     }
 
     public function destroy(LoomEntry $loomEntry): JsonResponse
     {
         $loomEntry->delete();
+
         return response()->json(['message' => 'Loom entry deleted successfully']);
     }
 }

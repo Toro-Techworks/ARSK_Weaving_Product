@@ -3,6 +3,8 @@ import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, LogOut, User, Menu } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { NotificationBell } from './NotificationBell';
+import { useActivityBroadcast } from '../hooks/useActivityBroadcast';
 import { getIcon, getIconForMenu } from './iconsMap';
 import { AnimatedPage } from './AnimatedPage';
 import { defaultTransition } from '../utils/motion';
@@ -197,6 +199,8 @@ export default function Layout({ children }) {
   const location = useLocation();
   const isLogin = location.pathname === '/login';
 
+  useActivityBroadcast(user?.role === 'super_admin');
+
   // Close mobile sidebar on route change
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -363,6 +367,7 @@ export default function Layout({ children }) {
             </h1>
             <p className="text-xs text-slate-500 truncate hidden sm:block">ARSK ERP · Operations</p>
           </div>
+          <NotificationBell />
         </header>
         <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8 min-h-0">
           <AnimatePresence mode="wait">

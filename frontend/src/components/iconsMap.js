@@ -22,6 +22,8 @@ import {
   Key,
   Menu,
   Activity,
+  Settings,
+  Bell,
 } from 'lucide-react';
 
 /** Spec: ReceiptText — not in all lucide-react versions; Receipt is the closest match */
@@ -52,6 +54,8 @@ export const iconMap = {
   Receipt,
   Menu,
   Activity,
+  Settings,
+  Bell,
   // Legacy / alias names still stored in DB
   FileBarChart: BarChart3,
   Cog: Settings2,
@@ -69,7 +73,6 @@ export const MENU_KEY_TO_ICON_NAME = {
   loom_production: 'Factory',
   'loom_production.looms': 'Factory',
   'loom_production.daily': 'CalendarCheck',
-  'loom_production.report': 'BarChart3',
 
   payments: 'TrendingUp',
   expenses: 'TrendingDown',
@@ -90,6 +93,7 @@ export const MENU_KEY_TO_ICON_NAME = {
   'admin.permissions': 'Lock',
   'admin.weaving_units': 'Factory',
   'admin.weavers': 'Users',
+  'admin.master_settings': 'Settings',
 
   settings: 'User',
   'settings.profile': 'User',
