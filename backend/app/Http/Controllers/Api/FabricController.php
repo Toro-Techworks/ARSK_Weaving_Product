@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Fabric;
+use App\Models\GenericCode;
 use App\Models\YarnOrder;
+use App\Support\SlNumberFormatter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -24,7 +26,13 @@ class FabricController extends Controller
             ->orderBy('id')
             ->paginate($perPage);
 
-        return $this->paginatedResponse($fabrics, $fabrics->items());
+        $seqMap = SlNumberFormatter::sequenceByFabricIdForYarnOrder((int) $yarnOrderId);
+        $data = array_map(
+            fn (Fabric $f) => SlNumberFormatter::fabricToArrayWithSlNumber($f, $seqMap),
+            $fabrics->items()
+        );
+
+        return $this->paginatedResponse($fabrics, $data);
     }
 
     /**
@@ -35,7 +43,9 @@ class FabricController extends Controller
     {
         $validated = $request->validate([
             'yarn_order_id' => 'required|exists:yarn_orders,id',
+            'loom_id' => 'nullable|exists:looms,id',
             'description' => 'nullable|string|max:255',
+            'colour' => GenericCode::validationRulePlusSeparatedMaster('colour', false, 512),
             'design' => 'nullable|string|max:255',
             'weave_technique' => 'nullable|string|max:255',
             'warp_count' => 'nullable|string|max:64',
@@ -47,13 +57,18 @@ class FabricController extends Controller
             'con_on_loom_reed' => 'nullable|numeric',
             'con_on_loom_pick' => 'nullable|numeric',
             'gsm_required' => 'nullable|numeric',
+            'actual_gsm' => 'nullable|numeric',
             'required_width' => 'nullable|numeric',
             'po_quantity' => 'nullable|numeric',
             'price_per_metre' => 'nullable|numeric',
             'total_meters_produced' => 'nullable|numeric|min:0',
         ]);
         $fabric = Fabric::create($validated);
-        return response()->json(['data' => $fabric], 201);
+        SlNumberFormatter::refreshSlNumbersForYarnOrder((int) $fabric->yarn_order_id);
+        $fabric->refresh();
+        $fabric->load('yarnOrder');
+
+        return response()->json(['data' => SlNumberFormatter::fabricToArrayWithSlNumber($fabric)], 201);
     }
 
     /**
@@ -63,7 +78,9 @@ class FabricController extends Controller
     public function update(Request $request, Fabric $fabric): JsonResponse
     {
         $validated = $request->validate([
+            'loom_id' => 'nullable|exists:looms,id',
             'description' => 'nullable|string|max:255',
+            'colour' => GenericCode::validationRulePlusSeparatedMaster('colour', false, 512),
             'design' => 'nullable|string|max:255',
             'weave_technique' => 'nullable|string|max:255',
             'warp_count' => 'nullable|string|max:64',
@@ -75,13 +92,17 @@ class FabricController extends Controller
             'con_on_loom_reed' => 'nullable|numeric',
             'con_on_loom_pick' => 'nullable|numeric',
             'gsm_required' => 'nullable|numeric',
+            'actual_gsm' => 'nullable|numeric',
             'required_width' => 'nullable|numeric',
             'po_quantity' => 'nullable|numeric',
             'price_per_metre' => 'nullable|numeric',
             'total_meters_produced' => 'nullable|numeric|min:0',
         ]);
         $fabric->update($validated);
-        return response()->json(['data' => $fabric->fresh()]);
+        $fresh = $fabric->fresh();
+        $fresh->load('yarnOrder');
+
+        return response()->json(['data' => SlNumberFormatter::fabricToArrayWithSlNumber($fresh)]);
     }
 
     /**
@@ -91,6 +112,7 @@ class FabricController extends Controller
     public function destroy(Fabric $fabric): JsonResponse
     {
         $fabric->delete();
+
         return response()->json(['message' => 'Deleted']);
     }
 
@@ -105,6 +127,7 @@ class FabricController extends Controller
             'yarn_order_id' => 'required|exists:yarn_orders,id',
             'fabrics' => 'required|array',
             'fabrics.*.description' => 'nullable|string|max:255',
+            'fabrics.*.colour' => GenericCode::validationRulePlusSeparatedMaster('colour', false, 512),
             'fabrics.*.design' => 'nullable|string|max:255',
             'fabrics.*.weave_technique' => 'nullable|string|max:255',
             'fabrics.*.warp_count' => 'nullable|string|max:64',
@@ -116,6 +139,7 @@ class FabricController extends Controller
             'fabrics.*.con_on_loom_reed' => 'nullable|numeric',
             'fabrics.*.con_on_loom_pick' => 'nullable|numeric',
             'fabrics.*.gsm_required' => 'nullable|numeric',
+            'fabrics.*.actual_gsm' => 'nullable|numeric',
             'fabrics.*.required_width' => 'nullable|numeric',
             'fabrics.*.po_quantity' => 'nullable|numeric',
             'fabrics.*.price_per_metre' => 'nullable|numeric',
@@ -126,29 +150,44 @@ class FabricController extends Controller
         Fabric::where('yarn_order_id', $yarnOrderId)->delete();
 
         $created = [];
-        foreach ($validated['fabrics'] as $row) {
-            $fabric = Fabric::create([
-                'yarn_order_id' => $yarnOrderId,
-                'description' => $row['description'] ?? null,
-                'design' => $row['design'] ?? null,
-                'weave_technique' => $row['weave_technique'] ?? null,
-                'warp_count' => $row['warp_count'] ?? null,
-                'warp_content' => $row['warp_content'] ?? null,
-                'weft_count' => $row['weft_count'] ?? null,
-                'weft_content' => $row['weft_content'] ?? null,
-                'con_final_reed' => isset($row['con_final_reed']) ? (float) $row['con_final_reed'] : null,
-                'con_final_pick' => isset($row['con_final_pick']) ? (float) $row['con_final_pick'] : null,
-                'con_on_loom_reed' => isset($row['con_on_loom_reed']) ? (float) $row['con_on_loom_reed'] : null,
-                'con_on_loom_pick' => isset($row['con_on_loom_pick']) ? (float) $row['con_on_loom_pick'] : null,
-                'gsm_required' => isset($row['gsm_required']) ? (float) $row['gsm_required'] : null,
-                'required_width' => isset($row['required_width']) ? (float) $row['required_width'] : null,
-                'po_quantity' => isset($row['po_quantity']) ? (float) $row['po_quantity'] : null,
-                'price_per_metre' => isset($row['price_per_metre']) ? (float) $row['price_per_metre'] : null,
-                'total_meters_produced' => isset($row['total_meters_produced']) ? (float) $row['total_meters_produced'] : 0,
-            ]);
-            $created[] = $fabric;
-        }
+        Fabric::withoutEvents(function () use ($validated, $yarnOrderId, &$created) {
+            foreach ($validated['fabrics'] as $row) {
+                $fabric = Fabric::create([
+                    'yarn_order_id' => $yarnOrderId,
+                    'description' => $row['description'] ?? null,
+                    'colour' => isset($row['colour']) && $row['colour'] !== '' ? $row['colour'] : null,
+                    'design' => $row['design'] ?? null,
+                    'weave_technique' => $row['weave_technique'] ?? null,
+                    'warp_count' => $row['warp_count'] ?? null,
+                    'warp_content' => $row['warp_content'] ?? null,
+                    'weft_count' => $row['weft_count'] ?? null,
+                    'weft_content' => $row['weft_content'] ?? null,
+                    'con_final_reed' => isset($row['con_final_reed']) ? (float) $row['con_final_reed'] : null,
+                    'con_final_pick' => isset($row['con_final_pick']) ? (float) $row['con_final_pick'] : null,
+                    'con_on_loom_reed' => isset($row['con_on_loom_reed']) ? (float) $row['con_on_loom_reed'] : null,
+                    'con_on_loom_pick' => isset($row['con_on_loom_pick']) ? (float) $row['con_on_loom_pick'] : null,
+                    'gsm_required' => isset($row['gsm_required']) ? (float) $row['gsm_required'] : null,
+                    'actual_gsm' => isset($row['actual_gsm']) ? (float) $row['actual_gsm'] : null,
+                    'required_width' => isset($row['required_width']) ? (float) $row['required_width'] : null,
+                    'po_quantity' => isset($row['po_quantity']) ? (float) $row['po_quantity'] : null,
+                    'price_per_metre' => isset($row['price_per_metre']) ? (float) $row['price_per_metre'] : null,
+                    'total_meters_produced' => isset($row['total_meters_produced']) ? (float) $row['total_meters_produced'] : 0,
+                ]);
+                $created[] = $fabric;
+            }
+        });
 
-        return response()->json(['data' => $created, 'message' => count($created) . ' fabric(s) saved'], 201);
+        log_audit('fabrics', 'update', $yarnOrderId, 'Bulk replaced '.count($created).' fabric row(s) for order #'.$yarnOrderId);
+
+        SlNumberFormatter::refreshSlNumbersForYarnOrder($yarnOrderId);
+
+        $seqMap = SlNumberFormatter::sequenceByFabricIdForYarnOrder($yarnOrderId);
+        $data = Fabric::where('yarn_order_id', $yarnOrderId)
+            ->orderBy('id')
+            ->get()
+            ->map(fn (Fabric $f) => SlNumberFormatter::fabricToArrayWithSlNumber($f, $seqMap))
+            ->all();
+
+        return response()->json(['data' => $data, 'message' => count($data).' fabric(s) saved'], 201);
     }
 }

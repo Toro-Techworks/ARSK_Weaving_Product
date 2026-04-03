@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
+use App\Models\GenericCode;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -28,6 +29,7 @@ class UserController extends Controller
         if ($u->isAdmin()) {
             return $roleName === 'user';
         }
+
         return false;
     }
 
@@ -38,14 +40,15 @@ class UserController extends Controller
             return true;
         }
         if ($u->isAdmin()) {
-            return !$target->isSuperAdmin();
+            return ! $target->isSuperAdmin();
         }
+
         return false;
     }
 
     public function index(Request $request): JsonResponse
     {
-        if (!$this->canAccessAdminPanel($request)) {
+        if (! $this->canAccessAdminPanel($request)) {
             return response()->json(['message' => 'Forbidden. Admin access required.'], 403);
         }
 
@@ -73,7 +76,7 @@ class UserController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        if (!$this->canAccessAdminPanel($request)) {
+        if (! $this->canAccessAdminPanel($request)) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -85,7 +88,7 @@ class UserController extends Controller
             'status' => 'sometimes|in:active,disabled',
         ]);
 
-        if (!$this->canCreateRole($request, (int) $validated['role_id'])) {
+        if (! $this->canCreateRole($request, (int) $validated['role_id'])) {
             return response()->json(['message' => 'You are not allowed to create this role.'], 403);
         }
 
@@ -93,32 +96,40 @@ class UserController extends Controller
         $validated['status'] = $validated['status'] ?? User::STATUS_ACTIVE;
         $user = User::create($validated);
 
+        log_audit(
+            'users',
+            'create',
+            $user->id,
+            \App\Support\RegistersActivityLogListeners::description('users', $user->id, 'created')
+        );
+
         return response()->json(['data' => new UserResource($user)], 201);
     }
 
     public function show(Request $request, User $user): JsonResponse
     {
-        if (!$this->canAccessAdminPanel($request) || !$this->canModifyUser($request, $user)) {
+        if (! $this->canAccessAdminPanel($request) || ! $this->canModifyUser($request, $user)) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
+
         return response()->json(['data' => new UserResource($user)]);
     }
 
     public function update(Request $request, User $user): JsonResponse
     {
-        if (!$this->canAccessAdminPanel($request) || !$this->canModifyUser($request, $user)) {
+        if (! $this->canAccessAdminPanel($request) || ! $this->canModifyUser($request, $user)) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
-            'username' => 'sometimes|required|string|min:4|max:255|unique:users,username,' . $user->id . '|regex:/^\S+$/',
+            'username' => 'sometimes|required|string|min:4|max:255|unique:users,username,'.$user->id.'|regex:/^\S+$/',
             'password' => ['nullable', 'confirmed', Password::defaults()],
             'role_id' => 'sometimes|required|exists:roles,id',
-            'status' => 'sometimes|in:active,disabled',
+            'status' => GenericCode::sometimesValidationRule('user_status'),
         ]);
 
-        if (isset($validated['role_id']) && !$this->canCreateRole($request, (int) $validated['role_id'])) {
+        if (isset($validated['role_id']) && ! $this->canCreateRole($request, (int) $validated['role_id'])) {
             return response()->json(['message' => 'You cannot assign this role.'], 403);
         }
 
@@ -129,13 +140,20 @@ class UserController extends Controller
             }
         }
 
-        if (!empty($validated['password'])) {
+        if (! empty($validated['password'])) {
             $validated['password'] = Hash::make($validated['password']);
         } else {
             unset($validated['password']);
         }
 
         $user->update($validated);
+
+        log_audit(
+            'users',
+            'update',
+            $user->id,
+            \App\Support\RegistersActivityLogListeners::description('users', $user->id, 'updated')
+        );
 
         return response()->json(['data' => new UserResource($user->fresh())]);
     }
@@ -145,16 +163,24 @@ class UserController extends Controller
         if ($user->id === $request->user()->id) {
             return response()->json(['message' => 'Cannot delete your own account.'], 422);
         }
-        if (!$this->canAccessAdminPanel($request) || !$this->canModifyUser($request, $user)) {
+        if (! $this->canAccessAdminPanel($request) || ! $this->canModifyUser($request, $user)) {
             return response()->json(['message' => 'Forbidden. Cannot delete this user.'], 403);
         }
+        $deletedId = $user->id;
         $user->delete();
+        log_audit(
+            'users',
+            'delete',
+            $deletedId,
+            \App\Support\RegistersActivityLogListeners::description('users', $deletedId, 'deleted')
+        );
+
         return response()->json(['message' => 'User deleted successfully']);
     }
 
     public function resetPassword(Request $request, User $user): JsonResponse
     {
-        if (!$this->canAccessAdminPanel($request) || !$this->canModifyUser($request, $user)) {
+        if (! $this->canAccessAdminPanel($request) || ! $this->canModifyUser($request, $user)) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -163,6 +189,8 @@ class UserController extends Controller
         ]);
 
         $user->update(['password' => Hash::make($validated['password'])]);
+
+        log_audit('users', 'update', $user->id, "User #{$user->id} password was reset");
 
         return response()->json(['message' => 'Password reset successfully.', 'data' => new UserResource($user->fresh())]);
     }

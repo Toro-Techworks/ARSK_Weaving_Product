@@ -13,6 +13,7 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory, Notifiable;
 
     const STATUS_ACTIVE = 'active';
+
     const STATUS_DISABLED = 'disabled';
 
     const STATUSES = [
@@ -37,6 +38,7 @@ class User extends Authenticatable
     {
         return [
             'password' => 'hashed',
+            'activity_logs_last_read_at' => 'datetime',
         ];
     }
 
@@ -52,6 +54,7 @@ class User extends Authenticatable
             return $rel->role_name ?? null;
         }
         $this->loadMissing('role');
+
         return $this->role?->role_name;
     }
 

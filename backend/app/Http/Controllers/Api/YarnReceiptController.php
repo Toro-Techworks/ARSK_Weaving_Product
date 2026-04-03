@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\GenericCode;
 use App\Models\YarnReceipt;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -30,11 +31,10 @@ class YarnReceiptController extends Controller
             'dc_no' => 'nullable|string|max:64',
             'vehicle_details' => 'nullable|string|max:255',
             'date' => 'nullable|date',
-            'yarn' => 'nullable|string|max:128',
-            'count' => 'nullable|string|max:64',
-            'content' => 'nullable|string|max:128',
-            'colour' => 'nullable|string|max:64',
-            'type' => 'nullable|string|in:Cone,Hank',
+            'count' => GenericCode::validationRule('yarn_receipt_count', false, GenericCode::DROPDOWN_TYPE_MASTER, 64),
+            'content' => GenericCode::validationRule('yarn_receipt_content', false, GenericCode::DROPDOWN_TYPE_MASTER, 128),
+            'colour' => GenericCode::validationRule('yarn_colour', false, GenericCode::DROPDOWN_TYPE_MASTER, 64),
+            'type' => GenericCode::validationRule('yarn_receipt_type'),
             'no_of_bags' => 'nullable|integer|min:0',
             'bundles' => 'nullable|integer|min:0',
             'knots' => 'nullable|integer|min:0',
@@ -42,6 +42,7 @@ class YarnReceiptController extends Controller
             'gross_weight' => 'nullable|numeric|min:0',
         ]);
         $receipt = YarnReceipt::create($validated);
+
         return response()->json(['data' => $receipt], 201);
     }
 
@@ -57,11 +58,10 @@ class YarnReceiptController extends Controller
             'dc_no' => 'nullable|string|max:64',
             'vehicle_details' => 'nullable|string|max:255',
             'date' => 'nullable|date',
-            'yarn' => 'nullable|string|max:128',
-            'count' => 'nullable|string|max:64',
-            'content' => 'nullable|string|max:128',
-            'colour' => 'nullable|string|max:64',
-            'type' => 'nullable|string|in:Cone,Hank',
+            'count' => GenericCode::validationRule('yarn_receipt_count', false, GenericCode::DROPDOWN_TYPE_MASTER, 64),
+            'content' => GenericCode::validationRule('yarn_receipt_content', false, GenericCode::DROPDOWN_TYPE_MASTER, 128),
+            'colour' => GenericCode::validationRule('yarn_colour', false, GenericCode::DROPDOWN_TYPE_MASTER, 64),
+            'type' => GenericCode::validationRule('yarn_receipt_type'),
             'no_of_bags' => 'nullable|integer|min:0',
             'bundles' => 'nullable|integer|min:0',
             'knots' => 'nullable|integer|min:0',
@@ -69,18 +69,20 @@ class YarnReceiptController extends Controller
             'gross_weight' => 'nullable|numeric|min:0',
         ]);
         $yarnReceipt->update($validated);
+
         return response()->json(['data' => $yarnReceipt->fresh()]);
     }
 
     public function destroy(YarnReceipt $yarnReceipt): JsonResponse
     {
         $yarnReceipt->delete();
+
         return response()->json(['message' => 'Deleted']);
     }
 
     /**
      * Replace all yarn receipts for an order with the given list (bulk sync).
-     * Body: { yarn_order_id: int, yarn_receipts: [{ dc_no, vehicle_details, date, yarn, ... }, ...] }
+     * Body: { yarn_order_id: int, yarn_receipts: [{ dc_no, vehicle_details, date, count, ... }, ...] }
      */
     public function bulkStore(Request $request): JsonResponse
     {
@@ -90,11 +92,10 @@ class YarnReceiptController extends Controller
             'yarn_receipts.*.dc_no' => 'nullable|string|max:64',
             'yarn_receipts.*.vehicle_details' => 'nullable|string|max:255',
             'yarn_receipts.*.date' => 'nullable|date',
-            'yarn_receipts.*.yarn' => 'nullable|string|max:128',
-            'yarn_receipts.*.count' => 'nullable|string|max:64',
-            'yarn_receipts.*.content' => 'nullable|string|max:128',
-            'yarn_receipts.*.colour' => 'nullable|string|max:64',
-            'yarn_receipts.*.type' => 'nullable|string|in:Cone,Hank',
+            'yarn_receipts.*.count' => GenericCode::validationRule('yarn_receipt_count', false, GenericCode::DROPDOWN_TYPE_MASTER, 64),
+            'yarn_receipts.*.content' => GenericCode::validationRule('yarn_receipt_content', false, GenericCode::DROPDOWN_TYPE_MASTER, 128),
+            'yarn_receipts.*.colour' => GenericCode::validationRule('yarn_colour', false, GenericCode::DROPDOWN_TYPE_MASTER, 64),
+            'yarn_receipts.*.type' => GenericCode::validationRule('yarn_receipt_type'),
             'yarn_receipts.*.no_of_bags' => 'nullable|integer|min:0',
             'yarn_receipts.*.bundles' => 'nullable|integer|min:0',
             'yarn_receipts.*.knots' => 'nullable|integer|min:0',
@@ -108,26 +109,29 @@ class YarnReceiptController extends Controller
         YarnReceipt::where('yarn_order_id', $yarnOrderId)->delete();
 
         $created = [];
-        foreach ($rows as $row) {
-            $receipt = YarnReceipt::create([
-                'yarn_order_id' => $yarnOrderId,
-                'dc_no' => $row['dc_no'] ?? null,
-                'vehicle_details' => $row['vehicle_details'] ?? null,
-                'date' => $row['date'] ?? null,
-                'yarn' => $row['yarn'] ?? null,
-                'count' => $row['count'] ?? null,
-                'content' => $row['content'] ?? null,
-                'colour' => $row['colour'] ?? null,
-                'type' => $row['type'] ?? null,
-                'no_of_bags' => isset($row['no_of_bags']) ? (int) $row['no_of_bags'] : null,
-                'bundles' => isset($row['bundles']) ? (int) $row['bundles'] : null,
-                'knots' => isset($row['knots']) ? (int) $row['knots'] : null,
-                'net_weight' => isset($row['net_weight']) ? (float) $row['net_weight'] : null,
-                'gross_weight' => isset($row['gross_weight']) ? (float) $row['gross_weight'] : null,
-            ]);
-            $created[] = $receipt;
-        }
+        YarnReceipt::withoutEvents(function () use ($rows, $yarnOrderId, &$created) {
+            foreach ($rows as $row) {
+                $receipt = YarnReceipt::create([
+                    'yarn_order_id' => $yarnOrderId,
+                    'dc_no' => $row['dc_no'] ?? null,
+                    'vehicle_details' => $row['vehicle_details'] ?? null,
+                    'date' => $row['date'] ?? null,
+                    'count' => $row['count'] ?? null,
+                    'content' => $row['content'] ?? null,
+                    'colour' => $row['colour'] ?? null,
+                    'type' => $row['type'] ?? null,
+                    'no_of_bags' => isset($row['no_of_bags']) ? (int) $row['no_of_bags'] : null,
+                    'bundles' => isset($row['bundles']) ? (int) $row['bundles'] : null,
+                    'knots' => isset($row['knots']) ? (int) $row['knots'] : null,
+                    'net_weight' => isset($row['net_weight']) ? (float) $row['net_weight'] : null,
+                    'gross_weight' => isset($row['gross_weight']) ? (float) $row['gross_weight'] : null,
+                ]);
+                $created[] = $receipt;
+            }
+        });
 
-        return response()->json(['data' => $created, 'message' => count($created) . ' receipt(s) saved'], 201);
+        log_audit('yarn_receipts', 'update', $yarnOrderId, 'Bulk replaced '.count($created).' yarn receipt(s) for order #'.$yarnOrderId);
+
+        return response()->json(['data' => $created, 'message' => count($created).' receipt(s) saved'], 201);
     }
 }

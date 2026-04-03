@@ -11,11 +11,8 @@ import { useRefreshOnSameMenuClick } from '../hooks/useRefreshOnSameMenuClick';
 import { TablePagination } from '../components/TablePagination';
 import { normalizePaginatedResponse } from '../utils/pagination';
 import api from '../api/client';
-
-const STATUS_OPTIONS = [
-  { value: 'Active', label: 'Active' },
-  { value: 'Inactive', label: 'Inactive' },
-];
+import { GENERIC_CODE_TYPES, FALLBACK_ACTIVE_INACTIVE } from '../constants/genericCodeTypes';
+import { useGenericCode } from '../hooks/useGenericCode';
 
 export function WeaverList() {
   const { canEdit } = usePagePermission();
@@ -146,6 +143,9 @@ function weaverRowToForm(weaver) {
 }
 
 function WeaverAddModal({ onClose, onSuccess }) {
+  const { options: statusOptions } = useGenericCode(GENERIC_CODE_TYPES.ACTIVE_INACTIVE, {
+    fallback: FALLBACK_ACTIVE_INACTIVE,
+  });
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(weaverRowToForm());
 
@@ -209,10 +209,10 @@ function WeaverAddModal({ onClose, onSuccess }) {
             <div className={fieldClass}>
               <FormSelect
                 label="Status"
-                options={STATUS_OPTIONS}
+                options={statusOptions}
                 isClearable={false}
                 value={form.status}
-                onChange={(e) => setForm({ ...form, status: e.target.value || 'Active' })}
+                onChange={(e) => setForm({ ...form, status: e.target.value || statusOptions[0]?.value || 'Active' })}
                 className="!mb-0"
               />
             </div>
@@ -233,6 +233,9 @@ function WeaverAddModal({ onClose, onSuccess }) {
 }
 
 function WeaverEditModal({ weaver, onClose, onSuccess }) {
+  const { options: statusOptions } = useGenericCode(GENERIC_CODE_TYPES.ACTIVE_INACTIVE, {
+    fallback: FALLBACK_ACTIVE_INACTIVE,
+  });
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(() => weaverRowToForm(weaver));
 
@@ -296,10 +299,10 @@ function WeaverEditModal({ weaver, onClose, onSuccess }) {
             <div className={fieldClass}>
               <FormSelect
                 label="Status"
-                options={STATUS_OPTIONS}
+                options={statusOptions}
                 isClearable={false}
                 value={form.status}
-                onChange={(e) => setForm({ ...form, status: e.target.value || 'Active' })}
+                onChange={(e) => setForm({ ...form, status: e.target.value || statusOptions[0]?.value || 'Active' })}
                 className="!mb-0"
               />
             </div>

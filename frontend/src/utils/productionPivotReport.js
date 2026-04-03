@@ -4,7 +4,9 @@
  * No React imports — safe to test and memoize.
  */
 
-/** @typedef {{ date: string, loom_id: number|string, loom_number?: string, order_id?: number|string, order_from?: string|null, customer?: string|null, fabric_type?: string|null, shift?: string|null, production_meters?: number|string, efficiency_percentage?: number|string|null, weaver1_id?: number|string|null, weaver2_id?: number|string|null, weaver1_name?: string|null, weaver2_name?: string|null }} ProductionReportRow */
+import { formatOrderId } from './formatOrderId';
+
+/** @typedef {{ date: string, loom_id: number|string, loom_number?: string, order_id?: number|string, order_from?: string|null, customer?: string|null, fabric_type?: string|null, fabric_sl?: string|null, shift?: string|null, production_meters?: number|string, efficiency_percentage?: number|string|null, weaver1_id?: number|string|null, weaver2_id?: number|string|null, weaver1_name?: string|null, weaver2_name?: string|null }} ProductionReportRow */
 
 /** @typedef {{ key: string, date: string, shift: 'Day' | 'Night' }} DateShiftColumn */
 
@@ -16,14 +18,6 @@ const SHIFT_COLUMNS = /** @type {const} */ (['Day', 'Night']);
  */
 export function makeDateShiftSlotKey(date, shift) {
   return `${date}|${shift}`;
-}
-
-/**
- * @param {string} loomId
- * @param {string} slotKey
- */
-export function matrixDraftKey(loomId, slotKey) {
-  return `${loomId}|${slotKey}`;
 }
 
 /**
@@ -40,24 +34,22 @@ export function canonicalizeShiftForPivot(raw) {
 }
 
 /**
- * Party label from yarn order: company (order_from), then customer, then design, then order id.
+ * Display label for order (formatted AEWU… id) from API row.
  * @param {ProductionReportRow} r
  */
-export function partyLabelFromProductionRow(r) {
-  const trim = (s) => (s != null && String(s).trim() ? String(s).trim() : '');
-  const company = trim(r.order_from);
-  const customer = trim(r.customer);
-  const fabric = trim(r.fabric_type);
-  const oid = r.order_id != null && r.order_id !== '' ? String(r.order_id) : '';
+export function orderLabelFromProductionRow(r) {
+  const id = r.order_id;
+  if (id == null || id === '') return '';
+  return formatOrderId(id, r.date);
+}
 
-  if (company && customer && company !== customer) {
-    return `${company} — ${customer}`;
-  }
-  if (company) return company;
-  if (customer) return customer;
-  if (fabric) return fabric;
-  if (oid) return `Order ${oid}`;
-  return '';
+/**
+ * SL numbers for production planning fabric lines (comma-separated), from API `fabric_sl`.
+ * @param {ProductionReportRow} r
+ */
+export function slLabelFromProductionRow(r) {
+  const s = r.fabric_sl != null ? String(r.fabric_sl).trim() : '';
+  return s;
 }
 
 /**
@@ -177,51 +169,6 @@ export function buildGlobalWeaverSlotLabels(rows, dateShiftColumns) {
 }
 
 /**
- * Apply inline matrix draft (party text + shift meters) and refresh summaries.
- * @param {ReturnType<typeof buildProductionPivotBundle>} bundle
- * @param {{ party: Record<string, string>, meters: Record<string, string> }} draft
- */
-export function applyMatrixDraft(bundle, draft) {
-  if (!bundle.dates.length) return bundle;
-  const partyDraft = draft?.party || {};
-  const metersDraft = draft?.meters || {};
-  if (Object.keys(partyDraft).length === 0 && Object.keys(metersDraft).length === 0) {
-    return bundle;
-  }
-
-  const loomBlocks = bundle.loomBlocks.map((block) => {
-    const lid = String(block.loomId);
-    /** @type {Record<string, string>} */
-    const party = { ...block.party };
-    /** @type {Record<string, number|null>} */
-    const shiftMtr = { ...block.shiftMtr };
-
-    for (const { key } of bundle.dateShiftColumns) {
-      const dk = matrixDraftKey(lid, key);
-      if (partyDraft[dk] !== undefined) party[key] = partyDraft[dk];
-      const rawM = metersDraft[dk];
-      if (rawM !== undefined && rawM !== '') {
-        const n = Number(rawM);
-        shiftMtr[key] = Number.isFinite(n) ? round2(n) : null;
-      }
-    }
-
-    const dateTotal = computeDateTotalsFromSlots(bundle.dates, shiftMtr);
-
-    return {
-      ...block,
-      party,
-      shiftMtr,
-      dateTotal,
-    };
-  });
-
-  const model = { dates: bundle.dates, dateShiftColumns: bundle.dateShiftColumns, loomBlocks };
-  const summaries = computeProductionSummaries(model);
-  return { ...bundle, loomBlocks, summaries };
-}
-
-/**
  * @param {ProductionReportRow[]} rows
  * @param {string[]} dates
  * @param {{ id: number|string, loom_number?: string }[] | null | undefined} allLooms — when set, every listed loom gets a block (empty cells if no production)
@@ -231,7 +178,7 @@ export function transformProductionToPivotModel(rows, dates, allLooms = null) {
   const dateShiftColumns = buildDateShiftColumns(dates);
   const slotSet = new Set(dateShiftColumns.map((c) => c.key));
 
-  /** @type {Map<string|number, { loom_number: string, bySlot: Map<string, { parties: Set<string>, meters: number }> }>} */
+  /** @type {Map<string|number, { loom_number: string, bySlot: Map<string, { orderLabels: Set<string>, slLabels: Set<string>, meters: number }> }>} */
   const byLoom = new Map();
 
   for (const r of rows || []) {
@@ -252,11 +199,13 @@ export function transformProductionToPivotModel(rows, dates, allLooms = null) {
     }
     const loom = byLoom.get(lid);
     if (!loom.bySlot.has(slotKey)) {
-      loom.bySlot.set(slotKey, { parties: new Set(), meters: 0 });
+      loom.bySlot.set(slotKey, { orderLabels: new Set(), slLabels: new Set(), meters: 0 });
     }
     const cell = loom.bySlot.get(slotKey);
-    const party = partyLabelFromProductionRow(r);
-    if (party) cell.parties.add(party);
+    const ol = orderLabelFromProductionRow(r);
+    if (ol) cell.orderLabels.add(ol);
+    const sl = slLabelFromProductionRow(r);
+    if (sl) cell.slLabels.add(sl);
     cell.meters += Number(r.production_meters ?? 0) || 0;
   }
 
@@ -305,18 +254,22 @@ export function transformProductionToPivotModel(rows, dates, allLooms = null) {
   const loomBlocks = loomIds.map((loomId) => {
     const { loom_number, bySlot } = byLoom.get(loomId);
     /** @type {Record<string, string>} */
-    const partyVals = {};
+    const orderIdVals = {};
+    /** @type {Record<string, string>} */
+    const slNoVals = {};
     /** @type {Record<string, number|null>} */
     const shiftMtrVals = {};
 
     for (const { key } of dateShiftColumns) {
       const agg = bySlot.get(key);
       if (!agg) {
-        partyVals[key] = '';
+        orderIdVals[key] = '';
+        slNoVals[key] = '';
         shiftMtrVals[key] = null;
         continue;
       }
-      partyVals[key] = Array.from(agg.parties).sort().join(', ') || '';
+      orderIdVals[key] = Array.from(agg.orderLabels).sort().join(', ') || '';
+      slNoVals[key] = Array.from(agg.slLabels).sort().join(', ') || '';
       shiftMtrVals[key] = agg.meters > 0 ? round2(agg.meters) : null;
     }
 
@@ -325,7 +278,8 @@ export function transformProductionToPivotModel(rows, dates, allLooms = null) {
     return {
       loomId,
       loomNumber: loom_number,
-      party: partyVals,
+      orderId: orderIdVals,
+      slNo: slNoVals,
       shiftMtr: shiftMtrVals,
       dateTotal: dateTotalVals,
     };

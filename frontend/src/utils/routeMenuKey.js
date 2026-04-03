@@ -10,7 +10,6 @@ export const pathToMenuKey = {
   '/orders/:id/edit': 'orders',
   '/loom-production/looms': 'loom_production.looms',
   '/loom-production/daily': 'loom_production.daily',
-  '/loom-production/report': 'loom_production.report',
   '/payments': 'payments',
   '/expenses': 'expenses',
   '/reports/order-summary': 'reports.order_summary',
@@ -23,6 +22,7 @@ export const pathToMenuKey = {
   '/admin/permissions': 'admin.permissions',
   '/admin/weaving-units': 'admin.weaving_units',
   '/admin/weavers': 'admin.weavers',
+  '/admin/master-settings': 'admin.master_settings',
   '/settings/profile': 'settings.profile',
 };
 

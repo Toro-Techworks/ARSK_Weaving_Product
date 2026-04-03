@@ -1,4 +1,8 @@
 export function formatOrderId(orderOrId, dateLike) {
+  if (typeof orderOrId === 'object' && orderOrId && orderOrId.display_order_id) {
+    return String(orderOrId.display_order_id);
+  }
+
   const id = typeof orderOrId === 'object' && orderOrId ? orderOrId.id : orderOrId;
   if (id == null || id === '') return '';
 

@@ -10,11 +10,14 @@ import { usePagePermission } from '../hooks/usePagePermission';
 import { useRefreshOnSameMenuClick } from '../hooks/useRefreshOnSameMenuClick';
 import { TablePagination } from '../components/TablePagination';
 import { normalizePaginatedResponse } from '../utils/pagination';
-
-const CATEGORIES = ['Electricity', 'Labour', 'Maintenance', 'Yarn'];
+import { GENERIC_CODE_TYPES, FALLBACK_EXPENSE_CATEGORY_OPTIONS } from '../constants/genericCodeTypes';
+import { useGenericCode } from '../hooks/useGenericCode';
 
 export function ExpenseList() {
   const { canEdit } = usePagePermission();
+  const { options: categoryOptions } = useGenericCode(GENERIC_CODE_TYPES.EXPENSE_CATEGORY, {
+    fallback: FALLBACK_EXPENSE_CATEGORY_OPTIONS,
+  });
   const [data, setData] = useState([]);
   const [meta, setMeta] = useState({ current_page: 1, last_page: 1, per_page: 10, total: 0 });
   const [page, setPage] = useState(1);
@@ -60,7 +63,7 @@ export function ExpenseList() {
       </div>
       <Card>
         <div className="mb-4">
-          <FormSelect options={[{ value: '', label: 'All categories' }, ...CATEGORIES.map((c) => ({ value: c, label: c }))]} value={category} onChange={(e) => { setCategory(e.target.value); setPage(1); }} />
+          <FormSelect options={[{ value: '', label: 'All categories' }, ...categoryOptions]} value={category} onChange={(e) => { setCategory(e.target.value); setPage(1); }} />
         </div>
         <Table columns={columns} data={data} isLoading={loading} />
         {(meta.total > 0 || page > 1) && (
@@ -86,6 +89,9 @@ export function ExpenseList() {
 }
 
 function ExpenseAddModal({ onClose, onSuccess }) {
+  const { options: categorySelectOptions } = useGenericCode(GENERIC_CODE_TYPES.EXPENSE_CATEGORY, {
+    fallback: FALLBACK_EXPENSE_CATEGORY_OPTIONS,
+  });
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ category: 'Electricity', amount: '', date: new Date().toISOString().slice(0, 10), notes: '' });
 
@@ -113,7 +119,7 @@ function ExpenseAddModal({ onClose, onSuccess }) {
           <p className="text-sm text-gray-600 -mt-2">Record an expense by category and amount.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className={fieldClass}>
-              <FormSelect label="Category" options={CATEGORIES.map((c) => ({ value: c, label: c }))} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="!mb-0" />
+              <FormSelect label="Category" options={categorySelectOptions} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="!mb-0" />
             </div>
             <div className={fieldClass}>
               <FormInput label="Amount" type="number" step="0.01" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="!mb-0" />

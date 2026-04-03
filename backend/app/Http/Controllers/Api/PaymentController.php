@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\PaymentResource;
+use App\Models\GenericCode;
 use App\Models\Payment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -32,20 +33,22 @@ class PaymentController extends Controller
             'company_id' => 'required|exists:companies,id',
             'payment_date' => 'required|date',
             'amount' => 'required|numeric|min:0',
-            'mode' => 'required|in:Cash,Bank,UPI',
-            'status' => 'sometimes|in:open,running,closed',
+            'mode' => GenericCode::validationRule('payment_mode', true),
+            'status' => GenericCode::sometimesValidationRule('payment_record_status'),
             'reference_number' => 'nullable|string|max:100',
             'notes' => 'nullable|string',
         ]);
 
         $validated['status'] = $validated['status'] ?? Payment::STATUS_OPEN;
         $payment = Payment::create($validated);
+
         return response()->json(['data' => new PaymentResource($payment->load(['company', 'order']))], 201);
     }
 
     public function show(Payment $payment): JsonResponse
     {
         $payment->load(['company']);
+
         return response()->json(['data' => new PaymentResource($payment)]);
     }
 
@@ -56,19 +59,21 @@ class PaymentController extends Controller
             'order_id' => 'nullable|exists:orders,id',
             'payment_date' => 'sometimes|required|date',
             'amount' => 'sometimes|required|numeric|min:0',
-            'mode' => 'sometimes|required|in:Cash,Bank,UPI',
-            'status' => 'sometimes|required|in:open,running,closed',
+            'mode' => array_merge(['sometimes', 'required'], array_slice(GenericCode::validationRule('payment_mode', true), 1)),
+            'status' => array_merge(['sometimes', 'required'], array_slice(GenericCode::validationRule('payment_record_status', true), 1)),
             'reference_number' => 'nullable|string|max:100',
             'notes' => 'nullable|string',
         ]);
 
         $payment->update($validated);
+
         return response()->json(['data' => new PaymentResource($payment->fresh(['company']))]);
     }
 
     public function destroy(Payment $payment): JsonResponse
     {
         $payment->delete();
+
         return response()->json(['message' => 'Payment deleted successfully']);
     }
 }

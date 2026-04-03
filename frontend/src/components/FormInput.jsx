@@ -38,6 +38,8 @@ export function FormSelect({ label, error, required, options, emptyLabel = 'Sele
     isDisabled = false,
     loadOptions,
     defaultOptions = true,
+    compact = false,
+    hideIndicators = false,
     ...rest
   } = props;
 
@@ -62,6 +64,8 @@ export function FormSelect({ label, error, required, options, emptyLabel = 'Sele
         isDisabled={isDisabled || rest.disabled}
         loadOptions={loadOptions}
         defaultOptions={defaultOptions}
+        compact={compact}
+        hideIndicators={hideIndicators}
       />
       {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
     </div>
