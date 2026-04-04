@@ -1,0 +1,96 @@
+name: Deploy (Master → Server)
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. Setup Node
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # 3. Build Frontend
+      - name: Build Frontend
+        working-directory: frontend
+        run: |
+          npm install
+          npm run build
+
+      # 4. Deploy Frontend
+      - name: Deploy Frontend
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          switches: -avz --delete
+          path: frontend/dist/
+          remote_path: domains/arsk.torotech.in/public_html/
+          remote_host: ${{ secrets.HOST }}
+          remote_user: ${{ secrets.USER }}
+          remote_port: ${{ secrets.PORT }}
+          remote_key: ${{ secrets.SSH_KEY }}
+
+      # 5. Upload index.php
+      - name: Upload index.php
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          switches: -avz
+          path: backend/public/index.php
+          remote_path: domains/arsk.torotech.in/public_html/
+          remote_host: ${{ secrets.HOST }}
+          remote_user: ${{ secrets.USER }}
+          remote_port: ${{ secrets.PORT }}
+          remote_key: ${{ secrets.SSH_KEY }}
+
+      # 6. Upload .htaccess
+      - name: Upload .htaccess
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          switches: -avz
+          path: backend/public/.htaccess
+          remote_path: domains/arsk.torotech.in/public_html/
+          remote_host: ${{ secrets.HOST }}
+          remote_user: ${{ secrets.USER }}
+          remote_port: ${{ secrets.PORT }}
+          remote_key: ${{ secrets.SSH_KEY }}
+
+      # 7. Deploy Backend
+      - name: Deploy Backend
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          switches: -avz --delete --exclude='.env'
+          path: backend/
+          remote_path: domains/arsk.torotech.in/toro-backend/
+          remote_host: ${{ secrets.HOST }}
+          remote_user: ${{ secrets.USER }}
+          remote_port: ${{ secrets.PORT }}
+          remote_key: ${{ secrets.SSH_KEY }}
+
+      # 8. Run Laravel Commands
+      - name: Run Laravel Commands
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USER }}
+          port: ${{ secrets.PORT }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd domains/arsk.torotech.in/toro-backend
+
+            composer install --no-dev --optimize-autoloader
+
+            php artisan migrate --force
+            php artisan config:clear
+            php artisan cache:clear
+            php artisan config:cache
+            php artisan route:cache
