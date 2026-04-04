@@ -1,6 +1,6 @@
 name: Deploy to Staging (Hostinger)
 
-# on:
+on:
 #   push:
 #     branches:
 #       - staging
