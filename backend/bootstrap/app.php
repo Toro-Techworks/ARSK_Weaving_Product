@@ -20,9 +20,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // Prevent redirect to login route for API requests
         $middleware->redirectGuestsTo(fn () => null);
 
-        $middleware->api(prepend: [
-            \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
-        ]);
+        // Bearer-token API: do not prepend EnsureFrontendRequestsAreStateful — it pulls in session/CSRF
+        // for “SPA cookie” mode and is unnecessary when the React app sends Authorization: Bearer.
+        // If you later need cookie + CSRF Sanctum SPA auth, restore it and set SANCTUM_STATEFUL_DOMAINS.
 
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRole::class,

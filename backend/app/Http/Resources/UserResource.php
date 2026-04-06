@@ -11,6 +11,11 @@ class UserResource extends JsonResource
     {
         $roleName = $this->role_name;
         $roleLabel = $roleName ? ucfirst(str_replace('_', ' ', $roleName)) : null;
+        $status = $this->status;
+        $statusLabel = $status !== null && $status !== ''
+            ? (\App\Models\User::STATUSES[$status] ?? (string) $status)
+            : null;
+
         return [
             'id' => $this->id,
             'name' => $this->name,
@@ -18,8 +23,8 @@ class UserResource extends JsonResource
             'role_id' => $this->role_id,
             'role' => $roleName,
             'role_label' => $roleLabel,
-            'status' => $this->status,
-            'status_label' => \App\Models\User::STATUSES[$this->status] ?? $this->status,
+            'status' => $status,
+            'status_label' => $statusLabel,
             'created_at' => $this->created_at?->toIso8601String(),
         ];
     }

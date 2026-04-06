@@ -11,15 +11,20 @@ class Payment extends Model
     use HasFactory;
 
     const MODE_CASH = 'Cash';
+
     const MODE_BANK = 'Bank';
+
     const MODE_UPI = 'UPI';
 
     const STATUS_OPEN = 'open';
+
     const STATUS_RUNNING = 'running';
+
     const STATUS_CLOSED = 'closed';
 
     protected $fillable = [
         'company_id',
+        'yarn_order_id',
         'payment_date',
         'amount',
         'mode',
@@ -36,5 +41,10 @@ class Payment extends Model
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
+    }
+
+    public function yarnOrder(): BelongsTo
+    {
+        return $this->belongsTo(YarnOrder::class);
     }
 }

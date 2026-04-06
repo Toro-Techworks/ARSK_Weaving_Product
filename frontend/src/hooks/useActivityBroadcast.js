@@ -50,12 +50,12 @@ const ACTION_TOAST_LABEL = {
 };
 
 /**
- * When the logged-in user is super_admin and Pusher env is set, subscribe to public channel
+ * When the logged-in user is super_admin or admin and Pusher env is set, subscribe to public channel
  * "notifications" and listen for .UserActionPerformed (see Laravel UserActionPerformed event).
  */
-export function useActivityBroadcast(isSuperAdmin) {
+export function useActivityBroadcast(shouldSubscribe) {
   useEffect(() => {
-    if (!isSuperAdmin) {
+    if (!shouldSubscribe) {
       teardownEcho();
       return undefined;
     }
@@ -63,11 +63,11 @@ export function useActivityBroadcast(isSuperAdmin) {
       const { hasKey, clusterSet } = pusherConfigStatus();
       if (hasKey && !clusterSet) {
         console.warn(
-          '[Activity] super_admin: add VITE_PUSHER_APP_CLUSTER to match Laravel PUSHER_APP_CLUSTER or real-time notifications stay off.'
+          '[Activity] Add VITE_PUSHER_APP_CLUSTER to match Laravel PUSHER_APP_CLUSTER or real-time notifications stay off.'
         );
       } else if (!hasKey) {
         console.warn(
-          '[Activity] super_admin: add VITE_PUSHER_APP_KEY (and cluster) to frontend .env, then restart Vite — real-time notifications disabled.'
+          '[Activity] Add VITE_PUSHER_APP_KEY (and cluster) to frontend .env, then restart Vite — real-time notifications disabled.'
         );
       }
       return undefined;
@@ -93,5 +93,5 @@ export function useActivityBroadcast(isSuperAdmin) {
     return () => {
       teardownEcho();
     };
-  }, [isSuperAdmin]);
+  }, [shouldSubscribe]);
 }

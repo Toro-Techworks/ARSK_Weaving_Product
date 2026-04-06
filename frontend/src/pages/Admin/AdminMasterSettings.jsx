@@ -160,7 +160,8 @@ export function AdminMasterSettings() {
         <div>
           <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Master Settings</h2>
           <p className="text-xs text-gray-500 mt-1">
-            Only <strong>MASTER</strong> generic codes are listed here. Application dropdowns use <strong>CORE</strong> codes.
+            Only <strong>MASTER</strong> generic codes are listed here. Some screens (yarn stock, production planning, production expenses)
+            read these values directly; other dropdowns still use <strong>CORE</strong> codes.
           </p>
         </div>
         {canEdit && (

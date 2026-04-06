@@ -13,7 +13,7 @@ const CANONICAL_ROLE_ORDER = ['super_admin', 'admin', 'user'];
  * @param {{ currentUserRole: string, enabled?: boolean }} options
  */
 export function useAssignableRoleSelectOptions({ currentUserRole, enabled = true }) {
-  const isSuperAdmin = currentUserRole === 'super_admin';
+  const canAssignManagedRoles = currentUserRole === 'super_admin' || currentUserRole === 'admin';
   const { options: genericRoleOptions, loading: loadingGc } = useGenericCode(GENERIC_CODE_TYPES.ROLES, {
     fallback: FALLBACK_ROLE_OPTIONS,
     enabled,
@@ -54,7 +54,7 @@ export function useAssignableRoleSelectOptions({ currentUserRole, enabled = true
   }, [enabled]);
 
   const roleSelectOptions = useMemo(() => {
-    const fromGeneric = isSuperAdmin
+    const fromGeneric = canAssignManagedRoles
       ? genericRoleOptions
       : genericRoleOptions.filter((o) => o.value === 'user');
 
@@ -69,7 +69,7 @@ export function useAssignableRoleSelectOptions({ currentUserRole, enabled = true
 
     if (mapped.length > 0) {
       let result = mapped;
-      if (isSuperAdmin) {
+      if (canAssignManagedRoles) {
         result = [...result].sort((a, b) => {
           const ia = CANONICAL_ROLE_ORDER.indexOf(a._roleName);
           const ib = CANONICAL_ROLE_ORDER.indexOf(b._roleName);
@@ -92,7 +92,7 @@ export function useAssignableRoleSelectOptions({ currentUserRole, enabled = true
     return entries
       .filter(([roleName]) => {
         if (!allowedNames.has(roleName)) return false;
-        if (!isSuperAdmin && roleName !== 'user') return false;
+        if (!canAssignManagedRoles && roleName !== 'user') return false;
         return true;
       })
       .map(([roleName, id]) => ({
@@ -101,13 +101,13 @@ export function useAssignableRoleSelectOptions({ currentUserRole, enabled = true
         _roleName: roleName,
       }))
       .sort((a, b) => {
-        if (!isSuperAdmin) return Number(a.value) - Number(b.value);
+        if (!canAssignManagedRoles) return Number(a.value) - Number(b.value);
         const ia = CANONICAL_ROLE_ORDER.indexOf(a._roleName);
         const ib = CANONICAL_ROLE_ORDER.indexOf(b._roleName);
         return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
       })
       .map(({ value, label }) => ({ value, label }));
-  }, [genericRoleOptions, idByRoleName, isSuperAdmin]);
+  }, [genericRoleOptions, idByRoleName, canAssignManagedRoles]);
 
   return {
     roleSelectOptions,

@@ -24,6 +24,7 @@ import { useGenericCode } from '../hooks/useGenericCode';
 import { handleGridNavKeyDown } from '../utils/gridKeyboardNav';
 import { formatOrderId } from '../utils/formatOrderId';
 import { isLoomInactiveStatus } from '../utils/loomStatus';
+import { ProductionReadiness } from '../components/ProductionReadiness';
 
 function formatOrderDate(val) {
   if (!val) return '—';
@@ -315,7 +316,8 @@ export function YarnStockEntry() {
     dropdownType: 'MASTER',
   });
   const { hasRole } = useAuth();
-  const isSuperAdmin = hasRole('super_admin');
+  const canManageYarnRequirements = hasRole('super_admin') || hasRole('admin');
+  const canViewProductionReadiness = hasRole('super_admin') || hasRole('admin');
   const [receipts, setReceipts] = useState([]);
   const [yarnReceiptRows, setYarnReceiptRows] = useState([]);
   const [activeCell, setActiveCell] = useState(null);
@@ -583,12 +585,12 @@ export function YarnStockEntry() {
   useEffect(() => {
     if (yarnRequirements.length > 0) {
       setYarnReqRows(yarnRequirements.map(yarnReqToRow));
-    } else if (editingOrderId && isSuperAdmin) {
+    } else if (editingOrderId && canManageYarnRequirements) {
       setYarnReqRows([emptyYarnReqRow()]);
     } else {
       setYarnReqRows([]);
     }
-  }, [yarnRequirements, editingOrderId, isSuperAdmin]);
+  }, [yarnRequirements, editingOrderId, canManageYarnRequirements]);
 
   useEffect(() => {
     setYarnReqEditIds(new Set());
@@ -1036,7 +1038,7 @@ export function YarnStockEntry() {
     } else {
       setYarnReqRows((prev) => {
         const next = prev.filter((_, i) => i !== rowIndex);
-        if (next.length === 0 && editingOrderId && isSuperAdmin) return [emptyYarnReqRow()];
+        if (next.length === 0 && editingOrderId && canManageYarnRequirements) return [emptyYarnReqRow()];
         return next;
       });
     }
@@ -1864,7 +1866,7 @@ export function YarnStockEntry() {
         )}
       </Card>
 
-      {isSuperAdmin && (
+      {canManageYarnRequirements && (
         <Card className="mt-6">
           <div className="mb-4">
             <h3 className="text-lg font-medium text-gray-900">Yarn Requirement</h3>
@@ -1907,59 +1909,65 @@ export function YarnStockEntry() {
                         {YARN_REQ_ROW_KEYS.map((colKey, colIndex) => (
                           <td key={colKey} className="p-0 align-top">
                             {colKey === 'colour' ? (
-                              <SearchableSelect
-                                ref={setYarnReqCell(rowIndex, colIndex)}
-                                options={yarnColourOptions}
-                                value={row[colKey] ?? ''}
-                                onChange={(v) => handleYarnReqCellChange(rowIndex, colKey, v || '')}
-                                onKeyDown={(e) => handleYarnReqGridKeyDown(e, rowIndex, colIndex)}
-                                onMenuOpen={() => {
-                                  ensureYarnReqSession(rowIndex);
-                                  setActiveCellYarnReq({ rowIndex, colKey });
-                                }}
-                                placeholder="Colour"
-                                isDisabled={!cellOn}
-                                isClearable
-                                compact
-                                hideIndicators
-                                menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
-                              />
+                              <div className="min-w-[100px] px-1 py-0.5">
+                                <SearchableSelect
+                                  ref={setYarnReqCell(rowIndex, colIndex)}
+                                  options={yarnColourOptions}
+                                  value={row[colKey] ?? ''}
+                                  onChange={(v) => handleYarnReqCellChange(rowIndex, colKey, v || '')}
+                                  onKeyDown={(e) => handleYarnReqGridKeyDown(e, rowIndex, colIndex)}
+                                  onMenuOpen={() => {
+                                    ensureYarnReqSession(rowIndex);
+                                    setActiveCellYarnReq({ rowIndex, colKey });
+                                  }}
+                                  placeholder="Colour"
+                                  isDisabled={!cellOn}
+                                  isClearable
+                                  compact
+                                  hideIndicators
+                                  menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
+                                />
+                              </div>
                             ) : colKey === 'count' ? (
-                              <SearchableSelect
-                                ref={setYarnReqCell(rowIndex, colIndex)}
-                                options={yarnReceiptCountOptions}
-                                value={row[colKey] ?? ''}
-                                onChange={(v) => handleYarnReqCellChange(rowIndex, colKey, v || '')}
-                                onKeyDown={(e) => handleYarnReqGridKeyDown(e, rowIndex, colIndex)}
-                                onMenuOpen={() => {
-                                  ensureYarnReqSession(rowIndex);
-                                  setActiveCellYarnReq({ rowIndex, colKey });
-                                }}
-                                placeholder="Count"
-                                isDisabled={!cellOn}
-                                isClearable
-                                compact
-                                hideIndicators
-                                menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
-                              />
+                              <div className="min-w-[100px] px-1 py-0.5">
+                                <SearchableSelect
+                                  ref={setYarnReqCell(rowIndex, colIndex)}
+                                  options={yarnReceiptCountOptions}
+                                  value={row[colKey] ?? ''}
+                                  onChange={(v) => handleYarnReqCellChange(rowIndex, colKey, v || '')}
+                                  onKeyDown={(e) => handleYarnReqGridKeyDown(e, rowIndex, colIndex)}
+                                  onMenuOpen={() => {
+                                    ensureYarnReqSession(rowIndex);
+                                    setActiveCellYarnReq({ rowIndex, colKey });
+                                  }}
+                                  placeholder="Count"
+                                  isDisabled={!cellOn}
+                                  isClearable
+                                  compact
+                                  hideIndicators
+                                  menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
+                                />
+                              </div>
                             ) : colKey === 'content' ? (
-                              <SearchableSelect
-                                ref={setYarnReqCell(rowIndex, colIndex)}
-                                options={yarnReceiptContentOptions}
-                                value={row[colKey] ?? ''}
-                                onChange={(v) => handleYarnReqCellChange(rowIndex, colKey, v || '')}
-                                onKeyDown={(e) => handleYarnReqGridKeyDown(e, rowIndex, colIndex)}
-                                onMenuOpen={() => {
-                                  ensureYarnReqSession(rowIndex);
-                                  setActiveCellYarnReq({ rowIndex, colKey });
-                                }}
-                                placeholder="Content"
-                                isDisabled={!cellOn}
-                                isClearable
-                                compact
-                                hideIndicators
-                                menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
-                              />
+                              <div className="min-w-[100px] px-1 py-0.5">
+                                <SearchableSelect
+                                  ref={setYarnReqCell(rowIndex, colIndex)}
+                                  options={yarnReceiptContentOptions}
+                                  value={row[colKey] ?? ''}
+                                  onChange={(v) => handleYarnReqCellChange(rowIndex, colKey, v || '')}
+                                  onKeyDown={(e) => handleYarnReqGridKeyDown(e, rowIndex, colIndex)}
+                                  onMenuOpen={() => {
+                                    ensureYarnReqSession(rowIndex);
+                                    setActiveCellYarnReq({ rowIndex, colKey });
+                                  }}
+                                  placeholder="Content"
+                                  isDisabled={!cellOn}
+                                  isClearable
+                                  compact
+                                  hideIndicators
+                                  menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
+                                />
+                              </div>
                             ) : (
                               <input
                                 ref={setYarnReqCell(rowIndex, colIndex)}
@@ -2056,6 +2064,14 @@ export function YarnStockEntry() {
             </>
           )}
         </Card>
+      )}
+
+      {canViewProductionReadiness && (
+        <ProductionReadiness
+          yarnOrderId={editingOrderId}
+          receipts={receipts}
+          yarnRequirements={yarnRequirements}
+        />
       )}
 
     </div>
@@ -2490,6 +2506,18 @@ function FabricModal({ yarnOrderId, fabric, onClose, onSaved }) {
 }
 
 function YarnRequirementModal({ yarnOrderId, row, onClose, onSaved }) {
+  const { options: yarnColourOptions } = useGenericCode(GENERIC_CODE_TYPES.YARN_COLOUR, {
+    fallback: FALLBACK_YARN_COLOURS,
+    dropdownType: 'MASTER',
+  });
+  const { options: yarnReceiptCountOptions } = useGenericCode(GENERIC_CODE_TYPES.YARN_RECEIPT_COUNT, {
+    fallback: FALLBACK_YARN_RECEIPT_COUNT_CONTENT,
+    dropdownType: 'MASTER',
+  });
+  const { options: yarnReceiptContentOptions } = useGenericCode(GENERIC_CODE_TYPES.YARN_RECEIPT_CONTENT, {
+    fallback: FALLBACK_YARN_RECEIPT_COUNT_CONTENT,
+    dropdownType: 'MASTER',
+  });
   const isEdit = Boolean(row?.id);
   const [form, setForm] = useState(isEdit ? {
     yarn_requirement: row.yarn_requirement ?? '',
@@ -2539,9 +2567,36 @@ function YarnRequirementModal({ yarnOrderId, row, onClose, onSaved }) {
           <form onSubmit={handleSubmit}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormInput label="Yarn Requirement" value={form.yarn_requirement} onChange={(e) => update('yarn_requirement', e.target.value)} placeholder="Yarn requirement" className={cell} />
-              <FormInput label="Colour" value={form.colour} onChange={(e) => update('colour', e.target.value)} placeholder="Colour" className={cell} />
-              <FormInput label="Count" value={form.count} onChange={(e) => update('count', e.target.value)} placeholder="Count" className={cell} />
-              <FormInput label="Content" value={form.content} onChange={(e) => update('content', e.target.value)} placeholder="Content" className={cell} />
+              <div className={cell}>
+                <FormSelect
+                  label="Colour"
+                  options={yarnColourOptions}
+                  value={form.colour}
+                  onChange={(e) => update('colour', e.target.value)}
+                  emptyLabel="Select colour"
+                  className="!mb-0"
+                />
+              </div>
+              <div className={cell}>
+                <FormSelect
+                  label="Count"
+                  options={yarnReceiptCountOptions}
+                  value={form.count}
+                  onChange={(e) => update('count', e.target.value)}
+                  emptyLabel="Select count"
+                  className="!mb-0"
+                />
+              </div>
+              <div className={cell}>
+                <FormSelect
+                  label="Content"
+                  options={yarnReceiptContentOptions}
+                  value={form.content}
+                  onChange={(e) => update('content', e.target.value)}
+                  emptyLabel="Select content"
+                  className="!mb-0"
+                />
+              </div>
               <FormInput label="Required Weight" type="number" min="0" step="0.001" value={form.required_weight} onChange={(e) => update('required_weight', e.target.value)} placeholder="0" className={cell} />
             </div>
             <div className="flex justify-end gap-2 mt-6 pt-4 border-t">

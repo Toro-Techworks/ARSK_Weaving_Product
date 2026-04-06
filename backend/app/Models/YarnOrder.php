@@ -73,4 +73,9 @@ class YarnOrder extends Model
     {
         return $this->hasMany(YarnRequirement::class);
     }
+
+    public function expenses()
+    {
+        return $this->hasMany(Expense::class);
+    }
 }

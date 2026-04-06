@@ -11,11 +11,11 @@ use Illuminate\Http\Request;
 class ActivityLogController extends Controller
 {
     /**
-     * GET /notifications — activity log for super admin only (middleware).
+     * GET /notifications — activity log (middleware: super_admin, admin).
      */
     public function index(Request $request): JsonResponse
     {
-        $this->ensureSuperAdmin($request);
+        $this->ensureNotificationsViewer($request);
 
         $perPage = $this->clampPerPage($request, 20, 100);
 
@@ -34,7 +34,7 @@ class ActivityLogController extends Controller
      */
     public function preview(Request $request): JsonResponse
     {
-        $user = $this->ensureSuperAdmin($request);
+        $user = $this->ensureNotificationsViewer($request);
 
         $items = ActivityLog::query()
             ->with(['user:id,name,username'])
@@ -55,7 +55,7 @@ class ActivityLogController extends Controller
      */
     public function unreadCount(Request $request): JsonResponse
     {
-        $user = $this->ensureSuperAdmin($request);
+        $user = $this->ensureNotificationsViewer($request);
 
         return response()->json([
             'unread_count' => $this->countUnreadForUser($user),
@@ -63,21 +63,21 @@ class ActivityLogController extends Controller
     }
 
     /**
-     * POST /notifications/mark-read — clear unread badge for current super admin.
+     * POST /notifications/mark-read — clear unread badge for current viewer.
      */
     public function markRead(Request $request): JsonResponse
     {
-        $user = $this->ensureSuperAdmin($request);
+        $user = $this->ensureNotificationsViewer($request);
         $user->forceFill(['activity_logs_last_read_at' => now()])->save();
 
         return response()->json(['message' => 'Marked as read.', 'unread_count' => 0]);
     }
 
-    private function ensureSuperAdmin(Request $request): User
+    private function ensureNotificationsViewer(Request $request): User
     {
         $user = $request->user();
-        if (! $user || ! $user->isSuperAdmin()) {
-            abort(403, 'Only super administrators can view notifications.');
+        if (! $user || ! $user->isSuperAdminOrAdmin()) {
+            abort(403, 'Only administrators can view notifications.');
         }
 
         return $user;
