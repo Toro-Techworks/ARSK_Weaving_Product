@@ -1,5 +1,10 @@
 <?php
 
+/**
+ * Login uses `username` + password against the `users` provider (see AuthController).
+ * Authenticated API routes use `auth:sanctum` (Bearer personal access tokens).
+ */
+
 return [
     'defaults' => [
         'guard' => 'web',

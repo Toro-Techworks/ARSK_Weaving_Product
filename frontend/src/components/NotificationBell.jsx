@@ -31,18 +31,18 @@ export function NotificationBell() {
   const [loadingPreview, setLoadingPreview] = useState(false);
   const rootRef = useRef(null);
 
-  const isSuperAdmin = user?.role === 'super_admin';
+  const canViewNotifications = user?.role === 'super_admin' || user?.role === 'admin';
 
   const fetchUnread = useCallback(() => {
-    if (!isSuperAdmin) return;
+    if (!canViewNotifications) return;
     api
       .get('/notifications/unread-count')
       .then(({ data }) => setUnreadCount(Number(data.unread_count) || 0))
       .catch(() => {});
-  }, [isSuperAdmin]);
+  }, [canViewNotifications]);
 
   const loadPreviewAndMarkRead = useCallback(() => {
-    if (!isSuperAdmin) return;
+    if (!canViewNotifications) return;
     setLoadingPreview(true);
     api
       .get('/notifications/preview')
@@ -56,14 +56,14 @@ export function NotificationBell() {
       })
       .catch(() => {})
       .finally(() => setLoadingPreview(false));
-  }, [isSuperAdmin]);
+  }, [canViewNotifications]);
 
   useEffect(() => {
-    if (!isSuperAdmin) return undefined;
+    if (!canViewNotifications) return undefined;
     fetchUnread();
     const id = window.setInterval(fetchUnread, POLL_MS);
     return () => window.clearInterval(id);
-  }, [isSuperAdmin, fetchUnread]);
+  }, [canViewNotifications, fetchUnread]);
 
   useEffect(() => {
     const onMarkedRead = () => setUnreadCount(0);
@@ -95,7 +95,7 @@ export function NotificationBell() {
     }
   };
 
-  if (!isSuperAdmin) return null;
+  if (!canViewNotifications) return null;
 
   const badge =
     unreadCount > 0 ? (

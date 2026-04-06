@@ -12,9 +12,8 @@ import { LoomList } from './pages/Looms';
 import { LoomDailyEntry } from './pages/LoomProduction';
 import { PaymentList } from './pages/Payments';
 import { ExpenseList } from './pages/Expenses';
-import { OrderSummaryReport, LoomEfficiencyReport } from './pages/Reports';
 import ProductionReportPage from './pages/ProductionReportPage';
-import YarnConsumptionReportPage from './pages/YarnConsumptionReportPage';
+const ExpenseReportPageLazy = lazy(() => import('./pages/ExpenseReportPage'));
 import { Profile } from './pages/Settings';
 import { AdminUserList, AdminPermissionMatrix } from './pages/Admin';
 import { WeavingUnitList } from './pages/WeavingUnits';
@@ -79,21 +78,19 @@ function AppRoutes() {
       <Route path="/payments" element={<ProtectedRoute><RequireViewPermission menuKey="payments"><Layout><PaymentList /></Layout></RequireViewPermission></ProtectedRoute>} />
       <Route path="/expenses" element={<ProtectedRoute><RequireViewPermission menuKey="expenses"><Layout><ExpenseList /></Layout></RequireViewPermission></ProtectedRoute>} />
 
-      <Route path="/reports/order-summary" element={<ProtectedRoute><RequireViewPermission menuKey="reports.order_summary"><Layout><OrderSummaryReport /></Layout></RequireViewPermission></ProtectedRoute>} />
-      <Route path="/reports/loom-efficiency" element={<ProtectedRoute><RequireViewPermission menuKey="reports.loom_efficiency"><Layout><LoomEfficiencyReport /></Layout></RequireViewPermission></ProtectedRoute>} />
       <Route path="/reports/production" element={<ProtectedRoute><RequireViewPermission menuKey="reports.production"><Layout><ProductionReportPage /></Layout></RequireViewPermission></ProtectedRoute>} />
-      <Route path="/reports/yarn-consumption" element={<ProtectedRoute><RequireViewPermission menuKey="reports.yarn_consumption"><Layout><YarnConsumptionReportPage /></Layout></RequireViewPermission></ProtectedRoute>} />
+      <Route path="/reports/client-expenses" element={<ProtectedRoute><RequireViewPermission menuKey="reports.client_expenses"><Layout><Suspense fallback={<PageLoader />}><ExpenseReportPageLazy /></Suspense></Layout></RequireViewPermission></ProtectedRoute>} />
 
       <Route path="/yarn-stock" element={<ProtectedRoute><RequireViewPermission menuKey="yarn_stock"><Layout><Suspense fallback={<PageLoader />}><YarnStockListLazy /></Suspense></Layout></RequireViewPermission></ProtectedRoute>} />
       <Route path="/yarn-stock/entry" element={<ProtectedRoute><RequireViewPermission menuKey="yarn_stock"><Layout><Suspense fallback={<PageLoader />}><YarnStockEntryLazy /></Suspense></Layout></RequireViewPermission></ProtectedRoute>} />
       <Route path="/yarn-stock/entry/:orderId" element={<ProtectedRoute><RequireViewPermission menuKey="yarn_stock"><Layout><Suspense fallback={<PageLoader />}><YarnStockEntryLazy /></Suspense></Layout></RequireViewPermission></ProtectedRoute>} />
 
       <Route path="/admin/users" element={<ProtectedRoute roles={['super_admin', 'admin']}><RequireViewPermission menuKey="admin.users"><Layout><Suspense fallback={<PageLoader />}><AdminUserListLazy /></Suspense></Layout></RequireViewPermission></ProtectedRoute>} />
-      <Route path="/admin/permissions" element={<ProtectedRoute roles={['super_admin']}><RequireViewPermission menuKey="admin.permissions"><Layout><Suspense fallback={<PageLoader />}><AdminPermissionMatrixLazy /></Suspense></Layout></RequireViewPermission></ProtectedRoute>} />
+      <Route path="/admin/permissions" element={<ProtectedRoute roles={['super_admin', 'admin']}><RequireViewPermission menuKey="admin.permissions"><Layout><Suspense fallback={<PageLoader />}><AdminPermissionMatrixLazy /></Suspense></Layout></RequireViewPermission></ProtectedRoute>} />
       <Route path="/admin/weaving-units" element={<ProtectedRoute roles={['super_admin', 'admin']}><RequireViewPermission menuKey="admin.weaving_units"><Layout><WeavingUnitList /></Layout></RequireViewPermission></ProtectedRoute>} />
       <Route path="/admin/weavers" element={<ProtectedRoute roles={['super_admin', 'admin']}><RequireViewPermission menuKey="admin.weavers"><Layout><WeaverList /></Layout></RequireViewPermission></ProtectedRoute>} />
       <Route path="/admin/master-settings" element={<ProtectedRoute roles={['super_admin', 'admin']}><RequireViewPermission menuKey="admin.master_settings"><Layout><Suspense fallback={<PageLoader />}><AdminMasterSettingsLazy /></Suspense></Layout></RequireViewPermission></ProtectedRoute>} />
-      <Route path="/admin/notifications" element={<ProtectedRoute roles={['super_admin']}><Layout><Suspense fallback={<PageLoader />}><NotificationsPageLazy /></Suspense></Layout></ProtectedRoute>} />
+      <Route path="/admin/notifications" element={<ProtectedRoute roles={['super_admin', 'admin']}><RequireViewPermission menuKey="admin.notifications"><Layout><Suspense fallback={<PageLoader />}><NotificationsPageLazy /></Suspense></Layout></RequireViewPermission></ProtectedRoute>} />
       <Route path="/settings/profile" element={<ProtectedRoute><Layout><Profile /></Layout></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />

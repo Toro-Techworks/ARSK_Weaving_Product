@@ -14,8 +14,9 @@ class PaymentController extends Controller
     public function index(Request $request): JsonResponse
     {
         $perPage = $this->clampPerPage($request, 10, 100);
-        $payments = Payment::with(['company'])
+        $payments = Payment::with(['company', 'yarnOrder:id,display_order_id,po_number,customer,order_from'])
             ->when($request->company_id, fn ($q) => $q->where('company_id', $request->company_id))
+            ->when($request->yarn_order_id, fn ($q) => $q->where('yarn_order_id', $request->yarn_order_id))
             ->when($request->date_from, fn ($q) => $q->whereDate('payment_date', '>=', $request->date_from))
             ->when($request->date_to, fn ($q) => $q->whereDate('payment_date', '<=', $request->date_to))
             ->orderBy('payment_date', 'desc')
@@ -31,10 +32,11 @@ class PaymentController extends Controller
     {
         $validated = $request->validate([
             'company_id' => 'required|exists:companies,id',
+            'yarn_order_id' => 'nullable|exists:yarn_orders,id',
             'payment_date' => 'required|date',
             'amount' => 'required|numeric|min:0',
             'mode' => GenericCode::validationRule('payment_mode', true),
-            'status' => GenericCode::sometimesValidationRule('payment_record_status'),
+            'status' => GenericCode::sometimesValidationRule('payment_status'),
             'reference_number' => 'nullable|string|max:100',
             'notes' => 'nullable|string',
         ]);
@@ -42,12 +44,12 @@ class PaymentController extends Controller
         $validated['status'] = $validated['status'] ?? Payment::STATUS_OPEN;
         $payment = Payment::create($validated);
 
-        return response()->json(['data' => new PaymentResource($payment->load(['company', 'order']))], 201);
+        return response()->json(['data' => new PaymentResource($payment->load(['company', 'yarnOrder:id,display_order_id,po_number,customer,order_from']))], 201);
     }
 
     public function show(Payment $payment): JsonResponse
     {
-        $payment->load(['company']);
+        $payment->load(['company', 'yarnOrder:id,display_order_id,po_number,customer,order_from']);
 
         return response()->json(['data' => new PaymentResource($payment)]);
     }
@@ -56,18 +58,18 @@ class PaymentController extends Controller
     {
         $validated = $request->validate([
             'company_id' => 'sometimes|required|exists:companies,id',
-            'order_id' => 'nullable|exists:orders,id',
+            'yarn_order_id' => 'nullable|exists:yarn_orders,id',
             'payment_date' => 'sometimes|required|date',
             'amount' => 'sometimes|required|numeric|min:0',
             'mode' => array_merge(['sometimes', 'required'], array_slice(GenericCode::validationRule('payment_mode', true), 1)),
-            'status' => array_merge(['sometimes', 'required'], array_slice(GenericCode::validationRule('payment_record_status', true), 1)),
+            'status' => array_merge(['sometimes', 'required'], array_slice(GenericCode::validationRule('payment_status', true), 1)),
             'reference_number' => 'nullable|string|max:100',
             'notes' => 'nullable|string',
         ]);
 
         $payment->update($validated);
 
-        return response()->json(['data' => new PaymentResource($payment->fresh(['company']))]);
+        return response()->json(['data' => new PaymentResource($payment->fresh(['company', 'yarnOrder:id,display_order_id,po_number,customer,order_from']))]);
     }
 
     public function destroy(Payment $payment): JsonResponse

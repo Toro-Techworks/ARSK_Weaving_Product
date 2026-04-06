@@ -25,7 +25,7 @@ class MenusSeeder extends Seeder
             ['menu_key' => 'orders', 'menu_name' => 'Orders', 'route_path' => '/orders', 'icon' => 'ClipboardList', 'sort_order' => 30],
             ['menu_key' => 'loom_production', 'menu_name' => 'Loom Production', 'route_path' => null, 'icon' => 'Factory', 'sort_order' => 40],
             ['menu_key' => 'payments', 'menu_name' => 'Payments', 'route_path' => '/payments', 'icon' => 'Wallet', 'sort_order' => 50],
-            ['menu_key' => 'expenses', 'menu_name' => 'Expenses', 'route_path' => '/expenses', 'icon' => 'TrendingDown', 'sort_order' => 60],
+            ['menu_key' => 'expenses', 'menu_name' => 'Production expenses', 'route_path' => '/expenses', 'icon' => 'TrendingDown', 'sort_order' => 60],
             ['menu_key' => 'yarn_stock', 'menu_name' => 'Yarn Stock', 'route_path' => '/yarn-stock', 'icon' => 'Package', 'sort_order' => 70],
             ['menu_key' => 'reports', 'menu_name' => 'Reports', 'route_path' => null, 'icon' => 'FileBarChart', 'sort_order' => 80],
             ['menu_key' => 'admin_panel', 'menu_name' => 'Administration', 'route_path' => null, 'icon' => 'Shield', 'sort_order' => 90],
@@ -67,17 +67,15 @@ class MenusSeeder extends Seeder
 
         $reportsParent = $ids['reports'];
         foreach ([
-            ['menu_key' => 'reports.production', 'menu_name' => 'Production Report', 'route_path' => '/reports/production', 'sort_order' => 10],
-            ['menu_key' => 'reports.yarn_consumption', 'menu_name' => 'Yarn Consumption Report', 'route_path' => '/reports/yarn-consumption', 'sort_order' => 20],
-            ['menu_key' => 'reports.order_summary', 'menu_name' => 'Order Summary', 'route_path' => '/reports/order-summary', 'sort_order' => 30],
-            ['menu_key' => 'reports.loom_efficiency', 'menu_name' => 'Loom Efficiency', 'route_path' => '/reports/loom-efficiency', 'sort_order' => 40],
+            ['menu_key' => 'reports.production', 'menu_name' => 'Production Report', 'route_path' => '/reports/production', 'sort_order' => 10, 'icon' => 'FileBarChart'],
+            ['menu_key' => 'reports.client_expenses', 'menu_name' => 'Client expense report', 'route_path' => '/reports/client-expenses', 'sort_order' => 20, 'icon' => 'TrendingDown'],
         ] as $row) {
             $menu = Menu::updateOrCreate(
                 ['menu_key' => $row['menu_key']],
                 [
                     'menu_name' => $row['menu_name'],
                     'route_path' => $row['route_path'],
-                    'icon' => 'FileBarChart',
+                    'icon' => $row['icon'] ?? 'FileBarChart',
                     'parent_id' => $reportsParent,
                     'sort_order' => $row['sort_order'],
                     'status' => 'active',
@@ -134,10 +132,8 @@ class MenusSeeder extends Seeder
             foreach ($menus as $menu) {
                 $view = true;
                 $edit = false;
-                if ($roleName === 'super_admin') {
+                if ($roleName === 'super_admin' || $roleName === 'admin') {
                     $edit = true;
-                } elseif ($roleName === 'admin') {
-                    $edit = $menu->menu_key !== 'admin.permissions';
                 }
 
                 UserMenuPermission::updateOrCreate(

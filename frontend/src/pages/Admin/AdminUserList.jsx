@@ -190,7 +190,8 @@ export function AdminUserList() {
           user={editModal}
           onClose={() => setEditModal(null)}
           onSaved={() => { setEditModal(null); fetchUsers(); }}
-          canAssignRole={currentUser?.role === 'super_admin'}
+          canAssignRole={currentUser?.role === 'super_admin' || currentUser?.role === 'admin'}
+          currentUserRole={currentUser?.role ?? ''}
         />
       )}
 
@@ -296,12 +297,12 @@ function CreateUserModal({ currentUser, onClose, onSuccess }) {
   );
 }
 
-function EditUserModal({ user, onClose, onSaved, canAssignRole }) {
+function EditUserModal({ user, onClose, onSaved, canAssignRole, currentUserRole }) {
   const { options: userStatusOptions } = useGenericCode(GENERIC_CODE_TYPES.USER_STATUS, {
     fallback: FALLBACK_USER_STATUS,
   });
   const { roleSelectOptions } = useAssignableRoleSelectOptions({
-    currentUserRole: 'super_admin',
+    currentUserRole: currentUserRole ?? '',
     enabled: canAssignRole,
   });
   const [form, setForm] = useState({ name: user.name, username: user.username, role_id: String(user.role_id || ''), status: user.status });

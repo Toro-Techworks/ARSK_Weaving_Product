@@ -13,7 +13,9 @@ export const GENERIC_CODE_TYPES = {
   ACTIVE_INACTIVE: 'active_inactive',
   SHIFT: 'shift',
   PAYMENT_MODE: 'payment_mode',
-  PAYMENT_RECORD_STATUS: 'payment_record_status',
+  /** Income / payment row lifecycle (open, running, closed); not for loom or weaver Active/Inactive. */
+  PAYMENT_STATUS: 'payment_status',
+  /** MASTER; maintain under Admin → Master Settings (code type `expense_category`). */
   EXPENSE_CATEGORY: 'expense_category',
   USER_STATUS: 'user_status',
   /** Mirrors `roles.role_name`; seeded in generic_codes (code_type `roles`). */
@@ -61,13 +63,21 @@ export const FALLBACK_PAYMENT_MODES = [
   { value: 'UPI', label: 'UPI' },
 ];
 
-export const FALLBACK_PAYMENT_RECORD_STATUS = [
+export const FALLBACK_PAYMENT_STATUS = [
   { value: 'open', label: 'Open' },
   { value: 'running', label: 'Running' },
   { value: 'closed', label: 'Closed' },
 ];
 
 export const FALLBACK_EXPENSE_CATEGORY_OPTIONS = [
+  { value: 'Loom shed & power', label: 'Loom shed & power' },
+  { value: 'Weaving wages', label: 'Weaving wages' },
+  { value: 'Sizing & dressing', label: 'Sizing & dressing' },
+  { value: 'Loom spares & service', label: 'Loom spares & service' },
+  { value: 'Warp / beam preparation', label: 'Warp / beam preparation' },
+  { value: 'Transport & freight', label: 'Transport & freight' },
+  { value: 'Quality / packing (mill)', label: 'Quality / packing (mill)' },
+  { value: 'Order-specific charge', label: 'Order-specific charge' },
   { value: 'Electricity', label: 'Electricity' },
   { value: 'Labour', label: 'Labour' },
   { value: 'Maintenance', label: 'Maintenance' },

@@ -82,15 +82,14 @@ export const MENU_KEY_TO_ICON_NAME = {
 
   reports: 'FileText',
   'reports.production': 'BarChart3',
-  'reports.yarn_consumption': 'Package',
-  'reports.order_summary': 'ReceiptText',
-  'reports.loom_efficiency': 'Activity',
+  'reports.client_expenses': 'TrendingDown',
 
   yarn_stock: 'Package',
 
   admin_panel: 'Shield',
   'admin.users': 'Users',
   'admin.permissions': 'Lock',
+  'admin.notifications': 'Bell',
   'admin.weaving_units': 'Factory',
   'admin.weavers': 'Users',
   'admin.master_settings': 'Settings',

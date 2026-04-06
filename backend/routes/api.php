@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\LoomProductionController;
 use App\Http\Controllers\Api\MenuController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\PermissionController;
+use App\Http\Controllers\Api\ProductionReadinessController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\UserController;
@@ -64,26 +65,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/yarn-requirements/bulk', [YarnRequirementController::class, 'bulkStore']);
     Route::apiResource('yarn-requirements', YarnRequirementController::class);
 
+    Route::get('/production-status', [ProductionReadinessController::class, 'index'])
+        ->middleware('role:super_admin,admin');
+
     Route::get('/generic-code/{codeType}', [GenericCodeController::class, 'byType']);
 
-    Route::get('/reports/order-summary', [ReportController::class, 'orderSummary']);
-    Route::get('/reports/order-summary/excel', [ReportController::class, 'orderSummaryExportExcel']);
-    Route::get('/reports/order-summary/pdf', [ReportController::class, 'orderSummaryExportPdf']);
-    Route::get('/reports/loom-efficiency', [ReportController::class, 'loomEfficiency']);
-    Route::get('/reports/loom-efficiency/excel', [ReportController::class, 'loomEfficiencyExportExcel']);
-    Route::get('/reports/loom-efficiency/pdf', [ReportController::class, 'loomEfficiencyExportPdf']);
+    Route::get('/reports/client-expenses', [ReportController::class, 'clientOrderExpenses']);
     Route::get('/reports/production', [ReportController::class, 'production']);
     Route::get('/reports/production/excel', [ReportController::class, 'productionExportExcel']);
     Route::get('/reports/production/pdf', [ReportController::class, 'productionExportPdf']);
     Route::get('/reports/production/export/excel', [ReportController::class, 'productionExportExcel']);
     Route::get('/reports/production/export/pdf', [ReportController::class, 'productionExportPdf']);
-
-    Route::get('/reports/yarn-consumption/options', [ReportController::class, 'yarnConsumptionOptions']);
-    Route::get('/reports/yarn-consumption', [ReportController::class, 'yarnConsumption']);
-    Route::get('/reports/yarn-consumption/excel', [ReportController::class, 'yarnConsumptionExportExcel']);
-    Route::get('/reports/yarn-consumption/pdf', [ReportController::class, 'yarnConsumptionExportPdf']);
-    Route::get('/reports/yarn-consumption/export/excel', [ReportController::class, 'yarnConsumptionExportExcel']);
-    Route::get('/reports/yarn-consumption/export/pdf', [ReportController::class, 'yarnConsumptionExportPdf']);
 
     Route::middleware('role:super_admin,admin')->group(function () {
         Route::apiResource('users', UserController::class);
@@ -101,7 +93,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/menus/{menu}', [\App\Http\Controllers\Api\Admin\AdminMenuController::class, 'update']);
     });
 
-    Route::prefix('permissions')->middleware('role:super_admin')->group(function () {
+    Route::prefix('permissions')->middleware('role:super_admin,admin')->group(function () {
         Route::get('/users', [PermissionController::class, 'users']);
         Route::get('/menus', [PermissionController::class, 'menus']);
         Route::get('/user-menu', [PermissionController::class, 'userMenu']);
@@ -110,9 +102,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /**
      * Debug: broadcast UserActionPerformed on public channel "notifications".
-     * GET /api/test-pusher (Authorization: Bearer …) as super_admin — browser console should log EVENT RECEIVED.
+     * GET /api/test-pusher (Authorization: Bearer …) as super_admin or admin — browser console should log EVENT RECEIVED.
      */
-    Route::middleware('role:super_admin')->get('/test-pusher', function (Request $request) {
+    Route::middleware('role:super_admin,admin')->get('/test-pusher', function (Request $request) {
         $driver = config('broadcasting.default');
         Log::info('test_pusher: invoked', ['broadcast_connection' => $driver]);
 
@@ -145,7 +137,7 @@ Route::middleware('auth:sanctum')->group(function () {
                 'listen' => 'Echo.channel("notifications").listen(".UserActionPerformed", …)',
                 'checklist' => [
                     'Frontend .env: VITE_PUSHER_APP_KEY and VITE_PUSHER_APP_CLUSTER must match Laravel (e.g. ap2).',
-                    'Logged-in as super_admin so Echo subscribes (useActivityBroadcast).',
+                    'Logged-in as super_admin or admin so Echo subscribes (useActivityBroadcast).',
                     'Restart Vite after changing VITE_*; hard-refresh browser.',
                 ],
             ]);
@@ -156,7 +148,7 @@ Route::middleware('auth:sanctum')->group(function () {
         }
     });
 
-    Route::middleware('role:super_admin')->group(function () {
+    Route::middleware('role:super_admin,admin')->group(function () {
         Route::get('/notifications', [ActivityLogController::class, 'index']);
         Route::get('/notifications/preview', [ActivityLogController::class, 'preview']);
         Route::get('/notifications/unread-count', [ActivityLogController::class, 'unreadCount']);

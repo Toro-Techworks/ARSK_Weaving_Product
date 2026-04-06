@@ -78,6 +78,12 @@ class User extends Authenticatable
         return $this->hasRole('admin');
     }
 
+    /** Super admin or admin (elevated back-office access). */
+    public function isSuperAdminOrAdmin(): bool
+    {
+        return $this->hasAnyRole(['super_admin', 'admin']);
+    }
+
     public function isActive(): bool
     {
         return $this->status === self::STATUS_ACTIVE;

@@ -7,10 +7,11 @@ use App\Http\Resources\UserResource;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class AuthController extends Controller
 {
@@ -46,41 +47,69 @@ class AuthController extends Controller
             'password' => 'required',
         ]);
 
-        if (!Auth::attempt($request->only('username', 'password'))) {
-            throw ValidationException::withMessages([
-                'username' => ['The provided credentials are incorrect.'],
+        try {
+            // Stateless login: do not use Auth::attempt() on API routes — it writes to the session
+            // guard and requires StartSession + writable session storage. That commonly causes 500s in
+            // production when only Bearer tokens are used.
+            $user = User::query()
+                ->where('username', $request->string('username')->trim()->toString())
+                ->first();
+
+            if (! $user || ! Hash::check($request->password, $user->password)) {
+                throw ValidationException::withMessages([
+                    'username' => ['The provided credentials are incorrect.'],
+                ]);
+            }
+
+            if (! $user->isActive()) {
+                throw ValidationException::withMessages([
+                    'username' => ['This account has been disabled. Contact an administrator.'],
+                ]);
+            }
+
+            $user->tokens()->delete();
+            $token = $user->createToken('auth-token')->plainTextToken;
+            $user->load('role');
+
+            return response()->json([
+                'user' => new UserResource($user),
+                'token' => $token,
+                'token_type' => 'Bearer',
             ]);
-        }
-
-        $user = Auth::user();
-
-        if (!$user->isActive()) {
-            Auth::logout();
-            throw ValidationException::withMessages([
-                'username' => ['This account has been disabled. Contact an administrator.'],
+        } catch (ValidationException $e) {
+            throw $e;
+        } catch (Throwable $e) {
+            Log::error('Login error', [
+                'message' => $e->getMessage(),
+                'exception' => $e::class,
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
             ]);
+
+            return response()->json([
+                'message' => config('app.debug')
+                    ? $e->getMessage()
+                    : 'Unable to sign in. Please try again later.',
+                ...(config('app.debug') ? [
+                    'exception' => $e::class,
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                ] : []),
+            ], 500);
         }
-
-        $user->tokens()->delete();
-        $token = $user->createToken('auth-token')->plainTextToken;
-
-        $user->load('role');
-        return response()->json([
-            'user' => new UserResource($user),
-            'token' => $token,
-            'token_type' => 'Bearer',
-        ]);
     }
 
     public function logout(Request $request)
     {
         $request->user()->currentAccessToken()->delete();
+
         return response()->json(['message' => 'Logged out successfully']);
     }
 
     public function user(Request $request)
     {
         $request->user()->load('role');
+
         return response()->json(['user' => new UserResource($request->user())]);
     }
 }
