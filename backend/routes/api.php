@@ -28,6 +28,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 
+// Preflight requests (OPTIONS) should always succeed for CORS.
+Route::options('{any}', function () {
+    return response()->noContent(200);
+})->where('any', '.*');
+
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
 

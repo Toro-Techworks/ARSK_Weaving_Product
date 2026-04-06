@@ -11,5 +11,6 @@ return [
     'allowed_headers' => ['*'],
     'exposed_headers' => [],
     'max_age' => 0,
-    'supports_credentials' => true,
+    // Bearer-token auth (no cookies) → credentials should be false for simpler, safer CORS.
+    'supports_credentials' => false,
 ];

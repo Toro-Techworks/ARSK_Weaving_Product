@@ -1,6 +1,8 @@
 import axios from 'axios';
+import { getToken, removeStoredUser, removeToken } from '../utils/auth';
 
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const AUTH_DEBUG = import.meta.env.VITE_AUTH_DEBUG === 'true';
 
 export const api = axios.create({
   baseURL: `${API_BASE}/api`,
@@ -12,20 +14,13 @@ export const api = axios.create({
   withCredentials: true,
 });
 
-/**
- * Call before login so Laravel sets the CSRF cookie when using stateful Sanctum.
- * Use the base URL (no /api) so the cookie is set for the same origin as API.
- */
-export function getCsrfCookie() {
-  return axios.get(`${API_BASE}/sanctum/csrf-cookie`, {
-    withCredentials: true,
-    headers: { 'Accept': 'application/json' },
-  });
-}
-
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = getToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (AUTH_DEBUG) {
+    // eslint-disable-next-line no-console
+    console.log('[auth] request', config.method?.toUpperCase(), config.url, 'Authorization:', config.headers.Authorization);
+  }
   return config;
 });
 
@@ -33,8 +28,8 @@ api.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
+      removeToken();
+      removeStoredUser();
       window.location.href = '/login';
     }
     return Promise.reject(err);
