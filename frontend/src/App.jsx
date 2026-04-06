@@ -35,7 +35,12 @@ function PageLoader() {
 }
 
 function ProtectedRoute({ children, roles }) {
-  const { user, loading } = useAuth();
+  const { user, authenticated, loading } = useAuth();
+
+  // Token-only auth: presence of token determines access.
+  if (!authenticated) return <Navigate to="/login" replace />;
+
+  // While we hydrate /user and permissions, keep user on a loader (do not bounce back to /login).
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center gap-3">
@@ -44,7 +49,10 @@ function ProtectedRoute({ children, roles }) {
       </div>
     );
   }
+
+  // Token exists but user could not be loaded (token invalid/expired) → send to login.
   if (!user) return <Navigate to="/login" replace />;
+
   if (roles && roles.length) {
     const allowed = roles.includes(user.role) || (user.role === 'owner' && roles.includes('super_admin'));
     if (!allowed) return <Navigate to="/" replace />;

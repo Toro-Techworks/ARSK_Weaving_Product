@@ -1,0 +1,31 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Normalize domain: redirect www → non-www (avoids CORS by keeping same-origin).
+    RewriteCond %{HTTP_HOST} ^www\.arsk\.torotech\.in$ [NC]
+    RewriteRule ^(.*)$ https://arsk.torotech.in/$1 [L,R=301]
+
+    # If you deploy the React build as the web root, this file enables:
+    # - /api/* → Laravel (backend/public/index.php)
+    # - React Router refresh support → /index.html
+
+    # Preserve Authorization header for PHP/FastCGI setups.
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Handle API requests (Laravel)
+    # IMPORTANT: Only enable this rewrite when the backend path actually exists on the server.
+    # On many hosts, `../backend/public/index.php` does NOT exist relative to public_html, which will break the site.
+    RewriteCond %{REQUEST_URI} ^/api [NC]
+    RewriteCond %{DOCUMENT_ROOT}/../backend/public/index.php -f
+    RewriteRule ^api/(.*)$ ../backend/public/index.php [L]
+
+    # If file or folder exists → serve normally
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Otherwise → send to React
+    RewriteRule ^ index.html [L]
+</IfModule>
+
