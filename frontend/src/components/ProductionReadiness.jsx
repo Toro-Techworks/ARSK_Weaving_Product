@@ -8,6 +8,15 @@ function formatWeight(n) {
   return new Intl.NumberFormat(undefined, { maximumFractionDigits: 3, minimumFractionDigits: 0 }).format(v);
 }
 
+function formatBalance(required, received) {
+  const req = Number(required);
+  const rec = Number(received);
+  if (Number.isNaN(req) || Number.isNaN(rec)) return '—';
+  const bal = rec - req;
+  if (bal < 0) return `-${formatWeight(Math.abs(bal))}`;
+  return formatWeight(bal);
+}
+
 function statusBadge(status, title) {
   const ok = status === 'PROCEED';
   return (
@@ -72,14 +81,6 @@ export function ProductionReadinessTable({ rows }) {
 
       out.push(
         <tr key={`${id}-required`} className={`border-t border-gray-100 ${rowBgReq}`}>
-          <td
-            rowSpan={2}
-            className="px-3 py-2 align-top text-gray-900 border-r border-gray-100 max-w-[14rem]"
-          >
-            <span className="line-clamp-3 break-words" title={row.yarn_requirement}>
-              {row.yarn_requirement ?? '—'}
-            </span>
-          </td>
           <td rowSpan={2} className="px-3 py-2 align-top text-gray-900 border-r border-gray-100">
             {row.colour || '—'}
           </td>
@@ -93,6 +94,18 @@ export function ProductionReadinessTable({ rows }) {
           <td className="px-3 py-2 text-right tabular-nums text-gray-900">
             {formatWeight(row.required_weight)}
           </td>
+          <td
+            rowSpan={2}
+            className="px-3 py-2 align-middle text-right tabular-nums font-semibold border-l border-gray-100"
+          >
+            <span
+              className={(Number(row.total_received_for_combo) - Number(row.required_weight)) > 0
+                ? 'text-emerald-700'
+                : 'text-red-700'}
+            >
+              {formatBalance(row.required_weight, row.total_received_for_combo)}
+            </span>
+          </td>
           <td rowSpan={2} className="px-3 py-2 align-middle border-l border-gray-100" title={statusTitle}>
             {statusBadge(lineStatus, statusTitle)}
           </td>
@@ -103,7 +116,7 @@ export function ProductionReadinessTable({ rows }) {
         <tr key={`${id}-received`} className={`border-t border-gray-100 ${rowBgRec}`}>
           <td className="px-3 py-2 text-gray-700 whitespace-nowrap">Received</td>
           <td className="px-3 py-2 text-right tabular-nums text-gray-900">
-            {formatWeight(row.received_weight)}
+            {formatWeight(row.total_received_for_combo)}
           </td>
         </tr>,
       );
@@ -120,12 +133,12 @@ export function ProductionReadinessTable({ rows }) {
       <table className="min-w-full border-collapse text-sm">
         <thead className="bg-gray-50 border-b border-gray-200">
           <tr>
-            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Yarn requirement</th>
             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Colour</th>
             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Count</th>
             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Content</th>
             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
             <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Weight</th>
+            <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Balance</th>
             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
           </tr>
         </thead>
@@ -207,12 +220,6 @@ export function ProductionReadiness({ yarnOrderId, receipts, yarnRequirements })
     <Card className="mt-6">
       <div className="mb-4">
         <h3 className="text-lg font-medium text-gray-900">Production Readiness</h3>
-        <p className="text-sm text-gray-500 mt-1">
-          One block per yarn requirement line (Required + Received). Receipts are matched by count, content, and colour.
-          For duplicate combinations, received yarn is applied to lines in order (first line first); each line’s status
-          reflects whether its requirement is met from what remains. The Received column shows the amount allocated to
-          that line from the combo total.
-        </p>
       </div>
 
       {loading && (

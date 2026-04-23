@@ -7,6 +7,7 @@ use App\Http\Resources\CompanyResource;
 use App\Models\Company;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class CompanyController extends Controller
 {
@@ -23,6 +24,54 @@ class CompanyController extends Controller
             $companies,
             CompanyResource::collection($companies->items())->resolve()
         );
+    }
+
+    public function deletedIndex(Request $request): JsonResponse
+    {
+        $perPage = $this->clampPerPage($request, 10, 100);
+        $companies = Company::onlyTrashed()
+            ->when($request->search, fn ($q) => $q->where('company_name', 'like', "%{$request->search}%")
+                ->orWhere('gst_number', 'like', "%{$request->search}%"))
+            ->orderByDesc('deleted_at')
+            ->paginate($perPage);
+
+        return $this->paginatedResponse(
+            $companies,
+            CompanyResource::collection($companies->items())->resolve()
+        );
+    }
+
+    public function permanentDeleteTrashed(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => [
+                'integer',
+                Rule::exists('companies', 'id')->whereNotNull('deleted_at'),
+            ],
+        ]);
+
+        $ids = $validated['ids'];
+        $companies = Company::onlyTrashed()->whereIn('id', $ids)->get();
+        foreach ($companies as $company) {
+            $company->forceDelete();
+        }
+
+        return response()->json([
+            'message' => 'Selected companies were permanently deleted.',
+            'deleted_count' => $companies->count(),
+        ]);
+    }
+
+    public function restoreTrashed(int $id): JsonResponse
+    {
+        $company = Company::onlyTrashed()->findOrFail($id);
+        $company->restore();
+
+        return response()->json([
+            'message' => 'Company restored.',
+            'data' => new CompanyResource($company->fresh()),
+        ]);
     }
 
     public function store(Request $request): JsonResponse
@@ -63,6 +112,7 @@ class CompanyController extends Controller
     public function destroy(Company $company): JsonResponse
     {
         $company->delete();
+
         return response()->json(['message' => 'Company deleted successfully']);
     }
 

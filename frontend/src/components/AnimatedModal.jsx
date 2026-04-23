@@ -28,7 +28,6 @@ export function AnimatedModal({ open, onClose, children, className = '', maxWidt
           exit="exit"
           variants={modalOverlayVariants}
           transition={defaultTransition}
-          onClick={onClose}
         >
           <motion.div
             role="dialog"

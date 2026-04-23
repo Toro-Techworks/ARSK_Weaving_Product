@@ -25,6 +25,8 @@ class LoomResource extends JsonResource
                         'yarn_order_id' => $f->yarn_order_id,
                         'sl_number' => $f->sl_number,
                         'design' => $f->design,
+                        'weave_technique' => $f->weave_technique,
+                        'colour' => $f->colour,
                         'loom_id' => $f->loom_id,
                     ])
                     ->values()

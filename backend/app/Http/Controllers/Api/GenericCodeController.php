@@ -26,7 +26,6 @@ class GenericCodeController extends Controller
             $q = GenericCode::query()
                 ->where('code_type', $normalized)
                 ->where('dropdown_type', GenericCode::DROPDOWN_TYPE_MASTER)
-                ->orderBy('sort_order')
                 ->orderBy('code_description');
             if (! $includeInactive) {
                 $q->active();
@@ -45,7 +44,6 @@ class GenericCodeController extends Controller
             $items = GenericCode::query()
                 ->where('code_type', $normalized)
                 ->where('dropdown_type', GenericCode::DROPDOWN_TYPE_CORE)
-                ->orderBy('sort_order')
                 ->orderBy('code_description')
                 ->get(['id', 'code_type', 'code_description', 'dropdown_type', 'sort_order', 'is_active']);
 

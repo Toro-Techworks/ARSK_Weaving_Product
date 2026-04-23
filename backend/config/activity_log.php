@@ -11,6 +11,8 @@ return [
     'models' => [
         \App\Models\Company::class => 'companies',
         \App\Models\WeavingUnit::class => 'weaving_units',
+        \App\Models\WindingUnit::class => 'winding_units',
+        \App\Models\Winding::class => 'windings',
         \App\Models\Weaver::class => 'weavers',
         \App\Models\Loom::class => 'looms',
         \App\Models\LoomEntry::class => 'loom_entries',
@@ -31,6 +33,8 @@ return [
     'display_names' => [
         'companies' => 'Company',
         'weaving_units' => 'Weaving unit',
+        'winding_units' => 'Winding unit',
+        'windings' => 'Winding entry',
         'weavers' => 'Weaver',
         'looms' => 'Loom',
         'loom_entries' => 'Loom entry',

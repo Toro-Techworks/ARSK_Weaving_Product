@@ -257,7 +257,7 @@ function CreateUserModal({ currentUser, onClose, onSuccess }) {
   const fieldClass = 'space-y-1.5';
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-lg max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="sticky top-0 bg-white border-b border-gray-100 px-4 sm:px-6 py-4 flex items-center justify-between">
           <h3 className="text-base sm:text-lg font-semibold text-gray-900">Create New User</h3>
@@ -323,7 +323,7 @@ function EditUserModal({ user, onClose, onSaved, canAssignRole, currentUserRole 
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-semibold mb-4">Edit User</h3>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -370,7 +370,7 @@ function ResetPasswordModal({ user, onClose, onReset }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-semibold mb-2">Reset Password</h3>
         <p className="text-sm text-gray-600 mb-4">Set a new password for {user.username}</p>

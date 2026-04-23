@@ -23,7 +23,6 @@ import MultiColourInput from '../components/ui/MultiColourInput';
 import { useGenericCode } from '../hooks/useGenericCode';
 import { handleGridNavKeyDown } from '../utils/gridKeyboardNav';
 import { formatOrderId } from '../utils/formatOrderId';
-import { isLoomInactiveStatus } from '../utils/loomStatus';
 import { ProductionReadiness } from '../components/ProductionReadiness';
 
 function formatOrderDate(val) {
@@ -259,7 +258,7 @@ function fabricRowToPayload(row) {
 }
 
 // --- Yarn Requirement ---
-const YARN_REQ_ROW_KEYS = ['yarn_requirement', 'colour', 'count', 'content', 'required_weight'];
+const YARN_REQ_ROW_KEYS = ['colour', 'count', 'content', 'required_weight'];
 
 const RECEIPT_GRID_COLS = YARN_RECEIPT_ROW_KEYS.length;
 const FABRIC_GRID_COLS = FABRIC_ROW_KEYS.length;
@@ -1291,7 +1290,7 @@ export function YarnStockEntry() {
                   <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Date</th>
                   <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Colour</th>
                   <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Count</th>
-                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Cnt</th>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Content</th>
                   <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Type</th>
                   <th className="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Bags</th>
                   <th className="px-2 py-2 text-right text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Bundles</th>
@@ -1613,7 +1612,6 @@ export function YarnStockEntry() {
               <thead className="sticky top-0 z-10 bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th rowSpan={2} className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap min-w-[8rem] align-middle border-b border-gray-200">SL No</th>
-                  <th rowSpan={2} className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap min-w-[10rem] align-middle border-b border-gray-200">Loom</th>
                   {FABRIC_HEADER_LEADING_KEYS.map((k) => (
                     <th key={k} rowSpan={2} className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap align-middle border-b border-gray-200">
                       {k.replace(/_/g, ' ')}
@@ -1657,18 +1655,6 @@ export function YarnStockEntry() {
                 ) : (
                   fabricRows.map((row, rowIndex) => {
                     const cellOn = fabricCellEditable(row);
-                    const rowLoomId = row?.loom_id ? String(row.loom_id) : '';
-                    const activeOrThisRowLoom = loomsForOrder.filter((l) => {
-                      const lid = String(l.id);
-                      if (lid === rowLoomId) return true;
-                      return !isLoomInactiveStatus(l.status);
-                    });
-                    const loomOptionsForRow = activeOrThisRowLoom.map((l) => ({
-                      value: String(l.id),
-                      label: `${l.loom_number ?? l.id}${l.sl_number ? ` · ${l.sl_number}` : ''}${
-                        isLoomInactiveStatus(l.status) ? ' · Inactive' : ''
-                      }`,
-                    }));
                     const sessionLocked = fabricSessionIndex !== null;
                     const isSessionRow = fabricSessionIndex === rowIndex;
                     const blockOtherRows = sessionLocked && !isSessionRow;
@@ -1682,25 +1668,6 @@ export function YarnStockEntry() {
                         title={row.sl_number || (row.id == null ? 'Assigned after save' : '')}
                       >
                         {row.sl_number || (row.id == null ? '—' : String(rowIndex + 1))}
-                      </td>
-                      <td className="px-2 py-1.5 text-xs text-gray-800 align-top min-w-[10rem]">
-                        <SearchableSelect
-                          options={loomOptionsForRow}
-                          value={rowLoomId}
-                          onMenuOpen={() => ensureFabricSession(rowIndex)}
-                          onChange={(v) => {
-                            if (!canEdit) return;
-                            const nextLoomId = v ? String(v) : '';
-                            setFabricRows((prev) => prev.map((r, i) => (i === rowIndex ? { ...r, loom_id: nextLoomId } : r)));
-                            setFabricSessionIndex(rowIndex);
-                          }}
-                          placeholder="Loom"
-                          isDisabled={!cellOn}
-                          isClearable
-                          compact
-                          hideIndicators
-                          menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
-                        />
                       </td>
                       {FABRIC_ROW_KEYS.map((colKey, colIndex) => {
                         const isNum = ['con_final_reed', 'con_final_pick', 'con_on_loom_reed', 'con_on_loom_pick', 'gsm_required', 'actual_gsm', 'required_width', 'po_quantity', 'price_per_metre'].includes(colKey);
@@ -2179,7 +2146,7 @@ function YarnReceiptModal({ receipt, yarnOrders = [], defaultYarnOrderId = null,
   const inputClass = 'space-y-1.5';
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div
         className="bg-white rounded-[10px] shadow-xl w-full max-w-[780px] max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
@@ -2414,7 +2381,7 @@ function FabricModal({ yarnOrderId, fabric, onClose, onSaved }) {
 
   const cell = 'space-y-1.5';
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-[10px] shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="p-8">
           <h3 className="text-lg font-semibold text-gray-900 mb-1">{isEdit ? 'Edit Fabric Details' : 'Add Fabric Details'}</h3>
@@ -2559,7 +2526,7 @@ function YarnRequirementModal({ yarnOrderId, row, onClose, onSaved }) {
 
   const cell = 'space-y-1.5';
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-[10px] shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="p-8">
           <h3 className="text-lg font-semibold text-gray-900 mb-1">{isEdit ? 'Edit Yarn Requirement' : 'Add Yarn Requirement'}</h3>

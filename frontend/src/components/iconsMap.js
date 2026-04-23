@@ -85,12 +85,14 @@ export const MENU_KEY_TO_ICON_NAME = {
   'reports.client_expenses': 'TrendingDown',
 
   yarn_stock: 'Package',
+  winding: 'Package',
 
   admin_panel: 'Shield',
   'admin.users': 'Users',
   'admin.permissions': 'Lock',
   'admin.notifications': 'Bell',
   'admin.weaving_units': 'Factory',
+  'admin.winding_units': 'Factory',
   'admin.weavers': 'Users',
   'admin.master_settings': 'Settings',
 

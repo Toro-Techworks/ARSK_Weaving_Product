@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Fabric;
 use App\Models\GenericCode;
+use App\Models\Loom;
+use App\Models\LoomAssignmentHistory;
 use App\Models\YarnOrder;
 use App\Support\SlNumberFormatter;
 use Illuminate\Http\JsonResponse;
@@ -63,10 +65,17 @@ class FabricController extends Controller
             'price_per_metre' => 'nullable|numeric',
             'total_meters_produced' => 'nullable|numeric|min:0',
         ]);
+        if (! $this->loomIsAssignable($validated['loom_id'] ?? null)) {
+            return response()->json(['message' => 'Cannot assign an inactive loom.'], 422);
+        }
         $fabric = Fabric::create($validated);
         SlNumberFormatter::refreshSlNumbersForYarnOrder((int) $fabric->yarn_order_id);
         $fabric->refresh();
         $fabric->load('yarnOrder');
+
+        if (! empty($fabric->loom_id)) {
+            $this->recordAssignmentSnapshot((int) $fabric->loom_id, $fabric);
+        }
 
         return response()->json(['data' => SlNumberFormatter::fabricToArrayWithSlNumber($fabric)], 201);
     }
@@ -98,11 +107,81 @@ class FabricController extends Controller
             'price_per_metre' => 'nullable|numeric',
             'total_meters_produced' => 'nullable|numeric|min:0',
         ]);
+        if (array_key_exists('loom_id', $validated) && ! $this->loomIsAssignable($validated['loom_id'])) {
+            return response()->json(['message' => 'Cannot assign an inactive loom.'], 422);
+        }
+
+        $previousLoomId = $fabric->loom_id !== null ? (int) $fabric->loom_id : null;
         $fabric->update($validated);
         $fresh = $fabric->fresh();
         $fresh->load('yarnOrder');
 
+        if (array_key_exists('loom_id', $validated)) {
+            $nextLoomId = $validated['loom_id'] !== null && $validated['loom_id'] !== ''
+                ? (int) $validated['loom_id']
+                : null;
+            if ($nextLoomId !== $previousLoomId) {
+                // Old loom is no longer running this fabric → mark it unassigned.
+                if ($previousLoomId !== null) {
+                    $this->recordUnassignmentSnapshot($previousLoomId);
+                }
+                // New loom is now running this fabric → snapshot the new assignment.
+                if ($nextLoomId !== null) {
+                    $this->recordAssignmentSnapshot($nextLoomId, $fresh);
+                }
+            }
+        }
+
         return response()->json(['data' => SlNumberFormatter::fabricToArrayWithSlNumber($fresh)]);
+    }
+
+    private function loomIsAssignable(mixed $loomId): bool
+    {
+        if ($loomId === null || $loomId === '') {
+            return true;
+        }
+        $status = Loom::query()->whereKey((int) $loomId)->value('status');
+        if (! is_string($status)) {
+            return false;
+        }
+
+        return strtolower(trim($status)) !== 'inactive';
+    }
+
+    /**
+     * Snapshot a loom assignment: records what fabric/design/weave/colour the
+     * loom started running at `now()`. Past dates will keep resolving to the
+     * row effective before this timestamp (preserving history).
+     */
+    private function recordAssignmentSnapshot(int $loomId, Fabric $fabric): void
+    {
+        LoomAssignmentHistory::create([
+            'loom_id' => $loomId,
+            'fabric_id' => (int) $fabric->id,
+            'yarn_order_id' => $fabric->yarn_order_id !== null ? (int) $fabric->yarn_order_id : null,
+            'sl_number' => $fabric->sl_number,
+            'design' => $fabric->design,
+            'weave_technique' => $fabric->weave_technique,
+            'colour' => $fabric->colour,
+            'assigned_at' => now(),
+        ]);
+    }
+
+    /**
+     * Snapshot a loom becoming unassigned (no fabric running on it from now on).
+     */
+    private function recordUnassignmentSnapshot(int $loomId): void
+    {
+        LoomAssignmentHistory::create([
+            'loom_id' => $loomId,
+            'fabric_id' => null,
+            'yarn_order_id' => null,
+            'sl_number' => null,
+            'design' => null,
+            'weave_technique' => null,
+            'colour' => null,
+            'assigned_at' => now(),
+        ]);
     }
 
     /**
@@ -111,7 +190,12 @@ class FabricController extends Controller
      */
     public function destroy(Fabric $fabric): JsonResponse
     {
+        $yarnOrderId = (int) $fabric->yarn_order_id;
         $fabric->delete();
+        // Keep per-order SL serial contiguous (1, 2, 3, …) after a deletion.
+        if ($yarnOrderId > 0) {
+            SlNumberFormatter::refreshSlNumbersForYarnOrder($yarnOrderId);
+        }
 
         return response()->json(['message' => 'Deleted']);
     }

@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\FabricController;
 use App\Http\Controllers\Api\GenericCodeController;
+use App\Http\Controllers\Api\LoomAssignmentHistoryController;
 use App\Http\Controllers\Api\LoomController;
 use App\Http\Controllers\Api\LoomEntryController;
 use App\Http\Controllers\Api\LoomProductionController;
@@ -21,6 +22,8 @@ use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\WeaverController;
 use App\Http\Controllers\Api\WeavingUnitController;
+use App\Http\Controllers\Api\WindingController;
+use App\Http\Controllers\Api\WindingUnitController;
 use App\Http\Controllers\Api\YarnOrderController;
 use App\Http\Controllers\Api\YarnReceiptController;
 use App\Http\Controllers\Api\YarnRequirementController;
@@ -43,13 +46,29 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/dashboard', [DashboardController::class, 'index']);
 
+    Route::middleware('role:super_admin')->group(function () {
+        Route::get('/companies/trashed', [CompanyController::class, 'deletedIndex']);
+        Route::post('/companies/trashed/permanent-delete', [CompanyController::class, 'permanentDeleteTrashed']);
+        Route::post('/companies/trashed/{id}/restore', [CompanyController::class, 'restoreTrashed'])->whereNumber('id');
+        Route::get('/weaving-units/trashed', [WeavingUnitController::class, 'deletedIndex']);
+        Route::post('/weaving-units/trashed/{id}/restore', [WeavingUnitController::class, 'restoreTrashed'])->whereNumber('id');
+        Route::get('/winding-units/trashed', [WindingUnitController::class, 'deletedIndex']);
+        Route::post('/winding-units/trashed/{id}/restore', [WindingUnitController::class, 'restoreTrashed'])->whereNumber('id');
+        Route::get('/weavers/trashed', [WeaverController::class, 'deletedIndex']);
+        Route::post('/weavers/trashed/{id}/restore', [WeaverController::class, 'restoreTrashed'])->whereNumber('id');
+        Route::get('/yarn-orders/trashed', [YarnOrderController::class, 'deletedIndex']);
+        Route::post('/yarn-orders/trashed/{id}/restore', [YarnOrderController::class, 'restoreTrashed'])->whereNumber('id');
+    });
     Route::apiResource('companies', CompanyController::class);
     Route::get('/companies-list', [CompanyController::class, 'list']);
     Route::apiResource('weaving-units', WeavingUnitController::class);
+    Route::apiResource('winding-units', WindingUnitController::class);
+    Route::apiResource('windings', WindingController::class);
     Route::apiResource('weavers', WeaverController::class);
 
     Route::apiResource('looms', LoomController::class);
     Route::get('/looms-list', [LoomController::class, 'list']);
+    Route::get('/loom-assignment-history', [LoomAssignmentHistoryController::class, 'index']);
 
     Route::get('/fabrics/yarn-order/{yarnOrderId}', [FabricController::class, 'indexByYarnOrder']);
     Route::post('/fabrics/bulk', [FabricController::class, 'bulkStore']);
