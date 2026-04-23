@@ -53,8 +53,6 @@ class GenericCodeSeeder extends Seeder
         }
 
         $masterRows = [
-            ['yarn_colour', 'Red', 10],
-            ['yarn_colour', 'Green', 20],
             ['colour', 'Red', 10],
             ['colour', 'Blue', 20],
             ['colour', 'Green', 30],

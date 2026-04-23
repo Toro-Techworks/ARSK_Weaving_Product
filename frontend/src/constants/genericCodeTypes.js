@@ -5,7 +5,8 @@
 export const GENERIC_CODE_TYPES = {
   YARN_RECEIPT_TYPE: 'yarn_receipt_type',
   /** MASTER dropdown_type; use useGenericCode(..., { dropdownType: 'MASTER' }). */
-  YARN_COLOUR: 'yarn_colour',
+  // Consolidated: use single `colour` type for all colour dropdowns.
+  YARN_COLOUR: 'colour',
   /** Production planning multi-colour (MASTER); GET /api/generic-code/colour?dropdown_type=MASTER */
   COLOUR: 'colour',
   YARN_RECEIPT_COUNT: 'yarn_receipt_count',

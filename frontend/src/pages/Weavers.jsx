@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Card } from '../components/Card';
 import { Table } from '../components/Table';
 import Button from '../components/Button';
 import { FormInput, FormSelect, FormTextarea } from '../components/FormInput';
 import { AnimatedModal } from '../components/AnimatedModal';
-import { Plus, Users, X } from 'lucide-react';
+import { Plus, Users, X, Archive } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import { usePagePermission } from '../hooks/usePagePermission';
 import { useRefreshOnSameMenuClick } from '../hooks/useRefreshOnSameMenuClick';
 import { TablePagination } from '../components/TablePagination';
@@ -15,7 +17,9 @@ import { GENERIC_CODE_TYPES, FALLBACK_ACTIVE_INACTIVE } from '../constants/gener
 import { useGenericCode } from '../hooks/useGenericCode';
 
 export function WeaverList() {
+  const { user } = useAuth();
   const { canEdit } = usePagePermission();
+  const isSuperAdmin = user?.role === 'super_admin';
   const [data, setData] = useState([]);
   const [meta, setMeta] = useState({ current_page: 1, last_page: 1, per_page: 10, total: 0 });
   const [page, setPage] = useState(1);
@@ -75,7 +79,22 @@ export function WeaverList() {
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6">
         <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Weaver List</h2>
-        {canEdit && <Button className="gap-2 w-full sm:w-auto" onClick={() => setAddModalOpen(true)}><Plus className="w-4 h-4" /> Add Weaver</Button>}
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:items-center">
+          {isSuperAdmin && (
+            <Link
+              to="/admin/weavers/deleted"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-gray-400 text-sm"
+            >
+              <Archive className="w-4 h-4 shrink-0" />
+              View deleted entries
+            </Link>
+          )}
+          {canEdit && (
+            <Button className="gap-2 w-full sm:w-auto" onClick={() => setAddModalOpen(true)}>
+              <Plus className="w-4 h-4" /> Add Weaver
+            </Button>
+          )}
+        </div>
       </div>
       <Card>
         <div className="flex flex-col sm:flex-row gap-3 mb-4">

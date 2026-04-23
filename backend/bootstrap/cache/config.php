@@ -168,7 +168,7 @@
         'url' => NULL,
         'username' => 'Laravel Log',
         'emoji' => ':boom:',
-        'level' => 'critical',
+        'level' => 'debug',
         'replace_placeholders' => true,
       ),
       'papertrail' => 

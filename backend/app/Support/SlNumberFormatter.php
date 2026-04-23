@@ -7,11 +7,11 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Fabric / style line (SL) code: {4 company letters}_{7-digit order tail}_{001…}.
+ * Fabric / style line (SL) code: a plain per-order serial number "1", "2", "3"…
  *
- * Company text uses {@see YarnOrder::$order_from}. The middle segment is the **last 7 digits** (digits only)
- * of {@see YarnOrder::$display_order_id} when stored; otherwise the same rule applied to
- * {@see ProductionMatrixReportBuilder::formatOrderLabel} (YY + 5-digit sequence).
+ * The serial resets to 1 for each yarn order (ordered by fabric id within the order),
+ * so the same SL value (e.g. "1") will exist across different orders — the uniqueness
+ * is only within a single order.
  */
 final class SlNumberFormatter
 {
@@ -86,11 +86,11 @@ final class SlNumberFormatter
 
     public static function format(?string $companyName, int|string $yarnOrderId, int $sequenceOneBased, ?string $orderDateYmd = null, ?string $displayOrderId = null): string
     {
-        $prefix = self::companyLetterPrefix($companyName);
-        $mid = self::orderLastSevenDigits($yarnOrderId, $orderDateYmd, $displayOrderId);
-        $seq = self::sequenceSuffix($sequenceOneBased);
+        // SL number is now a plain per-order serial: "1", "2", "3", …
+        // Other signature args are retained for backwards compatibility with callers.
+        unset($companyName, $yarnOrderId, $orderDateYmd, $displayOrderId);
 
-        return "{$prefix}_{$mid}_{$seq}";
+        return (string) max(1, $sequenceOneBased);
     }
 
     /**

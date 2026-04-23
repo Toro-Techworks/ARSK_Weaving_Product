@@ -32,6 +32,52 @@ class YarnOrderController extends Controller
         return $this->paginatedResponse($orders, $orders->items());
     }
 
+    public function deletedIndex(Request $request): JsonResponse
+    {
+        $perPage = $this->clampPerPage($request, 10, 100);
+        $q = YarnOrder::onlyTrashed()->orderByDesc('deleted_at')->orderByDesc('id');
+        $search = $request->input('search');
+        if ($search && is_string($search) && strlen(trim($search)) > 0) {
+            $term = '%'.$this->escapeLike(trim($search)).'%';
+            $q->where(function ($query) use ($term) {
+                $query->where('po_number', 'like', $term)
+                    ->orWhere('customer', 'like', $term)
+                    ->orWhere('order_from', 'like', $term)
+                    ->orWhereRaw('CAST(id AS CHAR) LIKE ?', [$term]);
+            });
+        }
+        $this->applyColumnFilters($q, $request);
+        $orders = $q->paginate($perPage);
+
+        $payload = $orders->getCollection()->map(function (YarnOrder $o) {
+            return [
+                'id' => $o->id,
+                'order_from' => $o->order_from,
+                'customer' => $o->customer,
+                'weaving_unit' => $o->weaving_unit,
+                'po_number' => $o->po_number,
+                'po_date' => $o->po_date?->format('Y-m-d'),
+                'delivery_date' => $o->delivery_date?->format('Y-m-d'),
+                'created_at' => $o->created_at?->toISOString(),
+                'deleted_at' => $o->deleted_at?->toISOString(),
+            ];
+        })->values()->all();
+
+        return $this->paginatedResponse($orders, $payload);
+    }
+
+    public function restoreTrashed(int $id): JsonResponse
+    {
+        $order = YarnOrder::onlyTrashed()->findOrFail($id);
+        $order->restore();
+        SlNumberFormatter::refreshSlNumbersForYarnOrder((int) $order->id);
+
+        return response()->json([
+            'message' => 'Order restored.',
+            'data' => $order->fresh(),
+        ]);
+    }
+
     /** Escape % and _ for LIKE patterns. */
     private function escapeLike(string $value): string
     {

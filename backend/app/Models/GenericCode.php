@@ -58,7 +58,6 @@ class GenericCode extends Model
                 ->where('code_type', $codeType)
                 ->where('dropdown_type', self::DROPDOWN_TYPE_CORE)
                 ->active()
-                ->orderBy('sort_order')
                 ->orderBy('code_description')
                 ->get(['id', 'code_type', 'code_description', 'dropdown_type', 'sort_order'])
                 ->map(fn ($r) => $r->toArray())

@@ -124,7 +124,6 @@ function LoomEditModal({ loom, orders, canEdit, open, onClose, onSaved }) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="loom-edit-title"
-      onClick={onClose}
     >
       <div
         className="bg-white rounded-xl shadow-lg max-w-lg w-full max-h-[90vh] overflow-y-auto p-5 sm:p-6"
@@ -304,7 +303,6 @@ function LoomCreateModal({ open, onClose, orders, canEdit, onSaved }) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="loom-create-title"
-      onClick={onClose}
     >
       <div
         className="bg-white rounded-xl shadow-lg max-w-lg w-full max-h-[90vh] overflow-y-auto p-5 sm:p-6"

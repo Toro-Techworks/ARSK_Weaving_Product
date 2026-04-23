@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Archive, Pencil, Plus, Trash2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import Button from './Button';
@@ -8,6 +9,7 @@ import { TablePagination } from './TablePagination';
 import { formatOrderId } from '../utils/formatOrderId';
 import { normalizePaginatedResponse } from '../utils/pagination';
 import { AnimatedModal } from './AnimatedModal';
+import { useAuth } from '../context/AuthContext';
 
 const EMPTY_ROW = () => ({
   id: null,
@@ -37,10 +39,13 @@ function buildOrderListParams(page, perPage, applied) {
 }
 
 export function OrderGridTable({ canEdit = true }) {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'super_admin';
   const [rows, setRows] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [weavingUnits, setWeavingUnits] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingCompanies, setLoadingCompanies] = useState(false);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [orderMeta, setOrderMeta] = useState({ current_page: 1, last_page: 1, per_page: 10, total: 0 });
@@ -55,14 +60,23 @@ export function OrderGridTable({ canEdit = true }) {
   const loadData = useCallback(() => {
     setLoading(true);
     const listParams = buildOrderListParams(page, perPage, filterApplied);
-    Promise.all([
+    Promise.allSettled([
       api.get('/yarn-orders', { params: listParams }).then((r) => normalizePaginatedResponse(r.data)),
-      api.get('/companies-list').then((r) => r.data?.data || []).catch(() => []),
+      api.get('/companies-list').then((r) => r.data?.data || r.data || []).catch(() => []),
       api.get('/weaving-units', { params: { page: 1, per_page: 500 } }).then((r) => normalizePaginatedResponse(r.data).data || []).catch(() => []),
     ])
-      .then(([ordersPage, companyList, weavingUnitList]) => {
-        setCompanies(companyList);
-        setWeavingUnits(weavingUnitList);
+      .then(([ordersRes, companiesRes, weavingUnitsRes]) => {
+        const companyList = companiesRes.status === 'fulfilled' ? (companiesRes.value || []) : [];
+        const weavingUnitList = weavingUnitsRes.status === 'fulfilled' ? (weavingUnitsRes.value || []) : [];
+        setCompanies(Array.isArray(companyList) ? companyList : []);
+        setWeavingUnits(Array.isArray(weavingUnitList) ? weavingUnitList : []);
+
+        if (ordersRes.status !== 'fulfilled') {
+          toast.error('Failed to load orders');
+          return;
+        }
+
+        const ordersPage = ordersRes.value;
         setOrderMeta({
           current_page: ordersPage.current_page,
           last_page: ordersPage.last_page,
@@ -82,7 +96,6 @@ export function OrderGridTable({ canEdit = true }) {
         setRows(normalized);
         setBootstrapped(true);
       })
-      .catch(() => toast.error('Failed to load orders'))
       .finally(() => setLoading(false));
   }, [page, perPage, filterApplied]);
 
@@ -103,8 +116,35 @@ export function OrderGridTable({ canEdit = true }) {
 
   useEffect(() => loadData(), [loadData]);
 
+  useEffect(() => {
+    let alive = true;
+    setLoadingCompanies(true);
+    api.get('/companies-list')
+      .then((r) => {
+        const list = r.data?.data || r.data || [];
+        if (!alive) return;
+        setCompanies(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setCompanies([]);
+        toast.error('Failed to load company list');
+      })
+      .finally(() => {
+        if (!alive) return;
+        setLoadingCompanies(false);
+      });
+    return () => { alive = false; };
+  }, []);
+
   const companyOptions = useMemo(
-    () => (companies || []).map((c) => c.company_name || '').filter(Boolean),
+    () => (companies || [])
+      .map((c) => {
+        if (!c) return '';
+        if (typeof c === 'string') return c;
+        return c.company_name || c.name || c.label || '';
+      })
+      .filter(Boolean),
     [companies]
   );
 
@@ -205,13 +245,24 @@ export function OrderGridTable({ canEdit = true }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 flex-wrap">
         <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Orders (Yarn Orders)</h2>
-        {canEdit && (
-          <Button onClick={openCreateModal} className="gap-1.5">
-            <Plus className="w-4 h-4" /> Create Order
-          </Button>
-        )}
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:items-center">
+          {isSuperAdmin && (
+            <Link
+              to="/orders/deleted"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-gray-400 text-sm"
+            >
+              <Archive className="w-4 h-4 shrink-0" />
+              View deleted entries
+            </Link>
+          )}
+          {canEdit && (
+            <Button onClick={openCreateModal} className="gap-1.5 w-full sm:w-auto">
+              <Plus className="w-4 h-4" /> Create Order
+            </Button>
+          )}
+        </div>
       </div>
 
       <form
@@ -230,12 +281,14 @@ export function OrderGridTable({ canEdit = true }) {
             onChange={(e) => setDraft({ order_id: e.target.value })}
             className="!mb-0"
           />
-          <FormInput
+          <FormSelect
             label="Order from"
-            placeholder="Company name"
+            emptyLabel="Select company"
+            options={companyOptions.map((c) => ({ value: c, label: c }))}
             value={filterDraft.order_from}
             onChange={(e) => setDraft({ order_from: e.target.value })}
             className="!mb-0"
+            disabled={loadingCompanies}
           />
           <FormInput
             label="Customer"
@@ -348,20 +401,12 @@ export function OrderGridTable({ canEdit = true }) {
                 emptyLabel="Select company"
                 options={companyOptions.map((c) => ({ value: c, label: c }))}
                 value={form.order_from}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setForm((prev) => ({
-                    ...prev,
-                    order_from: value,
-                    customer: value === 'ARSK' ? '' : 'NA',
-                  }));
-                }}
+                onChange={(e) => setForm((prev) => ({ ...prev, order_from: e.target.value }))}
               />
               <FormInput
                 label="Customer"
                 value={form.customer}
                 onChange={(e) => setForm((prev) => ({ ...prev, customer: e.target.value }))}
-                disabled={form.order_from !== 'ARSK'}
               />
               <FormSelect
                 label="Weaving Unit"

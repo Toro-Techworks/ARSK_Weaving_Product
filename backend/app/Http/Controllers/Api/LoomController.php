@@ -161,7 +161,7 @@ class LoomController extends Controller
         $looms = Loom::query()
             ->with([
                 'fabric:id,sl_number,yarn_order_id',
-                'assignedFabrics:id,loom_id,yarn_order_id,sl_number,design',
+                'assignedFabrics:id,loom_id,yarn_order_id,sl_number,design,weave_technique,colour',
             ])
             ->orderBy('loom_number')
             ->get();
