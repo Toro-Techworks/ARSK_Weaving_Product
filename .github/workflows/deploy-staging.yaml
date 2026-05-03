@@ -1,0 +1,141 @@
+name: Deploy ARSK Weaving Product (Staging → Hostinger)
+
+on:
+  push:
+    branches:
+      - staging
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # --- Staging artefacts (committed under hostinger/staging) ---
+
+      - name: Assemble backend .env
+        env:
+          STAGING_APP_KEY: ${{ secrets.STAGING_APP_KEY }}
+          STAGING_APP_URL: ${{ vars.STAGING_APP_URL }}
+          STAGING_DB_HOST: ${{ vars.STAGING_DB_HOST }}
+          STAGING_DB_PORT: ${{ vars.STAGING_DB_PORT }}
+          STAGING_DB_DATABASE: ${{ secrets.STAGING_DB_DATABASE }}
+          STAGING_DB_USERNAME: ${{ secrets.STAGING_DB_USERNAME }}
+          STAGING_DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
+        run: |
+          python3 << 'PY'
+          import os
+          import pathlib
+
+          keys = [
+              "STAGING_APP_KEY",
+              "STAGING_APP_URL",
+              "STAGING_DB_HOST",
+              "STAGING_DB_PORT",
+              "STAGING_DB_DATABASE",
+              "STAGING_DB_USERNAME",
+              "STAGING_DB_PASSWORD",
+          ]
+          path = pathlib.Path("hostinger/staging/backend-env-staging.txt")
+          text = path.read_text(encoding="utf-8")
+          for key in keys:
+              text = text.replace("__" + key + "__", os.environ.get(key, ""))
+          pathlib.Path(".ci-deploy/staging").mkdir(parents=True, exist_ok=True)
+          pathlib.Path(".ci-deploy/staging/backend-staging.env").write_text(
+              text, encoding="utf-8"
+          )
+          PY
+
+      - name: Render staging document-root index.php
+        env:
+          STAGING_BACKEND_DIR: ${{ vars.STAGING_BACKEND_DIR }}
+        run: |
+          mkdir -p .ci-deploy/staging
+          sed "s|__BACKEND_DIR__|${STAGING_BACKEND_DIR}|g" hostinger/staging/index.php.template > .ci-deploy/staging/staging-index.php
+
+      - name: Build Frontend
+        working-directory: frontend
+        env:
+          VITE_API_URL: ${{ secrets.STAGING_VITE_API_BASE_URL }}
+        run: |
+          npm ci
+          npm run build
+
+      - name: Prepare merged public_html
+        run: |
+          rm -rf .ci-deploy/staging/public-html
+          mkdir -p .ci-deploy/staging/public-html
+          rsync -a backend/public/ .ci-deploy/staging/public-html/ \
+            --exclude index.php --exclude .htaccess
+          rsync -a frontend/dist/ .ci-deploy/staging/public-html/
+          cp hostinger/staging/.htaccess .ci-deploy/staging/public-html/.htaccess
+          cp .ci-deploy/staging/staging-index.php .ci-deploy/staging/public-html/index.php
+
+      - name: Deploy public_html (Vite SPA + Laravel document root)
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          switches: -avz --delete
+          path: .ci-deploy/staging/public-html/
+          remote_path: ${{ vars.STAGING_REMOTE_BASE }}public_html/
+          remote_host: ${{ secrets.HOST }}
+          remote_user: ${{ secrets.USER }}
+          remote_port: ${{ secrets.PORT }}
+          remote_key: ${{ secrets.SSH_KEY }}
+
+      - name: Deploy backend (excluding .env)
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          switches: -avz --delete --exclude=.env
+          path: backend/
+          remote_path: ${{ vars.STAGING_REMOTE_BASE }}${{ vars.STAGING_BACKEND_DIR }}/
+          remote_host: ${{ secrets.HOST }}
+          remote_user: ${{ secrets.USER }}
+          remote_port: ${{ secrets.PORT }}
+          remote_key: ${{ secrets.SSH_KEY }}
+
+      - name: Stage .env for upload
+        run: |
+          mkdir -p .ci-deploy/staging/env-upload
+          cp .ci-deploy/staging/backend-staging.env .ci-deploy/staging/env-upload/.env
+
+      - name: Upload backend .env
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          switches: -avz
+          path: .ci-deploy/staging/env-upload/
+          remote_path: ${{ vars.STAGING_REMOTE_BASE }}${{ vars.STAGING_BACKEND_DIR }}/
+          remote_host: ${{ secrets.HOST }}
+          remote_user: ${{ secrets.USER }}
+          remote_port: ${{ secrets.PORT }}
+          remote_key: ${{ secrets.SSH_KEY }}
+
+      - name: Run Laravel commands
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USER }}
+          port: ${{ secrets.PORT }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd ${{ vars.STAGING_REMOTE_BASE }}${{ vars.STAGING_BACKEND_DIR }}
+
+            rm -rf vendor
+
+            /opt/alt/php83/usr/bin/php $(which composer) install --no-dev --optimize-autoloader
+
+            /opt/alt/php83/usr/bin/php artisan migrate --force
+            /opt/alt/php83/usr/bin/php artisan storage:link || true
+
+            /opt/alt/php83/usr/bin/php artisan config:clear
+            /opt/alt/php83/usr/bin/php artisan cache:clear
+            /opt/alt/php83/usr/bin/php artisan config:cache
+            /opt/alt/php83/usr/bin/php artisan route:cache
+            /opt/alt/php83/usr/bin/php artisan view:cache

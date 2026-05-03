@@ -1,0 +1,10 @@
+# Vite staging build (CI injects only what the build needs via GitHub secrets).
+# See secrets-and-variables.log → STAGING_VITE_API_BASE_URL.
+# Same secret name as ARSK_Merchant_tracking; workflow maps it to VITE_API_URL.
+#
+# Important: Merchant’s frontend uses VITE_API_BASE_URL including the /api suffix.
+# Weaving uses VITE_API_URL as the site origin only; frontend/src/api/client.js appends /api.
+# Set STAGING_VITE_API_BASE_URL to e.g. https://<staging-domain>.torotech.in (no trailing /api).
+# Local dev → copy patterns to frontend/.env (see Vite dev server URL).
+
+VITE_API_URL=https://<staging-domain>.torotech.in

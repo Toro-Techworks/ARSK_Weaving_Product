@@ -1,0 +1,24 @@
+<?php
+
+/**
+ * Staging document root bootstrap (public_html).
+ * Laravel app lives beside public_html under __BACKEND_DIR__ — must match workflow variable STAGING_BACKEND_DIR.
+ */
+
+use Illuminate\Foundation\Application;
+use Illuminate\Http\Request;
+
+define('LARAVEL_START', microtime(true));
+
+$backendRoot = dirname(__DIR__) . '/__BACKEND_DIR__';
+
+if (file_exists($maintenance = $backendRoot . '/storage/framework/maintenance.php')) {
+    require $maintenance;
+}
+
+require $backendRoot . '/vendor/autoload.php';
+
+/** @var Application $app */
+$app = require_once $backendRoot . '/bootstrap/app.php';
+
+$app->handleRequest(Request::capture());
