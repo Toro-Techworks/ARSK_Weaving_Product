@@ -125,6 +125,7 @@ jobs:
           port: ${{ secrets.PORT }}
           key: ${{ secrets.SSH_KEY }}
           script: |
+            set -e
             cd ${{ vars.STAGING_REMOTE_BASE }}${{ vars.STAGING_BACKEND_DIR }}
 
             rm -rf vendor
@@ -138,4 +139,4 @@ jobs:
             /opt/alt/php83/usr/bin/php artisan cache:clear
             /opt/alt/php83/usr/bin/php artisan config:cache
             /opt/alt/php83/usr/bin/php artisan route:cache
-            /opt/alt/php83/usr/bin/php artisan view:cache
+            /opt/alt/php83/usr/bin/php artisan view:cache || true
