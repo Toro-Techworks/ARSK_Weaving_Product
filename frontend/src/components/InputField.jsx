@@ -32,11 +32,19 @@ export default function InputField({
         <input
           type={inputType}
           value={value}
-          onChange={onChange}
           placeholder={placeholder}
           required={required}
           className={`w-full rounded-full border border-gray-300 bg-white px-4 py-3 text-gray-900 placeholder-gray-400 shadow-sm transition focus:border-[#312E81] focus:outline-none focus:ring-1 focus:ring-[#312E81] ${Icon ? 'pl-10' : ''} ${isPassword ? 'pr-10' : ''}`}
           {...props}
+          {...(type === 'email' ? { autoCapitalize: 'off', autoCorrect: 'off', spellCheck: false } : {})}
+          onChange={(e) => {
+            if (type === 'email') {
+              const v = e.target.value.toLowerCase();
+              onChange?.({ ...e, target: { ...e.target, value: v } });
+            } else {
+              onChange?.(e);
+            }
+          }}
         />
         {isPassword && (
           <button

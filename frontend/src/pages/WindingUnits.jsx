@@ -5,13 +5,18 @@ import { Card } from '../components/Card';
 import { Table } from '../components/Table';
 import Button from '../components/Button';
 import { FormInput, FormTextarea } from '../components/FormInput';
+import { FormPhoneInput } from '../components/FormPhoneInput';
 import { AnimatedModal } from '../components/AnimatedModal';
 import { Plus, Factory, X, Archive } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { usePagePermission } from '../hooks/usePagePermission';
 import { useRefreshOnSameMenuClick } from '../hooks/useRefreshOnSameMenuClick';
 import { TablePagination } from '../components/TablePagination';
+import { StatusToggle } from '../components/StatusToggle';
 import { normalizePaginatedResponse } from '../utils/pagination';
+import { getGstinValidationError, normalizeGstinInput } from '../utils/gstin';
+import { GstinFormField } from '../components/GstinFormField';
+import { ensureInternationalFormat, isValidInternationalPhone } from '../utils/phoneInternational';
 import api from '../api/client';
 
 export function WindingUnitList() {
@@ -51,6 +56,20 @@ export function WindingUnitList() {
   }, [search]);
   useRefreshOnSameMenuClick(fetch);
 
+  const toggleUnitStatus = (row) => {
+    if (!canEdit) return;
+    const isActive = String(row.status ?? 'Active').trim() === 'Active';
+    const next = isActive ? 'Inactive' : 'Active';
+    setData((prev) => prev.map((u) => (u.id === row.id ? { ...u, status: next } : u)));
+    api
+      .put(`/winding-units/${row.id}`, { status: next })
+      .then(() => toast.success(next === 'Active' ? 'Activated' : 'Deactivated'))
+      .catch((err) => {
+        toast.error(err.response?.data?.message || 'Update failed');
+        fetch();
+      });
+  };
+
   const deleteUnit = (id, name) => {
     if (!window.confirm(`Delete winding unit "${name}"?`)) return;
     api.delete(`/winding-units/${id}`).then(() => { toast.success('Deleted'); fetch(); }).catch(() => toast.error('Delete failed'));
@@ -61,16 +80,39 @@ export function WindingUnitList() {
     { key: 'contact_person', label: 'Contact' },
     { key: 'gst_number', label: 'GST No.' },
     { key: 'phone', label: 'Phone' },
-    ...(canEdit ? [{
-      key: 'actions',
-      label: 'Actions',
+    {
+      key: 'status',
+      label: 'Status',
       render: (_, row) => (
-        <span className="flex gap-2">
-          <button type="button" onClick={() => setEditUnit(row)} className="text-brand hover:underline">Edit</button>
-          <button type="button" onClick={() => deleteUnit(row.id, row.company_name)} className="text-red-600 hover:underline">Delete</button>
-        </span>
+        <span className="text-sm text-gray-700">{String(row.status ?? 'Active').trim() === 'Active' ? 'Active' : 'Inactive'}</span>
       ),
-    }] : []),
+    },
+    ...(canEdit
+      ? [
+          {
+            key: 'actions',
+            label: 'Actions',
+            render: (_, row) => (
+              <span className="flex flex-wrap items-center gap-3">
+                <StatusToggle
+                  checked={String(row.status ?? 'Active').trim() === 'Active'}
+                  disabled={!canEdit}
+                  onChange={() => toggleUnitStatus(row)}
+                  ariaLabel="Toggle winding unit active"
+                />
+                <span className="flex gap-2">
+                  <button type="button" onClick={() => setEditUnit(row)} className="text-brand hover:underline">
+                    Edit
+                  </button>
+                  <button type="button" onClick={() => deleteUnit(row.id, row.company_name)} className="text-red-600 hover:underline">
+                    Delete
+                  </button>
+                </span>
+              </span>
+            ),
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -129,15 +171,6 @@ export function WindingUnitList() {
   );
 }
 
-function normalizePhone(v) {
-  const digits = String(v || '').replace(/\D/g, '');
-  return digits.slice(0, 10);
-}
-
-function isValidPhone(v) {
-  return /^\d{10}$/.test(String(v || ''));
-}
-
 function unitRowToForm(unit) {
   if (!unit) {
     return {
@@ -147,31 +180,36 @@ function unitRowToForm(unit) {
       contact_person: '',
       phone: '',
       payment_terms: '',
+      status: 'Active',
     };
   }
   return {
     company_name: unit.company_name ?? '',
-    gst_number: unit.gst_number ?? '',
+    gst_number: normalizeGstinInput(unit.gst_number ?? ''),
     address: unit.address ?? '',
     contact_person: unit.contact_person ?? '',
-    phone: normalizePhone(unit.phone),
+    phone: ensureInternationalFormat(unit.phone),
     payment_terms: unit.payment_terms ?? '',
+    status: unit.status ?? 'Active',
   };
 }
 
 function WindingUnitAddModal({ onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(unitRowToForm());
+  const [gstinBlurred, setGstinBlurred] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const phone = normalizePhone(form.phone);
-    if (phone && !isValidPhone(phone)) {
-      toast.error('Phone number must be exactly 10 digits');
+    setSubmitAttempted(true);
+    if (getGstinValidationError(form.gst_number, { required: true })) return;
+    if (form.phone && !isValidInternationalPhone(form.phone)) {
+      toast.error('Enter a valid phone number for the selected country');
       return;
     }
     setLoading(true);
-    api.post('/winding-units', { ...form, phone })
+    api.post('/winding-units', { ...form, phone: form.phone || null, status: form.status || 'Active' })
       .then(() => { toast.success('Winding unit added'); onSuccess?.(); })
       .catch((err) => toast.error(err.response?.data?.message || 'Failed'))
       .finally(() => setLoading(false));
@@ -198,20 +236,26 @@ function WindingUnitAddModal({ onClose, onSuccess }) {
               <FormInput label="Winding Unit Name" required value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormInput label="GST Number" value={form.gst_number} onChange={(e) => setForm({ ...form, gst_number: e.target.value })} className="!mb-0" />
+              <GstinFormField
+                id="winding-add-gstin"
+                value={form.gst_number}
+                onValueChange={(v) => setForm({ ...form, gst_number: v })}
+                fieldBlurred={gstinBlurred}
+                onFieldBlur={() => setGstinBlurred(true)}
+                submitAttempted={submitAttempted}
+                required
+              />
             </div>
             <div className={fieldClass}>
               <FormInput label="Contact Person" value={form.contact_person} onChange={(e) => setForm({ ...form, contact_person: e.target.value })} className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormInput
+              <FormPhoneInput
+                id="winding-unit-add-phone"
                 label="Phone"
                 value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: normalizePhone(e.target.value) })}
-                inputMode="numeric"
-                maxLength={10}
-                placeholder="10-digit phone (optional)"
-                title="Up to 10 digits; leave blank if not applicable"
+                onChange={(next) => setForm({ ...form, phone: next })}
+                placeholder="Mobile number (optional)"
                 className="!mb-0"
               />
             </div>
@@ -223,6 +267,23 @@ function WindingUnitAddModal({ onClose, onSuccess }) {
             <div className="md:col-span-2">
               <div className={fieldClass}>
                 <FormInput label="Payment Terms" value={form.payment_terms} onChange={(e) => setForm({ ...form, payment_terms: e.target.value })} className="!mb-0" />
+              </div>
+            </div>
+            <div className={fieldClass}>
+              <span className="block text-sm font-medium text-gray-700">Status</span>
+              <div className="flex items-center gap-3 mt-2">
+                <StatusToggle
+                  checked={String(form.status || '').trim() === 'Active'}
+                  disabled={false}
+                  onChange={() =>
+                    setForm((f) => ({
+                      ...f,
+                      status: String(f.status || '').trim() === 'Active' ? 'Inactive' : 'Active',
+                    }))
+                  }
+                  ariaLabel="Toggle winding unit active"
+                />
+                <span className="text-sm text-gray-600">{String(form.status || '').trim() === 'Active' ? 'Active' : 'Inactive'}</span>
               </div>
             </div>
           </div>
@@ -239,16 +300,19 @@ function WindingUnitAddModal({ onClose, onSuccess }) {
 function WindingUnitEditModal({ unit, onClose, onSuccess }) {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(() => unitRowToForm(unit));
+  const [gstinBlurred, setGstinBlurred] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const phone = normalizePhone(form.phone);
-    if (phone && !isValidPhone(phone)) {
-      toast.error('Phone number must be exactly 10 digits');
+    setSubmitAttempted(true);
+    if (getGstinValidationError(form.gst_number, { required: true })) return;
+    if (form.phone && !isValidInternationalPhone(form.phone)) {
+      toast.error('Enter a valid phone number for the selected country');
       return;
     }
     setSaving(true);
-    api.put(`/winding-units/${unit.id}`, { ...form, phone })
+    api.put(`/winding-units/${unit.id}`, { ...form, phone: form.phone || null, status: form.status || 'Active' })
       .then(() => { toast.success('Winding unit updated'); onSuccess?.(); })
       .catch((err) => toast.error(err.response?.data?.message || 'Failed'))
       .finally(() => setSaving(false));
@@ -275,20 +339,26 @@ function WindingUnitEditModal({ unit, onClose, onSuccess }) {
               <FormInput label="Winding Unit Name" required value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormInput label="GST Number" value={form.gst_number} onChange={(e) => setForm({ ...form, gst_number: e.target.value })} className="!mb-0" />
+              <GstinFormField
+                id={`winding-edit-gstin-${unit.id}`}
+                value={form.gst_number}
+                onValueChange={(v) => setForm({ ...form, gst_number: v })}
+                fieldBlurred={gstinBlurred}
+                onFieldBlur={() => setGstinBlurred(true)}
+                submitAttempted={submitAttempted}
+                required
+              />
             </div>
             <div className={fieldClass}>
               <FormInput label="Contact Person" value={form.contact_person} onChange={(e) => setForm({ ...form, contact_person: e.target.value })} className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormInput
+              <FormPhoneInput
+                id={`winding-unit-edit-phone-${unit.id}`}
                 label="Phone"
                 value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: normalizePhone(e.target.value) })}
-                inputMode="numeric"
-                maxLength={10}
-                placeholder="10-digit phone (optional)"
-                title="Up to 10 digits; leave blank if not applicable"
+                onChange={(next) => setForm({ ...form, phone: next })}
+                placeholder="Mobile number (optional)"
                 className="!mb-0"
               />
             </div>
@@ -300,6 +370,23 @@ function WindingUnitEditModal({ unit, onClose, onSuccess }) {
             <div className="md:col-span-2">
               <div className={fieldClass}>
                 <FormInput label="Payment Terms" value={form.payment_terms} onChange={(e) => setForm({ ...form, payment_terms: e.target.value })} className="!mb-0" />
+              </div>
+            </div>
+            <div className={fieldClass}>
+              <span className="block text-sm font-medium text-gray-700">Status</span>
+              <div className="flex items-center gap-3 mt-2">
+                <StatusToggle
+                  checked={String(form.status || '').trim() === 'Active'}
+                  disabled={false}
+                  onChange={() =>
+                    setForm((f) => ({
+                      ...f,
+                      status: String(f.status || '').trim() === 'Active' ? 'Inactive' : 'Active',
+                    }))
+                  }
+                  ariaLabel="Toggle winding unit active"
+                />
+                <span className="text-sm text-gray-600">{String(form.status || '').trim() === 'Active' ? 'Active' : 'Inactive'}</span>
               </div>
             </div>
           </div>

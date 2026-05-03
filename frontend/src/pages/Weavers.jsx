@@ -5,6 +5,7 @@ import { Card } from '../components/Card';
 import { Table } from '../components/Table';
 import Button from '../components/Button';
 import { FormInput, FormSelect, FormTextarea } from '../components/FormInput';
+import { FormPhoneInput } from '../components/FormPhoneInput';
 import { AnimatedModal } from '../components/AnimatedModal';
 import { Plus, Users, X, Archive } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -12,6 +13,8 @@ import { usePagePermission } from '../hooks/usePagePermission';
 import { useRefreshOnSameMenuClick } from '../hooks/useRefreshOnSameMenuClick';
 import { TablePagination } from '../components/TablePagination';
 import { normalizePaginatedResponse } from '../utils/pagination';
+import { appendWeaverFieldsToFormData } from '../utils/weaverFormData';
+import { ensureInternationalFormat, isValidInternationalPhone } from '../utils/phoneInternational';
 import api from '../api/client';
 import { GENERIC_CODE_TYPES, FALLBACK_ACTIVE_INACTIVE } from '../constants/genericCodeTypes';
 import { useGenericCode } from '../hooks/useGenericCode';
@@ -131,15 +134,6 @@ export function WeaverList() {
   );
 }
 
-function normalizePhone(v) {
-  const digits = String(v || '').replace(/\D/g, '');
-  return digits.slice(0, 10);
-}
-
-function isValidPhone(v) {
-  return /^\d{10}$/.test(String(v || ''));
-}
-
 function weaverRowToForm(weaver) {
   if (!weaver) {
     return {
@@ -149,15 +143,21 @@ function weaverRowToForm(weaver) {
       address: '',
       joining_date: '',
       status: 'Active',
+      account_number: '',
+      aadhar_number: '',
+      pan_number: '',
     };
   }
   return {
     employee_code: weaver.employee_code ?? '',
     weaver_name: weaver.weaver_name ?? '',
-    phone: normalizePhone(weaver.phone),
+    phone: ensureInternationalFormat(weaver.phone),
     address: weaver.address ?? '',
     joining_date: weaver.joining_date ? String(weaver.joining_date).slice(0, 10) : '',
     status: weaver.status ?? 'Active',
+    account_number: weaver.account_number ?? '',
+    aadhar_number: weaver.aadhar_number ?? '',
+    pan_number: (weaver.pan_number ?? '').toUpperCase(),
   };
 }
 
@@ -167,18 +167,40 @@ function WeaverAddModal({ onClose, onSuccess }) {
   });
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(weaverRowToForm());
+  const [aadharFile, setAadharFile] = useState(null);
+  const [panFile, setPanFile] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get('/weavers/next-employee-code')
+      .then(({ data: res }) => {
+        const code = res?.data?.employee_code;
+        if (!cancelled && code) {
+          setForm((f) => ({ ...f, employee_code: code }));
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const phone = normalizePhone(form.phone);
-    if (phone && !isValidPhone(phone)) {
-      toast.error('Phone number must be exactly 10 digits');
+    if (form.phone && !isValidInternationalPhone(form.phone)) {
+      toast.error('Enter a valid phone number for the selected country');
       return;
     }
     setLoading(true);
-    api.post('/weavers', { ...form, phone })
+    const fd = new FormData();
+    appendWeaverFieldsToFormData(fd, form);
+    if (aadharFile) fd.append('aadhar_document', aadharFile);
+    if (panFile) fd.append('pan_document', panFile);
+    api.post('/weavers', fd)
       .then(() => { toast.success('Weaver added'); onSuccess?.(); })
-      .catch((err) => toast.error(err.response?.data?.message || 'Failed'))
+      .catch((err) => {
+        const msg = err.response?.data?.message
+          || (err.response?.data?.errors ? Object.values(err.response.data.errors).flat().join(' ') : 'Failed');
+        toast.error(msg);
+      })
       .finally(() => setLoading(false));
   };
 
@@ -200,19 +222,26 @@ function WeaverAddModal({ onClose, onSuccess }) {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className={fieldClass}>
-              <FormInput label="Employee Code" required value={form.employee_code} onChange={(e) => setForm({ ...form, employee_code: e.target.value })} className="!mb-0" />
+              <FormInput
+                label="Employee Code"
+                required
+                value={form.employee_code}
+                onChange={(e) => setForm({ ...form, employee_code: e.target.value })}
+                placeholder="EMP001"
+                className="!mb-0"
+              />
+              <p className="text-xs text-gray-500">Suggested automatically (EMP001, EMP002, …). You can edit if needed.</p>
             </div>
             <div className={fieldClass}>
               <FormInput label="Weaver Name" required value={form.weaver_name} onChange={(e) => setForm({ ...form, weaver_name: e.target.value })} className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormInput
+              <FormPhoneInput
+                id="weaver-add-phone"
                 label="Phone"
                 value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: normalizePhone(e.target.value) })}
-                inputMode="numeric"
-                maxLength={10}
-                placeholder="10-digit phone (optional)"
+                onChange={(next) => setForm({ ...form, phone: next })}
+                placeholder="Mobile number (optional)"
                 className="!mb-0"
               />
             </div>
@@ -233,6 +262,52 @@ function WeaverAddModal({ onClose, onSuccess }) {
                 value={form.status}
                 onChange={(e) => setForm({ ...form, status: e.target.value || statusOptions[0]?.value || 'Active' })}
                 className="!mb-0"
+              />
+            </div>
+            <div className={fieldClass}>
+              <FormInput
+                label="Account number"
+                value={form.account_number}
+                onChange={(e) => setForm({ ...form, account_number: e.target.value })}
+                className="!mb-0"
+              />
+            </div>
+            <div className={fieldClass}>
+              <FormInput
+                label="Aadhar number"
+                value={form.aadhar_number}
+                onChange={(e) => setForm({ ...form, aadhar_number: e.target.value.replace(/\D/g, '').slice(0, 12) })}
+                inputMode="numeric"
+                maxLength={12}
+                className="!mb-0"
+              />
+            </div>
+            <div className={fieldClass}>
+              <FormInput
+                label="PAN"
+                value={form.pan_number}
+                onChange={(e) => setForm({ ...form, pan_number: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10) })}
+                maxLength={10}
+                placeholder="ABCDE1234F"
+                className="!mb-0"
+              />
+            </div>
+            <div className={fieldClass}>
+              <span className="block text-sm font-medium text-gray-700 mb-1">Aadhar document (PDF / JPG / PNG, max 5MB)</span>
+              <input
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                className="block w-full text-sm text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-gray-100 file:text-gray-800"
+                onChange={(e) => setAadharFile(e.target.files?.[0] ?? null)}
+              />
+            </div>
+            <div className={fieldClass}>
+              <span className="block text-sm font-medium text-gray-700 mb-1">PAN document (PDF / JPG / PNG, max 5MB)</span>
+              <input
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                className="block w-full text-sm text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-gray-100 file:text-gray-800"
+                onChange={(e) => setPanFile(e.target.files?.[0] ?? null)}
               />
             </div>
             <div className="md:col-span-2">
@@ -257,18 +332,27 @@ function WeaverEditModal({ weaver, onClose, onSuccess }) {
   });
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(() => weaverRowToForm(weaver));
+  const [aadharFile, setAadharFile] = useState(null);
+  const [panFile, setPanFile] = useState(null);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const phone = normalizePhone(form.phone);
-    if (phone && !isValidPhone(phone)) {
-      toast.error('Phone number must be exactly 10 digits');
+    if (form.phone && !isValidInternationalPhone(form.phone)) {
+      toast.error('Enter a valid phone number for the selected country');
       return;
     }
     setSaving(true);
-    api.put(`/weavers/${weaver.id}`, { ...form, phone })
+    const fd = new FormData();
+    appendWeaverFieldsToFormData(fd, form);
+    if (aadharFile) fd.append('aadhar_document', aadharFile);
+    if (panFile) fd.append('pan_document', panFile);
+    api.put(`/weavers/${weaver.id}`, fd)
       .then(() => { toast.success('Weaver updated'); onSuccess?.(); })
-      .catch((err) => toast.error(err.response?.data?.message || 'Failed'))
+      .catch((err) => {
+        const msg = err.response?.data?.message
+          || (err.response?.data?.errors ? Object.values(err.response.data.errors).flat().join(' ') : 'Failed');
+        toast.error(msg);
+      })
       .finally(() => setSaving(false));
   };
 
@@ -296,13 +380,12 @@ function WeaverEditModal({ weaver, onClose, onSuccess }) {
               <FormInput label="Weaver Name" required value={form.weaver_name} onChange={(e) => setForm({ ...form, weaver_name: e.target.value })} className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormInput
+              <FormPhoneInput
+                id={`weaver-edit-phone-${weaver.id}`}
                 label="Phone"
                 value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: normalizePhone(e.target.value) })}
-                inputMode="numeric"
-                maxLength={10}
-                placeholder="10-digit phone (optional)"
+                onChange={(next) => setForm({ ...form, phone: next })}
+                placeholder="Mobile number (optional)"
                 className="!mb-0"
               />
             </div>
@@ -323,6 +406,58 @@ function WeaverEditModal({ weaver, onClose, onSuccess }) {
                 value={form.status}
                 onChange={(e) => setForm({ ...form, status: e.target.value || statusOptions[0]?.value || 'Active' })}
                 className="!mb-0"
+              />
+            </div>
+            <div className={fieldClass}>
+              <FormInput
+                label="Account number"
+                value={form.account_number}
+                onChange={(e) => setForm({ ...form, account_number: e.target.value })}
+                className="!mb-0"
+              />
+            </div>
+            <div className={fieldClass}>
+              <FormInput
+                label="Aadhar number"
+                value={form.aadhar_number}
+                onChange={(e) => setForm({ ...form, aadhar_number: e.target.value.replace(/\D/g, '').slice(0, 12) })}
+                inputMode="numeric"
+                maxLength={12}
+                className="!mb-0"
+              />
+            </div>
+            <div className={fieldClass}>
+              <FormInput
+                label="PAN"
+                value={form.pan_number}
+                onChange={(e) => setForm({ ...form, pan_number: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10) })}
+                maxLength={10}
+                placeholder="ABCDE1234F"
+                className="!mb-0"
+              />
+            </div>
+            <div className={fieldClass}>
+              <span className="block text-sm font-medium text-gray-700 mb-1">Aadhar document (PDF / JPG / PNG, max 5MB)</span>
+              {weaver.aadhar_document_url && (
+                <a href={weaver.aadhar_document_url} target="_blank" rel="noopener noreferrer" className="text-xs text-brand hover:underline block mb-1">View current file</a>
+              )}
+              <input
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                className="block w-full text-sm text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-gray-100 file:text-gray-800"
+                onChange={(e) => setAadharFile(e.target.files?.[0] ?? null)}
+              />
+            </div>
+            <div className={fieldClass}>
+              <span className="block text-sm font-medium text-gray-700 mb-1">PAN document (PDF / JPG / PNG, max 5MB)</span>
+              {weaver.pan_document_url && (
+                <a href={weaver.pan_document_url} target="_blank" rel="noopener noreferrer" className="text-xs text-brand hover:underline block mb-1">View current file</a>
+              )}
+              <input
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                className="block w-full text-sm text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-gray-100 file:text-gray-800"
+                onChange={(e) => setPanFile(e.target.files?.[0] ?? null)}
               />
             </div>
             <div className="md:col-span-2">

@@ -230,14 +230,14 @@ export function AdminPermissionMatrix() {
           <div style={{ minWidth: tableWidth }}>
             {/* Sticky table header */}
             <div
-              className="flex sticky top-0 z-20 bg-gray-50 border-b border-gray-200 shadow-sm"
-              style={{ height: HEADER_HEIGHT }}
+              className="flex sticky top-0 z-20 bg-gray-50 border-b border-gray-200 shadow-sm items-stretch"
+              style={{ minHeight: HEADER_HEIGHT }}
             >
               <div
-                className="sticky left-0 z-20 shrink-0 flex items-center px-3 border-r border-gray-200 font-medium text-gray-700 text-sm bg-gray-50 relative"
+                className="sticky left-0 z-20 shrink-0 flex items-center px-3 py-2 border-r border-gray-200 font-medium text-gray-700 text-sm bg-gray-50 relative"
                 style={{ width: userColumnWidth, minWidth: userColumnWidth }}
               >
-                User
+                <span className="whitespace-normal break-words leading-snug">User</span>
                 <div
                   role="separator"
                   aria-label="Resize column"
@@ -255,10 +255,13 @@ export function AdminPermissionMatrix() {
                 {menus.map((menu, idx) => (
                   <div
                     key={menu.id}
-                    className="flex flex-col items-center justify-center border-r border-gray-200 py-1 relative"
+                    className="flex flex-col items-center justify-center border-r border-gray-200 py-2 px-0.5 relative"
                     style={{ width: getMenuWidth(idx), minWidth: getMenuWidth(idx) }}
                   >
-                    <span className="text-xs font-medium text-gray-700 truncate w-full text-center px-0.5" title={menu.menu_name}>
+                    <span
+                      className="text-xs font-medium text-gray-700 w-full text-center whitespace-normal break-words leading-tight hyphens-auto"
+                      title={menu.menu_name}
+                    >
                       {menu.menu_name}
                     </span>
                     <span className="flex items-center gap-0.5 text-gray-400 mt-0.5" aria-hidden>
@@ -304,7 +307,7 @@ export function AdminPermissionMatrix() {
                         className={`sticky left-0 z-10 shrink-0 flex flex-col justify-center px-3 py-1.5 border-r border-gray-200 ${stickyBg} group-hover:bg-gray-100/80 transition-colors`}
                         style={{ width: userColumnWidth, minWidth: userColumnWidth }}
                       >
-                        <span className="text-sm font-medium text-gray-900 truncate" title={user.name}>
+                        <span className="text-sm font-medium text-gray-900 whitespace-normal break-words leading-snug" title={user.name}>
                           {user.name}
                         </span>
                         {canEdit && (

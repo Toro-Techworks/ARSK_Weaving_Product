@@ -7,7 +7,6 @@ use App\Models\Fabric;
 use App\Models\GenericCode;
 use App\Models\Loom;
 use App\Models\LoomAssignmentHistory;
-use App\Models\YarnOrder;
 use App\Support\SlNumberFormatter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,9 +19,8 @@ class FabricController extends Controller
      */
     public function indexByYarnOrder(Request $request, string $yarnOrderId): JsonResponse
     {
-        if (! YarnOrder::where('id', $yarnOrderId)->exists()) {
-            return response()->json(['message' => 'Yarn order not found.'], 404);
-        }
+        // Do not 404 when the yarn order row is missing (stale loom/assignment refs).
+        // Return an empty page so list UIs and prefetch helpers stay stable.
         $perPage = $this->clampPerPageLarge($request, 25, 200);
         $fabrics = Fabric::where('yarn_order_id', $yarnOrderId)
             ->orderBy('id')
@@ -49,7 +47,7 @@ class FabricController extends Controller
             'description' => 'nullable|string|max:255',
             'colour' => GenericCode::validationRulePlusSeparatedMaster('colour', false, 512),
             'design' => 'nullable|string|max:255',
-            'weave_technique' => 'nullable|string|max:255',
+            'weave_technique' => GenericCode::validationRule('weave_technique', false, GenericCode::DROPDOWN_TYPE_MASTER, 255),
             'warp_count' => 'nullable|string|max:64',
             'warp_content' => 'nullable|string|max:255',
             'weft_count' => 'nullable|string|max:64',
@@ -91,7 +89,7 @@ class FabricController extends Controller
             'description' => 'nullable|string|max:255',
             'colour' => GenericCode::validationRulePlusSeparatedMaster('colour', false, 512),
             'design' => 'nullable|string|max:255',
-            'weave_technique' => 'nullable|string|max:255',
+            'weave_technique' => GenericCode::validationRule('weave_technique', false, GenericCode::DROPDOWN_TYPE_MASTER, 255),
             'warp_count' => 'nullable|string|max:64',
             'warp_content' => 'nullable|string|max:255',
             'weft_count' => 'nullable|string|max:64',
@@ -213,7 +211,7 @@ class FabricController extends Controller
             'fabrics.*.description' => 'nullable|string|max:255',
             'fabrics.*.colour' => GenericCode::validationRulePlusSeparatedMaster('colour', false, 512),
             'fabrics.*.design' => 'nullable|string|max:255',
-            'fabrics.*.weave_technique' => 'nullable|string|max:255',
+            'fabrics.*.weave_technique' => GenericCode::validationRule('weave_technique', false, GenericCode::DROPDOWN_TYPE_MASTER, 255),
             'fabrics.*.warp_count' => 'nullable|string|max:64',
             'fabrics.*.warp_content' => 'nullable|string|max:255',
             'fabrics.*.weft_count' => 'nullable|string|max:64',

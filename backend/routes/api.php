@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\Admin\AdminGenericCodeController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CompanyController;
+use App\Http\Controllers\Api\DailyEntryController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\FabricController;
@@ -13,6 +14,7 @@ use App\Http\Controllers\Api\LoomAssignmentHistoryController;
 use App\Http\Controllers\Api\LoomController;
 use App\Http\Controllers\Api\LoomEntryController;
 use App\Http\Controllers\Api\LoomProductionController;
+use App\Http\Controllers\Api\MasterController;
 use App\Http\Controllers\Api\MenuController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\PermissionController;
@@ -64,8 +66,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('weaving-units', WeavingUnitController::class);
     Route::apiResource('winding-units', WindingUnitController::class);
     Route::apiResource('windings', WindingController::class);
+    Route::get('/weavers/next-employee-code', [WeaverController::class, 'nextEmployeeCode']);
     Route::apiResource('weavers', WeaverController::class);
 
+    Route::get('/masters/designs', [MasterController::class, 'designs']);
+    Route::get('/masters/weave-tech', [MasterController::class, 'weaveTech']);
+    Route::get('/masters/colours', [MasterController::class, 'colours']);
+
+    Route::post('/daily-entry', [DailyEntryController::class, 'store']);
+
+    Route::get('/looms/configurations', [LoomController::class, 'configurations']);
+    Route::get('/looms/{loom}/configuration', [LoomController::class, 'configuration']);
     Route::apiResource('looms', LoomController::class);
     Route::get('/looms-list', [LoomController::class, 'list']);
     Route::get('/loom-assignment-history', [LoomAssignmentHistoryController::class, 'index']);

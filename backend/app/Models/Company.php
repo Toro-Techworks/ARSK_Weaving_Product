@@ -17,6 +17,7 @@ class Company extends Model
         'gst_number',
         'address',
         'contact_person',
+        'email',
         'phone',
         'payment_terms',
     ];

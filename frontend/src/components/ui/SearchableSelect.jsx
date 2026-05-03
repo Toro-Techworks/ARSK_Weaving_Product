@@ -106,6 +106,14 @@ const SearchableSelect = forwardRef(function SearchableSelect(
     [compact, hideIndicators],
   );
 
+  const classNames = useMemo(
+    () => ({
+      /** Lets grid keyboard nav detect an open menu (portaled to body). */
+      menu: () => 'searchable-select-dropdown',
+    }),
+    [],
+  );
+
   const portalTarget =
     menuPortalTarget === undefined
       ? typeof document !== 'undefined'
@@ -114,25 +122,28 @@ const SearchableSelect = forwardRef(function SearchableSelect(
       : menuPortalTarget;
 
   return (
-    <Comp
-      ref={ref}
-      options={options}
-      loadOptions={loadOptions}
-      defaultOptions={defaultOptions}
-      value={resolvedValue}
-      onChange={(selected) => onChange?.(selected?.value ?? '')}
-      placeholder={placeholder}
-      isSearchable
-      isClearable={isClearable}
-      isDisabled={isDisabled}
-      styles={styles}
-      classNamePrefix={classNamePrefix}
-      menuPortalTarget={portalTarget ?? undefined}
-      menuPosition={portalTarget ? 'fixed' : 'absolute'}
-      onMenuOpen={onMenuOpen}
-      onMenuClose={onMenuClose}
-      onKeyDown={onKeyDown}
-    />
+    <div className="searchable-select-wrap" data-searchable-select-wrap="">
+      <Comp
+        ref={ref}
+        options={options}
+        loadOptions={loadOptions}
+        defaultOptions={defaultOptions}
+        value={resolvedValue}
+        onChange={(selected) => onChange?.(selected?.value ?? '')}
+        placeholder={placeholder}
+        isSearchable
+        isClearable={isClearable}
+        isDisabled={isDisabled}
+        styles={styles}
+        classNames={classNames}
+        classNamePrefix={classNamePrefix}
+        menuPortalTarget={portalTarget ?? undefined}
+        menuPosition={portalTarget ? 'fixed' : 'absolute'}
+        onMenuOpen={onMenuOpen}
+        onMenuClose={onMenuClose}
+        onKeyDown={onKeyDown}
+      />
+    </div>
   );
 });
 
