@@ -1,18 +1,33 @@
 <IfModule mod_rewrite.c>
 RewriteEngine On
 
-# Set default landing file
-DirectoryIndex index.html
+# CORS headers
+<IfModule mod_headers.c>
+  Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS, PUT, DELETE"
+  Header always set Access-Control-Allow-Headers "Content-Type, Authorization"
+</IfModule>
 
-# Laravel API
+# Preserve Authorization header
+RewriteCond %{HTTP:Authorization} .
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# ----------------------------------------
+# ✅ SERVE REACT (NO LEADING /)
+# ----------------------------------------
+RewriteCond %{REQUEST_URI} !^/api
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.html [L]
+
+# ----------------------------------------
+# ✅ LARAVEL FOR API
+# ----------------------------------------
 RewriteCond %{REQUEST_URI} ^/api
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ index.php [L]
 
-# React SPA fallback
-RewriteCond %{REQUEST_URI} !^/api
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^ index.html [L]
+# Default index priority
+DirectoryIndex index.html index.php
+
 </IfModule>

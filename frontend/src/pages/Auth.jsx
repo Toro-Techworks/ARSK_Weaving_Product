@@ -12,10 +12,10 @@ export default function Auth() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { login, user } = useAuth();
+  const { login, user, authenticated } = useAuth();
   const navigate = useNavigate();
 
-  if (user) return <Navigate to="/" replace />;
+  if (authenticated) return <Navigate to="/" replace />;
 
   const handleSubmit = async (e) => {
     e.preventDefault();

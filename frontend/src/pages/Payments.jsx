@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CreditCard, Plus, X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import { Card } from '../components/Card';
@@ -10,6 +10,22 @@ import { usePagePermission } from '../hooks/usePagePermission';
 import { useRefreshOnSameMenuClick } from '../hooks/useRefreshOnSameMenuClick';
 import { TablePagination } from '../components/TablePagination';
 import { normalizePaginatedResponse } from '../utils/pagination';
+import {
+  GENERIC_CODE_TYPES,
+  FALLBACK_PAYMENT_MODES,
+  FALLBACK_PAYMENT_STATUS,
+} from '../constants/genericCodeTypes';
+import { useGenericCode } from '../hooks/useGenericCode';
+import { SearchableOrderSelect } from '../components/SearchableOrderSelect';
+import { formatOrderId } from '../utils/formatOrderId';
+
+function formatPaymentOrderCell(row) {
+  const o = row.yarn_order;
+  if (!o) return row.yarn_order_id ? `#${row.yarn_order_id}` : '—';
+  const code = o.display_order_id || formatOrderId(o);
+  const parts = [code, o.po_number, o.customer].filter(Boolean);
+  return parts.join(' — ') || `Order #${o.id}`;
+}
 
 export function PaymentList() {
   const { canEdit } = usePagePermission();
@@ -46,6 +62,11 @@ export function PaymentList() {
   const columns = [
     { key: 'payment_date', label: 'Date' },
     { key: 'company', label: 'Company', render: (_, row) => row.company?.company_name || '-' },
+    {
+      key: 'yarn_order',
+      label: 'Order no.',
+      render: (_, row) => <span className="text-sm text-gray-800">{formatPaymentOrderCell(row)}</span>,
+    },
     { key: 'amount', label: 'Amount', render: (v) => v != null ? `₹${Number(v).toLocaleString()}` : '-' },
     { key: 'mode', label: 'Mode' },
     { key: 'status', label: 'Status', render: (v) => v ? String(v).toUpperCase() : '-' },
@@ -91,14 +112,34 @@ export function PaymentList() {
 function PaymentAddModal({ onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [companies, setCompanies] = useState([]);
-  const [form, setForm] = useState({ company_id: '', payment_date: new Date().toISOString().slice(0, 10), amount: '', mode: 'Bank', status: 'open', reference_number: '', notes: '' });
+  const { options: modeOptions } = useGenericCode(GENERIC_CODE_TYPES.PAYMENT_MODE, {
+    fallback: FALLBACK_PAYMENT_MODES,
+  });
+  const { options: statusOptions } = useGenericCode(GENERIC_CODE_TYPES.PAYMENT_STATUS, {
+    fallback: FALLBACK_PAYMENT_STATUS,
+  });
+  const [form, setForm] = useState({
+    company_id: '',
+    yarn_order_id: '',
+    payment_date: new Date().toISOString().slice(0, 10),
+    amount: '',
+    mode: 'Bank',
+    status: 'open',
+    reference_number: '',
+    notes: '',
+  });
 
   useEffect(() => { api.get('/companies-list').then(({ data: d }) => setCompanies(d.data || [])); }, []);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     setLoading(true);
-    api.post('/payments', { ...form, company_id: Number(form.company_id), order_id: form.order_id ? Number(form.order_id) : null, amount: Number(form.amount) })
+    api.post('/payments', {
+      ...form,
+      company_id: Number(form.company_id),
+      yarn_order_id: form.yarn_order_id ? Number(form.yarn_order_id) : null,
+      amount: Number(form.amount),
+    })
       .then(() => { toast.success('Payment recorded'); onSuccess?.(); })
       .catch((err) => toast.error(err.response?.data?.message || 'Failed'))
       .finally(() => setLoading(false));
@@ -107,7 +148,7 @@ function PaymentAddModal({ onClose, onSuccess }) {
   const fieldClass = 'space-y-1.5';
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3 sm:p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3 sm:p-4">
       <div className="bg-white rounded-xl shadow-lg w-[90vw] sm:w-full max-w-2xl max-h-[85vh] sm:max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="sticky top-0 bg-white border-b border-gray-100 px-4 sm:px-6 py-4 flex items-center justify-between">
           <h3 className="text-base sm:text-lg font-semibold text-gray-900">Record Payment</h3>
@@ -121,6 +162,14 @@ function PaymentAddModal({ onClose, onSuccess }) {
             <div className={fieldClass}>
               <FormSelect label="Company" required options={companies.map((c) => ({ value: c.id, label: c.company_name }))} value={form.company_id} onChange={(e) => setForm({ ...form, company_id: e.target.value })} className="!mb-0" />
             </div>
+            <div className={`${fieldClass} md:col-span-2`}>
+              <SearchableOrderSelect
+                label="Yarn order no. (optional)"
+                value={form.yarn_order_id}
+                onChange={(orderId) => setForm({ ...form, yarn_order_id: orderId || '' })}
+                placeholder="Search by order id, P.O., or customer…"
+              />
+            </div>
             <div className={fieldClass}>
               <FormInput label="Payment Date" type="date" required value={form.payment_date} onChange={(e) => setForm({ ...form, payment_date: e.target.value })} className="!mb-0" />
             </div>
@@ -128,16 +177,12 @@ function PaymentAddModal({ onClose, onSuccess }) {
               <FormInput label="Amount" type="number" step="0.01" required value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormSelect label="Mode" options={[{ value: 'Cash', label: 'Cash' }, { value: 'Bank', label: 'Bank' }, { value: 'UPI', label: 'UPI' }]} value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })} className="!mb-0" />
+              <FormSelect label="Mode" options={modeOptions} value={form.mode} onChange={(e) => setForm({ ...form, mode: e.target.value })} className="!mb-0" />
             </div>
             <div className={fieldClass}>
               <FormSelect
                 label="Status"
-                options={[
-                  { value: 'open', label: 'Open' },
-                  { value: 'running', label: 'Running' },
-                  { value: 'closed', label: 'Closed' },
-                ]}
+                options={statusOptions}
                 value={form.status}
                 onChange={(e) => setForm({ ...form, status: e.target.value })}
                 className="!mb-0"

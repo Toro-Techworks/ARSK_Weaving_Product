@@ -39,6 +39,7 @@ class PermissionController extends Controller
     public function menus(): JsonResponse
     {
         $menus = Menu::active()->orderBy('sort_order')->get(['id', 'menu_name', 'menu_key', 'parent_id', 'sort_order']);
+
         return response()->json(['data' => $menus]);
     }
 
@@ -56,6 +57,7 @@ class PermissionController extends Controller
             'view' => (bool) $r->view_permission,
             'edit' => (bool) $r->edit_permission,
         ])->values()->all();
+
         return response()->json(['data' => $data]);
     }
 
@@ -76,7 +78,7 @@ class PermissionController extends Controller
 
         $inserts = [];
         foreach ($validated['permissions'] as $p) {
-            if (!$p['view'] && !$p['edit']) {
+            if (! $p['view'] && ! $p['edit']) {
                 continue;
             }
             $inserts[] = [
@@ -89,13 +91,15 @@ class PermissionController extends Controller
             ];
         }
 
-        if (!empty($inserts)) {
+        if (! empty($inserts)) {
             foreach (array_chunk($inserts, 500) as $chunk) {
                 UserMenuPermission::insert($chunk);
             }
         }
 
         $this->clearMenuCacheForAllUsers();
+
+        log_audit('permissions', 'update', null, 'Menu permissions matrix saved ('.count($inserts).' rows)', $request->user()?->id);
 
         return response()->json(['message' => 'Permissions saved.', 'count' => count($inserts)]);
     }
@@ -104,7 +108,7 @@ class PermissionController extends Controller
     {
         $userIds = User::query()->pluck('id');
         foreach ($userIds as $id) {
-            Cache::forget('user_menus_' . $id);
+            Cache::forget('user_menus_'.$id);
         }
     }
 }

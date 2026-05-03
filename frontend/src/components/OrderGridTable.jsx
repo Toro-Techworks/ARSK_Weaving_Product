@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Archive, Pencil, Plus, Trash2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import Button from './Button';
@@ -8,14 +9,13 @@ import { TablePagination } from './TablePagination';
 import { formatOrderId } from '../utils/formatOrderId';
 import { normalizePaginatedResponse } from '../utils/pagination';
 import { AnimatedModal } from './AnimatedModal';
+import { useAuth } from '../context/AuthContext';
 
 const EMPTY_ROW = () => ({
   id: null,
-  loom_id: '',
   order_from: '',
   customer: '',
   weaving_unit: '',
-  design: '',
   po_number: '',
   po_date: '',
   delivery_date: '',
@@ -23,10 +23,8 @@ const EMPTY_ROW = () => ({
 
 const EMPTY_FILTERS = {
   order_id: '',
-  loom_id: '',
   order_from: '',
   customer: '',
-  design: '',
   po_number: '',
 };
 
@@ -34,20 +32,20 @@ function buildOrderListParams(page, perPage, applied) {
   const params = { page, per_page: perPage };
   const a = applied || EMPTY_FILTERS;
   if (a.order_id?.trim()) params.filter_order_id = a.order_id.trim();
-  if (a.loom_id) params.filter_loom_id = a.loom_id;
   if (a.order_from?.trim()) params.filter_order_from = a.order_from.trim();
   if (a.customer?.trim()) params.filter_customer = a.customer.trim();
-  if (a.design?.trim()) params.filter_design = a.design.trim();
   if (a.po_number?.trim()) params.filter_po_number = a.po_number.trim();
   return params;
 }
 
 export function OrderGridTable({ canEdit = true }) {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'super_admin';
   const [rows, setRows] = useState([]);
-  const [looms, setLooms] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [weavingUnits, setWeavingUnits] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingCompanies, setLoadingCompanies] = useState(false);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [orderMeta, setOrderMeta] = useState({ current_page: 1, last_page: 1, per_page: 10, total: 0 });
@@ -62,16 +60,23 @@ export function OrderGridTable({ canEdit = true }) {
   const loadData = useCallback(() => {
     setLoading(true);
     const listParams = buildOrderListParams(page, perPage, filterApplied);
-    Promise.all([
+    Promise.allSettled([
       api.get('/yarn-orders', { params: listParams }).then((r) => normalizePaginatedResponse(r.data)),
-      api.get('/looms-list').then((r) => r.data?.data || []).catch(() => []),
-      api.get('/companies-list').then((r) => r.data?.data || []).catch(() => []),
+      api.get('/companies-list').then((r) => r.data?.data || r.data || []).catch(() => []),
       api.get('/weaving-units', { params: { page: 1, per_page: 500 } }).then((r) => normalizePaginatedResponse(r.data).data || []).catch(() => []),
     ])
-      .then(([ordersPage, loomList, companyList, weavingUnitList]) => {
-        setLooms(loomList);
-        setCompanies(companyList);
-        setWeavingUnits(weavingUnitList);
+      .then(([ordersRes, companiesRes, weavingUnitsRes]) => {
+        const companyList = companiesRes.status === 'fulfilled' ? (companiesRes.value || []) : [];
+        const weavingUnitList = weavingUnitsRes.status === 'fulfilled' ? (weavingUnitsRes.value || []) : [];
+        setCompanies(Array.isArray(companyList) ? companyList : []);
+        setWeavingUnits(Array.isArray(weavingUnitList) ? weavingUnitList : []);
+
+        if (ordersRes.status !== 'fulfilled') {
+          toast.error('Failed to load orders');
+          return;
+        }
+
+        const ordersPage = ordersRes.value;
         setOrderMeta({
           current_page: ordersPage.current_page,
           last_page: ordersPage.last_page,
@@ -80,11 +85,9 @@ export function OrderGridTable({ canEdit = true }) {
         });
         const normalized = (ordersPage.data || []).map((o) => ({
           id: o.id,
-          loom_id: o.loom_id != null ? String(o.loom_id) : '',
           order_from: o.order_from ?? '',
           customer: o.customer ?? '',
           weaving_unit: o.weaving_unit ?? '',
-          design: o.design ?? '',
           po_number: o.po_number ?? '',
           po_date: o.po_date ? String(o.po_date).slice(0, 10) : '',
           delivery_date: o.delivery_date ? String(o.delivery_date).slice(0, 10) : '',
@@ -93,7 +96,6 @@ export function OrderGridTable({ canEdit = true }) {
         setRows(normalized);
         setBootstrapped(true);
       })
-      .catch(() => toast.error('Failed to load orders'))
       .finally(() => setLoading(false));
   }, [page, perPage, filterApplied]);
 
@@ -114,14 +116,36 @@ export function OrderGridTable({ canEdit = true }) {
 
   useEffect(() => loadData(), [loadData]);
 
-  const companyOptions = useMemo(
-    () => (companies || []).map((c) => c.company_name || '').filter(Boolean),
-    [companies]
-  );
+  useEffect(() => {
+    let alive = true;
+    setLoadingCompanies(true);
+    api.get('/companies-list')
+      .then((r) => {
+        const list = r.data?.data || r.data || [];
+        if (!alive) return;
+        setCompanies(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setCompanies([]);
+        toast.error('Failed to load company list');
+      })
+      .finally(() => {
+        if (!alive) return;
+        setLoadingCompanies(false);
+      });
+    return () => { alive = false; };
+  }, []);
 
-  const loomOptions = useMemo(
-    () => (looms || []).map((l) => ({ value: String(l.id), label: l.loom_number })),
-    [looms]
+  const companyOptions = useMemo(
+    () => (companies || [])
+      .map((c) => {
+        if (!c) return '';
+        if (typeof c === 'string') return c;
+        return c.company_name || c.name || c.label || '';
+      })
+      .filter(Boolean),
+    [companies]
   );
 
   const weavingUnitOptions = useMemo(
@@ -142,11 +166,9 @@ export function OrderGridTable({ canEdit = true }) {
     setEditingOrderId(row.id);
     setForm({
       id: row.id,
-      loom_id: row.loom_id ?? '',
       order_from: row.order_from ?? '',
       customer: row.customer ?? '',
       weaving_unit: row.weaving_unit ?? '',
-      design: row.design ?? '',
       po_number: row.po_number ?? '',
       po_date: row.po_date ?? '',
       delivery_date: row.delivery_date ?? '',
@@ -176,23 +198,18 @@ export function OrderGridTable({ canEdit = true }) {
     setModalSaving(true);
     try {
       const payload = {
-        // New orders should not be assigned to a loom directly.
-        loom_id: editingOrderId ? (form.loom_id ? Number(form.loom_id) : null) : null,
         order_from: form.order_from || null,
         customer: form.customer || null,
         weaving_unit: form.weaving_unit || null,
-        design: form.design || null,
         po_number: form.po_number || null,
         po_date: form.po_date || null,
         delivery_date: form.delivery_date || null,
       };
 
       const hasAny =
-        payload.loom_id != null ||
         payload.order_from ||
         payload.customer ||
         payload.weaving_unit ||
-        payload.design ||
         payload.po_number ||
         payload.po_date ||
         payload.delivery_date;
@@ -228,13 +245,24 @@ export function OrderGridTable({ canEdit = true }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 flex-wrap">
         <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Orders (Yarn Orders)</h2>
-        {canEdit && (
-          <Button onClick={openCreateModal} className="gap-1.5">
-            <Plus className="w-4 h-4" /> Create Order
-          </Button>
-        )}
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:items-center">
+          {isSuperAdmin && (
+            <Link
+              to="/orders/deleted"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-gray-400 text-sm"
+            >
+              <Archive className="w-4 h-4 shrink-0" />
+              View deleted entries
+            </Link>
+          )}
+          {canEdit && (
+            <Button onClick={openCreateModal} className="gap-1.5 w-full sm:w-auto">
+              <Plus className="w-4 h-4" /> Create Order
+            </Button>
+          )}
+        </div>
       </div>
 
       <form
@@ -245,7 +273,7 @@ export function OrderGridTable({ canEdit = true }) {
         }}
       >
         <div className="text-sm font-medium text-gray-700">Filter orders</div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <FormInput
             label="Order ID"
             placeholder="e.g. ORD-… or id"
@@ -254,32 +282,19 @@ export function OrderGridTable({ canEdit = true }) {
             className="!mb-0"
           />
           <FormSelect
-            label="Loom"
-            emptyLabel="All looms"
-            value={filterDraft.loom_id}
-            onChange={(e) => setDraft({ loom_id: e.target.value })}
-            options={loomOptions}
-            className="!mb-0"
-          />
-          <FormInput
             label="Order from"
-            placeholder="Company name"
+            emptyLabel="Select company"
+            options={companyOptions.map((c) => ({ value: c, label: c }))}
             value={filterDraft.order_from}
             onChange={(e) => setDraft({ order_from: e.target.value })}
             className="!mb-0"
+            disabled={loadingCompanies}
           />
           <FormInput
             label="Customer"
             placeholder="Customer"
             value={filterDraft.customer}
             onChange={(e) => setDraft({ customer: e.target.value })}
-            className="!mb-0"
-          />
-          <FormInput
-            label="Design"
-            placeholder="Design"
-            value={filterDraft.design}
-            onChange={(e) => setDraft({ design: e.target.value })}
             className="!mb-0"
           />
           <FormInput
@@ -386,20 +401,12 @@ export function OrderGridTable({ canEdit = true }) {
                 emptyLabel="Select company"
                 options={companyOptions.map((c) => ({ value: c, label: c }))}
                 value={form.order_from}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setForm((prev) => ({
-                    ...prev,
-                    order_from: value,
-                    customer: value === 'ARSK' ? '' : 'NA',
-                  }));
-                }}
+                onChange={(e) => setForm((prev) => ({ ...prev, order_from: e.target.value }))}
               />
               <FormInput
                 label="Customer"
                 value={form.customer}
                 onChange={(e) => setForm((prev) => ({ ...prev, customer: e.target.value }))}
-                disabled={form.order_from !== 'ARSK'}
               />
               <FormSelect
                 label="Weaving Unit"

@@ -4,13 +4,14 @@ import { Calendar, Layers } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import { Card } from '../components/Card';
-import { Table } from '../components/Table';
 import Button from '../components/Button';
 import { FormInput, FormSelect } from '../components/FormInput';
 import { SearchableOrderSelect } from '../components/SearchableOrderSelect';
 import { usePagePermission } from '../hooks/usePagePermission';
 import { useRefreshOnSameMenuClick } from '../hooks/useRefreshOnSameMenuClick';
 import { DailyEntryTable } from '../components/DailyEntryTable';
+import { GENERIC_CODE_TYPES, FALLBACK_SHIFT_OPTIONS } from '../constants/genericCodeTypes';
+import { useGenericCode } from '../hooks/useGenericCode';
 
 export function LoomDailyEntry() {
   const { canEdit } = usePagePermission();
@@ -23,6 +24,9 @@ export function LoomDailyEntry() {
 
 export function LoomEntryForm({ onSuccess }) {
   const { canEdit } = usePagePermission();
+  const { options: shiftOptions } = useGenericCode(GENERIC_CODE_TYPES.SHIFT, {
+    fallback: FALLBACK_SHIFT_OPTIONS,
+  });
   const [loading, setLoading] = useState(false);
   const [looms, setLooms] = useState([]);
   const [form, setForm] = useState({
@@ -120,7 +124,7 @@ export function LoomEntryForm({ onSuccess }) {
               <FormSelect
                 label="Shift"
                 required
-                options={[{ value: 'Day', label: 'Day' }, { value: 'Night', label: 'Night' }]}
+                options={shiftOptions}
                 value={form.shift}
                 onChange={(e) => setForm({ ...form, shift: e.target.value })}
                 className="!mb-0"
@@ -167,43 +171,6 @@ export function LoomEntryForm({ onSuccess }) {
           </div>
         </Card>
       </form>
-    </div>
-  );
-}
-
-export function ProductionReport() {
-  const [data, setData] = useState([]);
-  const [dateFrom, setDateFrom] = useState(new Date().toISOString().slice(0, 7) + '-01');
-  const [dateTo, setDateTo] = useState(new Date().toISOString().slice(0, 10));
-  const [loading, setLoading] = useState(false);
-
-  const fetch = () => {
-    setLoading(true);
-    api.get('/reports/loom-efficiency', { params: { date_from: dateFrom, date_to: dateTo, per_page: 500, page: 1 } })
-      .then(({ data: res }) => setData(res.looms || []))
-      .catch(() => toast.error('Failed to load'))
-      .finally(() => setLoading(false));
-  };
-  useEffect(() => fetch(), [dateFrom, dateTo]);
-  useRefreshOnSameMenuClick(fetch);
-
-  const columns = [
-    { key: 'loom_number', label: 'Loom' },
-    { key: 'net_production', label: 'Net Production (m)' },
-    { key: 'efficiency_percentage', label: 'Efficiency %' },
-    { key: 'days_worked', label: 'Days Worked' },
-  ];
-
-  return (
-    <div>
-      <h2 className="text-xl font-semibold text-gray-900 mb-6">Production Report</h2>
-      <Card>
-        <div className="flex gap-4 mb-4">
-          <FormInput type="date" label="From" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          <FormInput type="date" label="To" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-        </div>
-        <Table columns={columns} data={data} isLoading={loading} />
-      </Card>
     </div>
   );
 }

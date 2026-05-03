@@ -25,6 +25,32 @@ class WeavingUnitController extends Controller
         );
     }
 
+    public function deletedIndex(Request $request): JsonResponse
+    {
+        $perPage = $this->clampPerPage($request, 10, 100);
+        $units = WeavingUnit::onlyTrashed()
+            ->when($request->search, fn ($q) => $q->where('company_name', 'like', "%{$request->search}%")
+                ->orWhere('gst_number', 'like', "%{$request->search}%"))
+            ->orderByDesc('deleted_at')
+            ->paginate($perPage);
+
+        return $this->paginatedResponse(
+            $units,
+            WeavingUnitResource::collection($units->items())->resolve()
+        );
+    }
+
+    public function restoreTrashed(int $id): JsonResponse
+    {
+        $unit = WeavingUnit::onlyTrashed()->findOrFail($id);
+        $unit->restore();
+
+        return response()->json([
+            'message' => 'Weaving unit restored.',
+            'data' => new WeavingUnitResource($unit->fresh()),
+        ]);
+    }
+
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([

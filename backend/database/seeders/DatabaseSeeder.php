@@ -12,6 +12,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call(RolesSeeder::class);
+        $this->call(GenericCodeSeeder::class);
 
         $superAdminRoleId = Role::where('role_name', 'super_admin')->value('id');
         $adminRoleId = Role::where('role_name', 'admin')->value('id');

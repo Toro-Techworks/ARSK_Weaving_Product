@@ -19,19 +19,11 @@ return new class extends Migration
                 'parent_id' => $parentId,
                 'sort_order' => 20,
             ],
-            [
-                'menu_key' => 'reports.yarn_consumption',
-                'menu_name' => 'Yarn Consumption Report',
-                'route_path' => '/reports/yarn-consumption',
-                'icon' => 'FileBarChart',
-                'parent_id' => $parentId,
-                'sort_order' => 30,
-            ],
         ];
 
         foreach ($toInsert as $m) {
             $exists = DB::table('menus')->where('menu_key', $m['menu_key'])->exists();
-            if (!$exists) {
+            if (! $exists) {
                 DB::table('menus')->insert([
                     'menu_name' => $m['menu_name'],
                     'menu_key' => $m['menu_key'],
@@ -47,8 +39,10 @@ return new class extends Migration
         }
 
         // Grant view permission to all users by default.
-        $menuIds = DB::table('menus')->whereIn('menu_key', ['reports.production', 'reports.yarn_consumption'])->pluck('id');
-        if ($menuIds->isEmpty()) return;
+        $menuIds = DB::table('menus')->whereIn('menu_key', ['reports.production'])->pluck('id');
+        if ($menuIds->isEmpty()) {
+            return;
+        }
 
         $userIds = DB::table('users')->pluck('id');
         foreach ($userIds as $userId) {
@@ -57,7 +51,7 @@ return new class extends Migration
                     ->where('user_id', $userId)
                     ->where('menu_id', $menuId)
                     ->exists();
-                if (!$has) {
+                if (! $has) {
                     DB::table('user_menu_permissions')->insert([
                         'user_id' => $userId,
                         'menu_id' => $menuId,
@@ -74,9 +68,8 @@ return new class extends Migration
     public function down(): void
     {
         DB::table('user_menu_permissions')->whereIn('menu_id', function ($q) {
-            $q->select('id')->from('menus')->whereIn('menu_key', ['reports.production', 'reports.yarn_consumption']);
+            $q->select('id')->from('menus')->whereIn('menu_key', ['reports.production']);
         })->delete();
-        DB::table('menus')->whereIn('menu_key', ['reports.production', 'reports.yarn_consumption'])->delete();
+        DB::table('menus')->whereIn('menu_key', ['reports.production'])->delete();
     }
 };
-

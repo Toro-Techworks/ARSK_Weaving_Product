@@ -94,7 +94,7 @@ Log in with **username** (not email). Menus and permissions are seeded by `Menus
 - `GET|POST|... /api/loom-entries`
 - `GET|POST|... /api/payments`, `GET|POST|... /api/expenses`
 - `GET|POST|... /api/gst-records`
-- `GET /api/reports/gst-summary`, `order-summary`, `loom-efficiency`
+- `GET /api/reports/production` (and `/excel`, `/pdf` exports)
 - `GET|POST|... /api/users` (owner only)
 
 All authenticated routes use `Authorization: Bearer {token}`.

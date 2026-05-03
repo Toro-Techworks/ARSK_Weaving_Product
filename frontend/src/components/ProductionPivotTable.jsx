@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useMemo } from 'react';
+import React, { memo } from 'react';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -28,121 +28,89 @@ function slotNumCellClass(col) {
   return base;
 }
 
-/**
- * @param {{ value: string, onChange: (v: string) => void, orderOptions: { value: string, label: string }[] }} props
- */
-const PartyCell = memo(function PartyCell({ value, onChange, orderOptions }) {
-  const onPickOrder = useCallback(
-    (e) => {
-      const id = e.target.value;
-      if (!id) return;
-      const opt = orderOptions.find((o) => o.value === id);
-      if (opt) onChange(opt.label);
-      e.target.value = '';
-    },
-    [onChange, orderOptions]
-  );
-
+/** Read-only report cell for text (order id, SL). */
+function ReadOnlyTextCell({ value, title }) {
+  const s = value != null && String(value).trim() !== '' ? String(value).trim() : '';
   return (
-    <div className="flex flex-col gap-0.5">
-      <input
-        type="text"
-        className="w-full text-xs text-gray-800 border border-gray-200 rounded px-1 py-0.5 bg-white focus:ring-1 focus:ring-violet-400 focus:border-violet-400"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        aria-label="Party"
-      />
-      {orderOptions.length > 0 ? (
-        <select
-          className="w-full text-[10px] text-gray-600 border border-gray-200 rounded px-0.5 py-0.5 bg-gray-50"
-          defaultValue=""
-          onChange={onPickOrder}
-          aria-label="Fill party from order"
-        >
-          <option value="">Order…</option>
-          {orderOptions.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      ) : null}
+    <div
+      className="w-full min-h-[1.5rem] text-xs text-gray-900 px-1 py-0.5 whitespace-pre-wrap break-words bg-gray-50/60 rounded border border-transparent"
+      title={title || (s || undefined)}
+    >
+      {s || '—'}
     </div>
   );
-});
-
-/**
- * @param {{ value: number|null|undefined, onChange: (raw: string) => void }} props
- */
-const ShiftMtrCell = memo(function ShiftMtrCell({ value, onChange }) {
-  const str = value == null || value === '' ? '' : String(value);
-  return (
-    <input
-      type="number"
-      step="0.01"
-      min="0"
-      className="w-full text-right text-xs font-mono tabular-nums border border-gray-200 rounded px-1 py-0.5 bg-white focus:ring-1 focus:ring-violet-400 focus:border-violet-400"
-      value={str}
-      onChange={(e) => onChange(e.target.value)}
-      aria-label="Shift meters"
-    />
-  );
-});
+}
 
 const LoomPivotRows = memo(function LoomPivotRows({
   block,
   dateShiftColumns,
   dates,
-  orderOptions,
-  onPartyChange,
-  onMetersChange,
 }) {
-  const lid = String(block.loomId);
-
   return (
     <>
-      <tr className="bg-white hover:bg-slate-50/80 border-b border-gray-100">
+      <tr className="bg-white hover:bg-slate-50 border-b border-gray-100">
         <td
-          rowSpan={3}
-          className="sticky left-0 z-10 w-24 min-w-[5.5rem] bg-slate-50 border-r border-gray-200 px-2 py-1 align-middle font-bold text-gray-900 whitespace-nowrap shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]"
+          rowSpan={4}
+          className="sticky left-0 z-[30] w-24 min-w-[5.5rem] border-r border-gray-200 px-2 py-1 align-middle font-bold text-gray-900 whitespace-nowrap shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)]"
+          style={{ backgroundColor: '#f8fafc' }}
         >
           {block.loomNumber}
         </td>
-        <td className="sticky left-24 z-10 w-28 min-w-[6.5rem] bg-white border-r border-gray-200 px-2 py-1 text-gray-600 text-xs font-medium uppercase tracking-wide shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]">
-          Party
+        <td
+          className="sticky left-24 z-[30] w-28 min-w-[6.5rem] border-r border-gray-200 px-2 py-1 text-gray-600 text-xs font-medium uppercase tracking-wide shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)]"
+          style={{ backgroundColor: '#ffffff' }}
+        >
+          Order ID
         </td>
         {dateShiftColumns.map((col) => (
           <td key={col.key} className={slotCellClass(col)}>
-            <PartyCell
-              value={block.party[col.key] ?? ''}
-              onChange={(v) => onPartyChange(lid, col.key, v)}
-              orderOptions={orderOptions}
-            />
+            <ReadOnlyTextCell value={block.orderId[col.key] ?? ''} />
           </td>
         ))}
       </tr>
-      <tr className="bg-slate-50/40 hover:bg-slate-50 border-b border-gray-100">
-        <td className="sticky left-24 z-10 w-28 min-w-[6.5rem] bg-slate-50/40 border-r border-gray-200 px-2 py-1 text-gray-600 text-xs font-medium uppercase tracking-wide shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]">
+      <tr className="bg-slate-50 hover:bg-slate-100 border-b border-gray-100">
+        <td
+          className="sticky left-24 z-[30] w-28 min-w-[6.5rem] border-r border-gray-200 px-2 py-1 text-gray-600 text-xs font-medium uppercase tracking-wide shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)]"
+          style={{ backgroundColor: '#f1f5f9' }}
+        >
+          SL No
+        </td>
+        {dateShiftColumns.map((col) => (
+          <td key={col.key} className={slotCellClass(col)}>
+            <ReadOnlyTextCell value={block.slNo[col.key] ?? ''} />
+          </td>
+        ))}
+      </tr>
+      <tr className="bg-slate-100 hover:bg-slate-100 border-b border-gray-100">
+        <td
+          className="sticky left-24 z-[30] w-28 min-w-[6.5rem] border-r border-gray-200 px-2 py-1 text-gray-600 text-xs font-medium uppercase tracking-wide shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)]"
+          style={{ backgroundColor: '#e2e8f0' }}
+        >
           Shift Mtr
         </td>
         {dateShiftColumns.map((col) => (
           <td key={col.key} className={slotNumCellClass(col)}>
-            <ShiftMtrCell
-              value={block.shiftMtr[col.key]}
-              onChange={(raw) => onMetersChange(lid, col.key, raw)}
-            />
+            <div className="w-full text-right text-xs font-mono tabular-nums text-gray-900 px-1 py-0.5 bg-gray-50/60 rounded min-h-[1.5rem] flex items-center justify-end">
+              {block.shiftMtr[col.key] != null && block.shiftMtr[col.key] !== ''
+                ? displayNum(block.shiftMtr[col.key])
+                : '—'}
+            </div>
           </td>
         ))}
       </tr>
-      <tr className="bg-white hover:bg-slate-50/80 border-b-2 border-gray-300">
-        <td className="sticky left-24 z-10 w-28 min-w-[6.5rem] bg-white border-r border-gray-200 px-2 py-1 text-gray-700 text-xs font-semibold uppercase tracking-wide shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]">
+      <tr className="bg-white hover:bg-slate-50 border-b-2 border-gray-300">
+        <td
+          className="sticky left-24 z-[30] w-28 min-w-[6.5rem] border-r border-gray-200 px-2 py-1 text-gray-700 text-xs font-semibold uppercase tracking-wide shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)]"
+          style={{ backgroundColor: '#ffffff' }}
+        >
           Total Mtr (day)
         </td>
         {dates.map((d) => (
           <td
             key={d}
             colSpan={2}
-            className="border-r-2 border-gray-300 px-1.5 py-1 text-right font-mono text-xs tabular-nums text-gray-900 font-medium bg-slate-50/30"
+            className="border-r-2 border-gray-300 px-1.5 py-1 text-right font-mono text-xs tabular-nums text-gray-900 font-medium"
+            style={{ backgroundColor: '#f8fafc' }}
           >
             {displayNum(block.dateTotal[d])}
           </td>
@@ -153,21 +121,10 @@ const LoomPivotRows = memo(function LoomPivotRows({
 });
 
 /**
- * @param {{
- *   bundle: ReturnType<import('../utils/productionPivotReport').buildProductionPivotBundle>,
- *   orderOptions?: { value: string, label: string }[],
- *   onPartyChange?: (loomId: string|number, slotKey: string, value: string) => void,
- *   onMetersChange?: (loomId: string|number, slotKey: string, raw: string) => void,
- * }} props
+ * @param {{ bundle: ReturnType<import('../utils/productionPivotReport').buildProductionPivotBundle> }} props
  */
-function ProductionPivotTableInner({ bundle, orderOptions = [], onPartyChange, onMetersChange }) {
+function ProductionPivotTableInner({ bundle }) {
   const { dates, dateShiftColumns, loomBlocks, summaries, globalWeavers } = bundle;
-
-  const noop = useCallback(() => {}, []);
-  const partyCb = onPartyChange ?? noop;
-  const metersCb = onMetersChange ?? noop;
-
-  const opts = useMemo(() => orderOptions, [orderOptions]);
 
   if (!dates.length) {
     return (
@@ -196,13 +153,15 @@ function ProductionPivotTableInner({ bundle, orderOptions = [], onPartyChange, o
             <tr className="bg-slate-100 border-b border-gray-200">
               <th
                 rowSpan={2}
-                className="sticky left-0 z-20 w-24 min-w-[5.5rem] bg-slate-100 border-r border-b border-gray-300 px-2 py-2 text-left font-bold text-gray-900 align-middle shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]"
+                className="sticky left-0 z-[40] w-24 min-w-[5.5rem] border-r border-b border-gray-300 px-2 py-2 text-left font-bold text-gray-900 align-middle shadow-[2px_0_6px_-2px_rgba(15,23,42,0.14)]"
+                style={{ backgroundColor: '#f1f5f9' }}
               >
                 Loom
               </th>
               <th
                 rowSpan={2}
-                className="sticky left-24 z-20 w-28 min-w-[6.5rem] bg-slate-100 border-r border-b border-gray-300 px-2 py-2 text-left font-bold text-gray-900 align-middle shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]"
+                className="sticky left-24 z-[40] w-28 min-w-[6.5rem] border-r border-b border-gray-300 px-2 py-2 text-left font-bold text-gray-900 align-middle shadow-[2px_0_6px_-2px_rgba(15,23,42,0.14)]"
+                style={{ backgroundColor: '#f1f5f9' }}
               >
                 Row
               </th>
@@ -232,14 +191,18 @@ function ProductionPivotTableInner({ bundle, orderOptions = [], onPartyChange, o
             </tr>
           </thead>
           <tbody>
-            <tr className="bg-violet-50/70 border-b border-violet-100">
+            <tr className="border-b border-violet-200" style={{ backgroundColor: '#f5f3ff' }}>
               <td
                 rowSpan={2}
-                className="sticky left-0 z-10 w-24 min-w-[5.5rem] bg-violet-50/90 border-r border-violet-200 px-2 py-1 align-middle text-center text-[11px] font-semibold text-violet-900 uppercase tracking-wide shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]"
+                className="sticky left-0 z-[30] w-24 min-w-[5.5rem] border-r border-violet-200 px-2 py-1 align-middle text-center text-[11px] font-semibold text-violet-900 uppercase tracking-wide shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)]"
+                style={{ backgroundColor: '#f5f3ff' }}
               >
                 Weavers
               </td>
-              <td className="sticky left-24 z-10 w-28 min-w-[6.5rem] bg-violet-50/90 border-r border-violet-200 px-2 py-1 pl-4 font-medium text-violet-950 text-xs shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]">
+              <td
+                className="sticky left-24 z-[30] w-28 min-w-[6.5rem] border-r border-violet-200 px-2 py-1 pl-4 font-medium text-violet-950 text-xs shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)]"
+                style={{ backgroundColor: '#f5f3ff' }}
+              >
                 Weaver 1
               </td>
               {dateShiftColumns.map((col) => (
@@ -254,8 +217,11 @@ function ProductionPivotTableInner({ bundle, orderOptions = [], onPartyChange, o
                 </td>
               ))}
             </tr>
-            <tr className="bg-violet-50/50 border-b-2 border-gray-300">
-              <td className="sticky left-24 z-10 w-28 min-w-[6.5rem] bg-violet-50/80 border-r border-violet-200 px-2 py-1 pl-4 font-medium text-violet-950 text-xs shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]">
+            <tr className="border-b-2 border-gray-300" style={{ backgroundColor: '#f5f3ff' }}>
+              <td
+                className="sticky left-24 z-[30] w-28 min-w-[6.5rem] border-r border-violet-200 px-2 py-1 pl-4 font-medium text-violet-950 text-xs shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)]"
+                style={{ backgroundColor: '#f5f3ff' }}
+              >
                 Weaver 2
               </td>
               {dateShiftColumns.map((col) => (
@@ -276,9 +242,6 @@ function ProductionPivotTableInner({ bundle, orderOptions = [], onPartyChange, o
                 block={block}
                 dateShiftColumns={dateShiftColumns}
                 dates={dates}
-                orderOptions={opts}
-                onPartyChange={partyCb}
-                onMetersChange={metersCb}
               />
             ))}
           </tbody>
@@ -344,7 +307,7 @@ function ProductionPivotTableInner({ bundle, orderOptions = [], onPartyChange, o
         </table>
       </div>
       <p className="text-[11px] text-gray-500 px-3 py-2 border-t border-gray-200 bg-gray-50">
-        <strong>Weaver 1</strong> and <strong>Weaver 2</strong> are shared rows for the whole matrix; each Day/Night cell lists weavers from production entries in that slot (multiple looms → comma-separated names). Loom rows below are unchanged. Matrix edits are local until a save API exists.
+        <strong>Weaver 1</strong> and <strong>Weaver 2</strong> are shared rows for the whole matrix. Each loom shows <strong>Order ID</strong>, <strong>SL No</strong> (fabric line numbers for that order), <strong>Shift Mtr</strong>, and <strong>Total Mtr (day)</strong> — all read-only from production data.
       </p>
     </div>
   );

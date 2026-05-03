@@ -15,6 +15,8 @@ function TableComponent({
   keyField = 'id',
   emptyMessage = 'No data found.',
   isLoading,
+  onRowClick,
+  getRowClassName,
 }) {
   if (isLoading) {
     return <TableSkeleton rows={6} cols={columns?.length || 4} />;
@@ -48,7 +50,16 @@ function TableComponent({
                 animate="animate"
                 exit="exit"
                 transition={{ ...defaultTransition, delay: index * 0.02 }}
-                className="hover:bg-gray-50 transition-colors duration-150"
+                role={onRowClick ? 'button' : undefined}
+                tabIndex={onRowClick ? 0 : undefined}
+                onKeyDown={onRowClick ? (e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onRowClick(row);
+                  }
+                } : undefined}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                className={`hover:bg-gray-50 transition-colors duration-150 ${onRowClick ? 'cursor-pointer' : ''} ${getRowClassName ? (getRowClassName(row) || '') : ''}`}
               >
                 {columns.map((col) => (
                   <td key={col.key} className="px-4 py-3 text-sm text-gray-900">

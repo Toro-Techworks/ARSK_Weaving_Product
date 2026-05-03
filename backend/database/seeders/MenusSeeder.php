@@ -6,6 +6,7 @@ use App\Models\Menu;
 use App\Models\User;
 use App\Models\UserMenuPermission;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Cache;
 
 class MenusSeeder extends Seeder
 {
@@ -22,10 +23,11 @@ class MenusSeeder extends Seeder
             ['menu_key' => 'dashboard', 'menu_name' => 'Dashboard', 'route_path' => '/', 'icon' => 'LayoutDashboard', 'sort_order' => 10],
             ['menu_key' => 'companies', 'menu_name' => 'Companies', 'route_path' => '/companies', 'icon' => 'Building2', 'sort_order' => 20],
             ['menu_key' => 'orders', 'menu_name' => 'Orders', 'route_path' => '/orders', 'icon' => 'ClipboardList', 'sort_order' => 30],
+            ['menu_key' => 'yarn_stock', 'menu_name' => 'Yarn Stock', 'route_path' => '/yarn-stock', 'icon' => 'Package', 'sort_order' => 35],
+            ['menu_key' => 'winding', 'menu_name' => 'Winding', 'route_path' => '/winding', 'icon' => 'Package', 'sort_order' => 37],
             ['menu_key' => 'loom_production', 'menu_name' => 'Loom Production', 'route_path' => null, 'icon' => 'Factory', 'sort_order' => 40],
             ['menu_key' => 'payments', 'menu_name' => 'Payments', 'route_path' => '/payments', 'icon' => 'Wallet', 'sort_order' => 50],
-            ['menu_key' => 'expenses', 'menu_name' => 'Expenses', 'route_path' => '/expenses', 'icon' => 'TrendingDown', 'sort_order' => 60],
-            ['menu_key' => 'yarn_stock', 'menu_name' => 'Yarn Stock', 'route_path' => '/yarn-stock', 'icon' => 'Package', 'sort_order' => 70],
+            ['menu_key' => 'expenses', 'menu_name' => 'Production expenses', 'route_path' => '/expenses', 'icon' => 'TrendingDown', 'sort_order' => 60],
             ['menu_key' => 'reports', 'menu_name' => 'Reports', 'route_path' => null, 'icon' => 'FileBarChart', 'sort_order' => 80],
             ['menu_key' => 'admin_panel', 'menu_name' => 'Administration', 'route_path' => null, 'icon' => 'Shield', 'sort_order' => 90],
         ];
@@ -47,9 +49,10 @@ class MenusSeeder extends Seeder
 
         $loomParent = $ids['loom_production'];
         foreach ([
-            ['menu_key' => 'loom_production.looms', 'menu_name' => 'Looms', 'route_path' => '/loom-production/looms', 'sort_order' => 10],
+            // Hidden from sidebar; managed in Admin → Master now.
+            ['menu_key' => 'loom_production.looms', 'menu_name' => 'Looms', 'route_path' => '/loom-production/looms', 'sort_order' => 10, 'status' => 'inactive'],
             ['menu_key' => 'loom_production.daily', 'menu_name' => 'Daily Entry', 'route_path' => '/loom-production/daily', 'sort_order' => 20],
-            ['menu_key' => 'loom_production.report', 'menu_name' => 'Production Report', 'route_path' => '/loom-production/report', 'sort_order' => 30],
+            ['menu_key' => 'loom_production.assigning', 'menu_name' => 'Loom Assigning', 'route_path' => '/loom-production/assigning', 'sort_order' => 30],
         ] as $row) {
             $menu = Menu::updateOrCreate(
                 ['menu_key' => $row['menu_key']],
@@ -59,7 +62,7 @@ class MenusSeeder extends Seeder
                     'icon' => 'Factory',
                     'parent_id' => $loomParent,
                     'sort_order' => $row['sort_order'],
-                    'status' => 'active',
+                    'status' => $row['status'] ?? 'active',
                 ]
             );
             $ids[$row['menu_key']] = $menu->id;
@@ -67,17 +70,15 @@ class MenusSeeder extends Seeder
 
         $reportsParent = $ids['reports'];
         foreach ([
-            ['menu_key' => 'reports.production', 'menu_name' => 'Production Report', 'route_path' => '/reports/production', 'sort_order' => 10],
-            ['menu_key' => 'reports.yarn_consumption', 'menu_name' => 'Yarn Consumption Report', 'route_path' => '/reports/yarn-consumption', 'sort_order' => 20],
-            ['menu_key' => 'reports.order_summary', 'menu_name' => 'Order Summary', 'route_path' => '/reports/order-summary', 'sort_order' => 30],
-            ['menu_key' => 'reports.loom_efficiency', 'menu_name' => 'Loom Efficiency', 'route_path' => '/reports/loom-efficiency', 'sort_order' => 40],
+            ['menu_key' => 'reports.production', 'menu_name' => 'Production Report', 'route_path' => '/reports/production', 'sort_order' => 10, 'icon' => 'FileBarChart'],
+            ['menu_key' => 'reports.client_expenses', 'menu_name' => 'Client expense report', 'route_path' => '/reports/client-expenses', 'sort_order' => 20, 'icon' => 'TrendingDown'],
         ] as $row) {
             $menu = Menu::updateOrCreate(
                 ['menu_key' => $row['menu_key']],
                 [
                     'menu_name' => $row['menu_name'],
                     'route_path' => $row['route_path'],
-                    'icon' => 'FileBarChart',
+                    'icon' => $row['icon'] ?? 'FileBarChart',
                     'parent_id' => $reportsParent,
                     'sort_order' => $row['sort_order'],
                     'status' => 'active',
@@ -90,8 +91,11 @@ class MenusSeeder extends Seeder
         foreach ([
             ['menu_key' => 'admin.users', 'menu_name' => 'Users', 'route_path' => '/admin/users', 'icon' => 'Users', 'sort_order' => 10],
             ['menu_key' => 'admin.permissions', 'menu_name' => 'User Permissions', 'route_path' => '/admin/permissions', 'icon' => 'ClipboardList', 'sort_order' => 20],
-            ['menu_key' => 'admin.weaving_units', 'menu_name' => 'Weaving Unit', 'route_path' => '/admin/weaving-units', 'icon' => 'Factory', 'sort_order' => 30],
-            ['menu_key' => 'admin.weavers', 'menu_name' => 'Weavers', 'route_path' => '/admin/weavers', 'icon' => 'Users', 'sort_order' => 40],
+            // Hidden from sidebar; managed in Admin → Master now.
+            ['menu_key' => 'admin.weaving_units', 'menu_name' => 'Weaving Unit', 'route_path' => '/admin/weaving-units', 'icon' => 'Factory', 'sort_order' => 30, 'status' => 'inactive'],
+            ['menu_key' => 'admin.winding_units', 'menu_name' => 'Winding Unit', 'route_path' => '/admin/winding-units', 'icon' => 'Factory', 'sort_order' => 35, 'status' => 'inactive'],
+            ['menu_key' => 'admin.weavers', 'menu_name' => 'Weavers', 'route_path' => '/admin/weavers', 'icon' => 'Users', 'sort_order' => 40, 'status' => 'inactive'],
+            ['menu_key' => 'admin.master_settings', 'menu_name' => 'Master', 'route_path' => '/admin/master-settings', 'icon' => 'Settings', 'sort_order' => 50],
         ] as $row) {
             $menu = Menu::updateOrCreate(
                 ['menu_key' => $row['menu_key']],
@@ -101,13 +105,24 @@ class MenusSeeder extends Seeder
                     'icon' => $row['icon'],
                     'parent_id' => $adminParent,
                     'sort_order' => $row['sort_order'],
-                    'status' => 'active',
+                    'status' => $row['status'] ?? 'active',
                 ]
             );
             $ids[$row['menu_key']] = $menu->id;
         }
 
         $this->syncUserMenuPermissions();
+        $this->clearUserMenusCache();
+    }
+
+    /**
+     * MenuController caches GET /menus/user per user; invalidate after menu/permission changes.
+     */
+    private function clearUserMenusCache(): void
+    {
+        foreach (User::query()->pluck('id') as $id) {
+            Cache::forget('user_menus_'.$id);
+        }
     }
 
     private function syncUserMenuPermissions(): void
@@ -122,10 +137,8 @@ class MenusSeeder extends Seeder
             foreach ($menus as $menu) {
                 $view = true;
                 $edit = false;
-                if ($roleName === 'super_admin') {
+                if ($roleName === 'super_admin' || $roleName === 'admin') {
                     $edit = true;
-                } elseif ($roleName === 'admin') {
-                    $edit = $menu->menu_key !== 'admin.permissions';
                 }
 
                 UserMenuPermission::updateOrCreate(

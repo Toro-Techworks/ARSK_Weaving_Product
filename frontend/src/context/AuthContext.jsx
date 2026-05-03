@@ -1,16 +1,19 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import api, { getCsrfCookie } from '../api/client';
+import api from '../api/client';
+import {
+  getStoredUser,
+  getToken,
+  removeStoredUser,
+  removeToken,
+  setStoredUser,
+  setToken,
+} from '../utils/auth';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
-    try {
-      const u = localStorage.getItem('user');
-      return u ? JSON.parse(u) : null;
-    } catch {
-      return null;
-    }
+    return getStoredUser();
   });
   const [menus, setMenus] = useState([]);
   const [permissions, setPermissions] = useState({});
@@ -18,14 +21,14 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   const fetchUser = useCallback(async () => {
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) {
       setUser(null);
       setMenus([]);
       setPermissions({});
       setPermissionsLoaded(false);
       setLoading(false);
-      localStorage.removeItem('user');
+      removeStoredUser();
       return;
     }
     try {
@@ -34,7 +37,7 @@ export function AuthProvider({ children }) {
         api.get('/menus/user').catch(() => ({ data: { data: [], permissions: {} } })),
       ]);
       setUser(userRes.data.user);
-      localStorage.setItem('user', JSON.stringify(userRes.data.user));
+      setStoredUser(userRes.data.user);
       setMenus(menusRes.data.data || []);
       setPermissions(menusRes.data.permissions || {});
       setPermissionsLoaded(true);
@@ -43,8 +46,8 @@ export function AuthProvider({ children }) {
       setMenus([]);
       setPermissions({});
       setPermissionsLoaded(false);
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
+      removeToken();
+      removeStoredUser();
     } finally {
       setLoading(false);
     }
@@ -55,7 +58,7 @@ export function AuthProvider({ children }) {
   }, [fetchUser]);
 
   const refreshMenus = useCallback(async () => {
-    const token = localStorage.getItem('token');
+    const token = getToken();
     if (!token) return;
     try {
       const { data } = await api.get('/menus/user');
@@ -72,18 +75,19 @@ export function AuthProvider({ children }) {
   // Refetch menus/permissions when tab becomes visible so Assign Menu changes apply without re-login
   useEffect(() => {
     const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && localStorage.getItem('token')) refreshMenus();
+      if (document.visibilityState === 'visible' && getToken()) refreshMenus();
     };
     window.addEventListener('visibilitychange', onVisibilityChange);
     return () => window.removeEventListener('visibilitychange', onVisibilityChange);
   }, [refreshMenus]);
 
   const login = useCallback(async (username, password) => {
-    await getCsrfCookie();
     const { data } = await api.post('/login', { username, password });
-    localStorage.setItem('token', data.token);
+    setToken(data.token);
+    // eslint-disable-next-line no-console
+    console.log('[auth] logged in token:', data.token);
     setUser(data.user);
-    localStorage.setItem('user', JSON.stringify(data.user));
+    setStoredUser(data.user);
     const menusRes = await api.get('/menus/user').catch(() => ({ data: { data: [], permissions: {} } }));
     setMenus(menusRes.data.data || []);
     setPermissions(menusRes.data.permissions || {});
@@ -92,9 +96,9 @@ export function AuthProvider({ children }) {
   }, []);
 
   const setAuth = useCallback((token, userData) => {
-    localStorage.setItem('token', token);
+    setToken(token);
     setUser(userData);
-    localStorage.setItem('user', JSON.stringify(userData));
+    setStoredUser(userData);
     api.get('/menus/user').then((r) => {
       setMenus(r.data.data || []);
       setPermissions(r.data.permissions || {});
@@ -106,8 +110,8 @@ export function AuthProvider({ children }) {
     try {
       await api.post('/logout');
     } catch (_) {}
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    removeToken();
+    removeStoredUser();
     setUser(null);
     setMenus([]);
     setPermissions({});
@@ -128,8 +132,11 @@ export function AuthProvider({ children }) {
     return p ? !!p.edit : false;
   }, [permissions]);
 
+  const token = getToken();
+  const authenticated = Boolean(token);
+
   return (
-    <AuthContext.Provider value={{ user, menus, permissions, permissionsLoaded, loading, login, logout, setAuth, fetchUser, hasRole, refreshMenus, canView, canEdit }}>
+    <AuthContext.Provider value={{ user, authenticated, menus, permissions, permissionsLoaded, loading, login, logout, setAuth, fetchUser, hasRole, refreshMenus, canView, canEdit }}>
       {children}
     </AuthContext.Provider>
   );
