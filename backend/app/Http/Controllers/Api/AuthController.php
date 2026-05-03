@@ -63,7 +63,7 @@ class AuthController extends Controller
 
             if (! $user->isActive()) {
                 throw ValidationException::withMessages([
-                    'username' => ['This account has been disabled. Contact an administrator.'],
+                    'username' => ['This account is not active. Contact an administrator.'],
                 ]);
             }
 

@@ -17,6 +17,7 @@ class WeavingUnitResource extends JsonResource
             'contact_person' => $this->contact_person,
             'phone' => $this->phone,
             'payment_terms' => $this->payment_terms,
+            'status' => $this->status,
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
             'deleted_at' => $this->deleted_at?->toISOString(),

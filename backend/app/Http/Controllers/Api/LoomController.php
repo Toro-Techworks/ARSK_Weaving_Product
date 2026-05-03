@@ -168,4 +168,58 @@ class LoomController extends Controller
 
         return response()->json(['data' => LoomResource::collection($looms)->resolve()]);
     }
+
+    /**
+     * Current production attributes from the fabric row assigned to this loom (latest by id).
+     */
+    public function configuration(Loom $loom): JsonResponse
+    {
+        return response()->json($this->configurationPayload($loom));
+    }
+
+    /**
+     * Batch configuration for Daily Entry: GET /looms/configurations?ids=1,2,3
+     */
+    public function configurations(Request $request): JsonResponse
+    {
+        $raw = (string) $request->query('ids', '');
+        $ids = array_values(array_filter(array_map(
+            fn ($x) => (int) trim($x),
+            explode(',', $raw),
+        )));
+        if ($ids === []) {
+            return response()->json(['data' => (object) []]);
+        }
+        $looms = Loom::query()->whereIn('id', $ids)->get()->keyBy(fn ($l) => (int) $l->id);
+        $out = [];
+        foreach ($ids as $id) {
+            $loom = $looms->get($id);
+            $out[(string) $id] = $this->configurationPayload($loom);
+        }
+
+        return response()->json(['data' => $out]);
+    }
+
+    /**
+     * @return array{design: ?string, weave_tech: ?string, colour: ?string}
+     */
+    private function configurationPayload(?Loom $loom): array
+    {
+        if (! $loom) {
+            return ['design' => null, 'weave_tech' => null, 'colour' => null];
+        }
+        $fabric = Fabric::query()
+            ->where('loom_id', $loom->id)
+            ->orderByDesc('id')
+            ->first(['design', 'weave_technique', 'colour']);
+        if (! $fabric) {
+            return ['design' => null, 'weave_tech' => null, 'colour' => null];
+        }
+
+        return [
+            'design' => $fabric->design,
+            'weave_tech' => $fabric->weave_technique,
+            'colour' => $fabric->colour,
+        ];
+    }
 }

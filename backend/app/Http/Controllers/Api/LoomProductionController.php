@@ -173,24 +173,64 @@ class LoomProductionController extends Controller
             $changes = $incoming['changes'];
         }
 
-        $normalized = array_values(array_map(function ($ch) {
-            return [
-                'loom_id' => $ch['loomId'] ?? $ch['loom_id'] ?? null,
-                'date' => $ch['date'] ?? null,
-                'shift' => $ch['shift'] ?? null,
-                'field' => $ch['field'] ?? null,
-                'value' => $ch['value'] ?? null,
-            ];
-        }, $changes));
+        $loomSpecsIn = $incoming['loom_specs'] ?? [];
+        $dateFromIn = $incoming['date_from'] ?? null;
+        $dateToIn = $incoming['date_to'] ?? null;
 
-        $validated = validator(['changes' => $normalized], [
-            'changes' => 'required|array|max:2000',
-            'changes.*.loom_id' => 'required|integer|exists:looms,id',
-            'changes.*.date' => 'required|date_format:Y-m-d',
-            'changes.*.shift' => GenericCode::validationRule('shift', true),
-            'changes.*.field' => 'required|string|in:yarn_order_id,fabric_id,meters,weaver1_id,weaver2_id',
-            'changes.*.value' => 'nullable',
-        ])->validate();
+        $hasSpecs = is_array($loomSpecsIn) && count($loomSpecsIn) > 0;
+        $hasChanges = is_array($changes) && count($changes) > 0;
+
+        if (! $hasChanges && ! $hasSpecs) {
+            throw ValidationException::withMessages([
+                'changes' => ['No changes to apply.'],
+            ]);
+        }
+
+        $specBag = [
+            'loom_specs' => [],
+            'date_from' => null,
+            'date_to' => null,
+        ];
+        if ($hasSpecs) {
+            $specBag = validator([
+                'loom_specs' => $loomSpecsIn,
+                'date_from' => $dateFromIn,
+                'date_to' => $dateToIn,
+            ], [
+                'loom_specs' => 'required|array|max:500',
+                'loom_specs.*.loom_id' => 'required|integer|exists:looms,id',
+                'loom_specs.*.design' => GenericCode::validationRule('design', false, GenericCode::DROPDOWN_TYPE_MASTER, 255),
+                'loom_specs.*.weave_technique' => GenericCode::validationRule('weave_technique', false, GenericCode::DROPDOWN_TYPE_MASTER, 255),
+                'loom_specs.*.colour' => GenericCode::validationRule('colour', false, GenericCode::DROPDOWN_TYPE_MASTER, 512),
+                'date_from' => 'required|date_format:Y-m-d',
+                'date_to' => 'required|date_format:Y-m-d',
+            ])->validate();
+        }
+
+        $normalized = [];
+        if ($hasChanges) {
+            $normalized = array_values(array_map(function ($ch) {
+                return [
+                    'loom_id' => $ch['loomId'] ?? $ch['loom_id'] ?? null,
+                    'date' => $ch['date'] ?? null,
+                    'shift' => $ch['shift'] ?? null,
+                    'field' => $ch['field'] ?? null,
+                    'value' => $ch['value'] ?? null,
+                ];
+            }, $changes));
+        }
+
+        $validated = ['changes' => []];
+        if ($hasChanges) {
+            $validated = validator(['changes' => $normalized], [
+                'changes' => 'required|array|max:2000',
+                'changes.*.loom_id' => 'required|integer|exists:looms,id',
+                'changes.*.date' => 'required|date_format:Y-m-d',
+                'changes.*.shift' => GenericCode::validationRule('shift', true),
+                'changes.*.field' => 'required|string|in:yarn_order_id,fabric_id,meters,weaver1_id,weaver2_id',
+                'changes.*.value' => 'nullable',
+            ])->validate();
+        }
 
         $grouped = [];
         foreach ($validated['changes'] as $ch) {
@@ -207,10 +247,20 @@ class LoomProductionController extends Controller
             ];
         }
 
+        $dateFrom = $specBag['date_from'] ?? null;
+        $dateTo = $specBag['date_to'] ?? null;
+
+        $specByLoom = [];
+        if ($hasSpecs) {
+            foreach ($specBag['loom_specs'] as $s) {
+                $specByLoom[(int) $s['loom_id']] = $s;
+            }
+        }
+
         $deleted = [];
         $entries = [];
 
-        DB::transaction(function () use ($grouped, &$deleted, &$entries) {
+        DB::transaction(function () use ($grouped, &$deleted, &$entries, $hasSpecs, $specBag, $dateFrom, $dateTo, $specByLoom) {
             foreach ($grouped as $g) {
                 $loomId = $g['loom_id'];
                 $date = $g['date'];
@@ -225,12 +275,18 @@ class LoomProductionController extends Controller
                 $row = $existing ? [
                     'yarn_order_id' => $existing->yarn_order_id,
                     'fabric_id' => $existing->fabric_id,
+                    'design' => $existing->design,
+                    'weave_technique' => $existing->weave_technique,
+                    'colour' => $existing->colour,
                     'meters_produced' => (float) $existing->meters_produced,
                     'weaver1_id' => $existing->weaver1_id,
                     'weaver2_id' => $existing->weaver2_id,
                 ] : [
                     'yarn_order_id' => null,
                     'fabric_id' => null,
+                    'design' => null,
+                    'weave_technique' => null,
+                    'colour' => null,
                     'meters_produced' => 0.0,
                     'weaver1_id' => null,
                     'weaver2_id' => null,
@@ -240,11 +296,20 @@ class LoomProductionController extends Controller
                     $this->applyPatch($row, $patch);
                 }
 
+                if ($spec = $specByLoom[$loomId] ?? null) {
+                    $row['design'] = $spec['design'] ?? null;
+                    $row['weave_technique'] = $spec['weave_technique'] ?? null;
+                    $row['colour'] = $spec['colour'] ?? null;
+                }
+
                 $shouldPersist = ((float) $row['meters_produced']) > 0
                     || ! empty($row['weaver1_id'])
                     || ! empty($row['weaver2_id'])
                     || ! empty($row['yarn_order_id'])
-                    || ! empty($row['fabric_id']);
+                    || ! empty($row['fabric_id'])
+                    || ! empty($row['design'])
+                    || ! empty($row['weave_technique'])
+                    || ! empty($row['colour']);
 
                 if (! $shouldPersist) {
                     if ($existing) {
@@ -277,6 +342,9 @@ class LoomProductionController extends Controller
                     'shift' => $shift,
                     'yarn_order_id' => $row['yarn_order_id'],
                     'fabric_id' => $row['fabric_id'],
+                    'design' => $row['design'],
+                    'weave_technique' => $row['weave_technique'],
+                    'colour' => $row['colour'],
                     'meters_produced' => round((float) $row['meters_produced'], 2),
                     'weaver1_id' => $row['weaver1_id'],
                     'weaver2_id' => $row['weaver2_id'],
@@ -291,12 +359,27 @@ class LoomProductionController extends Controller
                     $entries[] = LoomEntry::create($payload)->load(['weaver1', 'weaver2']);
                 }
             }
+
+            if ($hasSpecs && $dateFrom && $dateTo) {
+                foreach ($specBag['loom_specs'] as $spec) {
+                    LoomEntry::query()
+                        ->where('loom_id', (int) $spec['loom_id'])
+                        ->whereDate('date', '>=', $dateFrom)
+                        ->whereDate('date', '<=', $dateTo)
+                        ->update([
+                            'design' => $spec['design'] ?? null,
+                            'weave_technique' => $spec['weave_technique'] ?? null,
+                            'colour' => $spec['colour'] ?? null,
+                        ]);
+                }
+            }
         });
 
         return response()->json([
             'data' => [
                 'entries' => LoomEntryResource::collection($entries)->resolve(),
                 'deleted' => $deleted,
+                'loom_specs_updated' => $hasSpecs,
             ],
         ]);
     }

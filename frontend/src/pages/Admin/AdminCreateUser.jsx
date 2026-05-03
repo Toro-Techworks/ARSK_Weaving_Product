@@ -25,6 +25,7 @@ export function AdminCreateUser() {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     name: '',
+    designation: '',
     username: '',
     password: '',
     password_confirmation: '',
@@ -80,6 +81,9 @@ export function AdminCreateUser() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className={fieldClass}>
               <FormInput label="Name" required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Full name" className="!mb-0" />
+            </div>
+            <div className={fieldClass}>
+              <FormInput label="Designation" value={form.designation} onChange={(e) => setForm((f) => ({ ...f, designation: e.target.value }))} placeholder="e.g. Production Manager" className="!mb-0" />
             </div>
             <div className={fieldClass}>
               <FormInput label="Username" type="text" required value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value.trim().replace(/\s+/g, '') }))} placeholder="username" minLength={4} className="!mb-0" title="Min 4 characters, no spaces" />

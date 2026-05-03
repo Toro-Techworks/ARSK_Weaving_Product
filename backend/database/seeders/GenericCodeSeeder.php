@@ -27,7 +27,8 @@ class GenericCodeSeeder extends Seeder
             ['payment_status', 'running', 20],
             ['payment_status', 'closed', 30],
             ['user_status', 'active', 10],
-            ['user_status', 'disabled', 20],
+            ['user_status', 'inactive', 20],
+            ['user_status', 'left', 30],
             ['menu_link_status', 'active', 10],
             ['menu_link_status', 'inactive', 20],
         ];
@@ -72,6 +73,15 @@ class GenericCodeSeeder extends Seeder
             ['expense_category', 'Transport & freight', 46],
             ['expense_category', 'Quality / packing (mill)', 47],
             ['expense_category', 'Order-specific charge', 48],
+            ['weave_technique', 'Plain', 10],
+            ['weave_technique', 'Twill', 20],
+            ['weave_technique', 'Satin', 30],
+            ['weave_technique', 'Dobby', 40],
+            ['weave_technique', 'Jacquard', 50],
+            ['weave_technique', 'casement', 60],
+            ['design', 'FRDS', 10],
+            ['design', 'check', 20],
+            ['design', 'DESIGN', 30],
         ];
         foreach ($masterRows as [$type, $description, $sort]) {
             GenericCode::updateOrCreate(

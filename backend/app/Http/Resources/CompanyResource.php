@@ -15,6 +15,7 @@ class CompanyResource extends JsonResource
             'gst_number' => $this->gst_number,
             'address' => $this->address,
             'contact_person' => $this->contact_person,
+            'email' => $this->email,
             'phone' => $this->phone,
             'payment_terms' => $this->payment_terms,
             'created_at' => $this->created_at?->toISOString(),

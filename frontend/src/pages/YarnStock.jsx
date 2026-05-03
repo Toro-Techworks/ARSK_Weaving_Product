@@ -18,10 +18,11 @@ import {
   FALLBACK_YARN_COLOURS,
   FALLBACK_YARN_RECEIPT_COUNT_CONTENT,
   FALLBACK_PLANNING_COLOURS,
+  FALLBACK_WEAVE_TECHNIQUE,
 } from '../constants/genericCodeTypes';
 import MultiColourInput from '../components/ui/MultiColourInput';
 import { useGenericCode } from '../hooks/useGenericCode';
-import { handleGridNavKeyDown } from '../utils/gridKeyboardNav';
+import { handleGridNavKeyDown, firstFocusableActionButton } from '../utils/gridKeyboardNav';
 import { formatOrderId } from '../utils/formatOrderId';
 import { ProductionReadiness } from '../components/ProductionReadiness';
 
@@ -260,6 +261,15 @@ function fabricRowToPayload(row) {
 // --- Yarn Requirement ---
 const YARN_REQ_ROW_KEYS = ['colour', 'count', 'content', 'required_weight'];
 
+/** If stored value is not yet in MASTER list, surface it so the row stays editable until user picks a master value. */
+function mergeMasterOptionForCurrentValue(options, rawValue) {
+  const v = rawValue != null ? String(rawValue).trim() : '';
+  if (!v) return options ?? [];
+  const list = options ?? [];
+  if (list.some((o) => String(o.value) === v)) return list;
+  return [{ value: v, label: v }, ...list];
+}
+
 const RECEIPT_GRID_COLS = YARN_RECEIPT_ROW_KEYS.length;
 const FABRIC_GRID_COLS = FABRIC_ROW_KEYS.length;
 const YARN_REQ_GRID_COLS = YARN_REQ_ROW_KEYS.length;
@@ -291,7 +301,7 @@ const orderEntryInitial = {
   delivery_date: '',
 };
 
-/** Yarn Stock Entry: New Order form + Yarn Receipt Details */
+/** Yarn Stock Entry: order summary + receipt / planning grids */
 export function YarnStockEntry() {
   const { orderId: orderIdParam } = useParams();
   const { canEdit } = usePagePermission();
@@ -314,6 +324,10 @@ export function YarnStockEntry() {
     fallback: FALLBACK_PLANNING_COLOURS,
     dropdownType: 'MASTER',
   });
+  const { options: weaveTechniqueMasterOptions } = useGenericCode(GENERIC_CODE_TYPES.WEAVE_TECHNIQUE, {
+    fallback: FALLBACK_WEAVE_TECHNIQUE,
+    dropdownType: 'MASTER',
+  });
   const { hasRole } = useAuth();
   const canManageYarnRequirements = hasRole('super_admin') || hasRole('admin');
   const canViewProductionReadiness = hasRole('super_admin') || hasRole('admin');
@@ -328,13 +342,10 @@ export function YarnStockEntry() {
   const [yarnReceiptEditIds, setYarnReceiptEditIds] = useState(() => new Set());
   const [yarnOrders, setYarnOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingReceipt, setEditingReceipt] = useState(null);
   const receiptMatrixRef = useRef([]);
+  const receiptRowActionsRef = useRef([]);
   const [orderEntry, setOrderEntry] = useState(orderEntryInitial);
   const [editingOrderId, setEditingOrderId] = useState(null);
-  const [orderEntryErrors, setOrderEntryErrors] = useState({});
-  const [orderEntrySaving, setOrderEntrySaving] = useState(false);
   const [fabrics, setFabrics] = useState([]);
   const [fabricsLoading, setFabricsLoading] = useState(false);
   const [loomsForOrder, setLoomsForOrder] = useState([]);
@@ -346,6 +357,7 @@ export function YarnStockEntry() {
   /** Saved fabric row ids currently in edit mode; new rows (no id) are always editable until first save. */
   const [fabricEditIds, setFabricEditIds] = useState(() => new Set());
   const fabricMatrixRef = useRef([]);
+  const fabricRowActionsRef = useRef([]);
   const fabricRowsRef = useRef(fabricRows);
   fabricRowsRef.current = fabricRows;
   const fabricEditIdsRef = useRef(fabricEditIds);
@@ -361,6 +373,7 @@ export function YarnStockEntry() {
   const [yarnReqEditIds, setYarnReqEditIds] = useState(() => new Set());
   const [yarnReqRowErrors, setYarnReqRowErrors] = useState({});
   const yarnReqMatrixRef = useRef([]);
+  const yarnReqRowActionsRef = useRef([]);
   const yarnReqRowsRef = useRef(yarnReqRows);
   yarnReqRowsRef.current = yarnReqRows;
   const yarnReqEditIdsRef = useRef(yarnReqEditIds);
@@ -456,7 +469,6 @@ export function YarnStockEntry() {
     if (!orderIdParam) {
       setOrderEntry(orderEntryInitial);
       setEditingOrderId(null);
-      setOrderEntryErrors({});
       setOrderLoading(false);
       justLoadedOrderIdRef.current = null;
       setReceipts([]);
@@ -696,6 +708,7 @@ export function YarnStockEntry() {
           return false;
         },
         onLand: (r, c) => setActiveCell({ rowIndex: r, colKey: YARN_RECEIPT_ROW_KEYS[c] }),
+        endOfRowTabTarget: firstFocusableActionButton(receiptRowActionsRef.current[rowIndex]),
       });
     },
     [yarnReceiptRows, yarnReceiptEditIds, canEdit],
@@ -832,6 +845,7 @@ export function YarnStockEntry() {
           return false;
         },
         onLand: (r, c) => setActiveCellFabric({ rowIndex: r, colKey: FABRIC_ROW_KEYS[c] }),
+        endOfRowTabTarget: firstFocusableActionButton(fabricRowActionsRef.current[rowIndex]),
       });
     },
     [fabricRows, fabricEditIds, canEdit],
@@ -1008,6 +1022,7 @@ export function YarnStockEntry() {
           return false;
         },
         onLand: (r, c) => setActiveCellYarnReq({ rowIndex: r, colKey: YARN_REQ_ROW_KEYS[c] }),
+        endOfRowTabTarget: firstFocusableActionButton(yarnReqRowActionsRef.current[rowIndex]),
       });
     },
     [yarnReqRows, yarnReqEditIds, canEdit],
@@ -1165,66 +1180,17 @@ export function YarnStockEntry() {
       .catch(() => toast.error('Delete failed'));
   };
 
-  const validateOrderEntry = () => {
-    const err = {};
-    if (!orderEntry.order_from?.trim()) err.order_from = 'Order From is required';
-    if (!orderEntry.weaving_unit?.trim()) err.weaving_unit = 'Weaving Unit is required';
-    if (!orderEntry.po_number?.trim()) err.po_number = 'P.O Number is required';
-    if (!orderEntry.po_date?.trim()) err.po_date = 'PO Date is required';
-    if (!orderEntry.delivery_date?.trim()) err.delivery_date = 'Delivery Date is required';
-    setOrderEntryErrors(err);
-    return Object.keys(err).length === 0;
-  };
-
-  const handleOrderEntrySubmit = async (e) => {
-    e.preventDefault();
-    if (!validateOrderEntry()) {
-      toast.error('Please fill all required fields.');
-      return;
-    }
-    setOrderEntrySaving(true);
-    const payload = {
-      order_from: orderEntry.order_from?.trim() || null,
-      weaving_unit: orderEntry.weaving_unit?.trim() || null,
-      po_number: orderEntry.po_number || null,
-      customer: orderEntry.customer || null,
-      po_date: orderEntry.po_date || null,
-      delivery_date: orderEntry.delivery_date || null,
-    };
-    try {
-      if (editingOrderId) {
-        await api.put(`/yarn-orders/${editingOrderId}`, payload);
-        toast.success('Order updated.');
-        fetchFabrics(editingOrderId);
-      } else {
-        const { data } = await api.post('/yarn-orders', payload);
-        const newId = data.data?.id ?? null;
-        setEditingOrderId(newId);
-        toast.success('Order saved.');
-      }
-      setOrderEntryErrors({});
-      fetchYarnOrders();
-    } catch (err) {
-      const msg = err.response?.data?.message
-        || (err.response?.data?.errors ? Object.values(err.response.data.errors).flat().join(' ') : 'Failed to save order');
-      toast.error(msg);
-    } finally {
-      setOrderEntrySaving(false);
-    }
-  };
-
   const pageLoading = orderIdParam && orderLoading;
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6">
-        <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Yarn Stock Entry</h2>
-        {!canEdit && (
+      {!canEdit && (
+        <div className="flex justify-end mb-4 sm:mb-6">
           <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
             Read Only Mode
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
       {pageLoading && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-[2px]">
@@ -1236,40 +1202,38 @@ export function YarnStockEntry() {
       )}
 
       {editingOrderId && (
-        <Card className="mb-4 sm:mb-6 border-gray-100 bg-gray-50/40">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
-            <h3 className="text-base font-semibold text-gray-900">Order details</h3>
-            <span className="text-sm font-mono font-medium text-brand tabular-nums">
+        <div className="mb-6 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-x-6 sm:gap-x-10 gap-y-5">
+          <div>
+            <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Order ID</div>
+            <div className="mt-1 text-sm font-mono font-medium tabular-nums text-brand">
               {formatOrderId(editingOrderId, orderEntry.po_date)}
-            </span>
+            </div>
           </div>
-          <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3 text-sm">
-            <div>
-              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Order from</dt>
-              <dd className="mt-0.5 text-gray-900">{orderEntry.order_from?.trim() || '—'}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Weaving unit</dt>
-              <dd className="mt-0.5 text-gray-900">{orderEntry.weaving_unit?.trim() || '—'}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">P.O number</dt>
-              <dd className="mt-0.5 text-gray-900">{orderEntry.po_number?.trim() || '—'}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Customer</dt>
-              <dd className="mt-0.5 text-gray-900">{orderEntry.customer?.trim() || '—'}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">PO date</dt>
-              <dd className="mt-0.5 text-gray-900">{formatOrderDate(orderEntry.po_date)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Delivery date</dt>
-              <dd className="mt-0.5 text-gray-900">{formatOrderDate(orderEntry.delivery_date)}</dd>
-            </div>
-          </dl>
-        </Card>
+          <div>
+            <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Order from</div>
+            <div className="mt-1 text-sm text-gray-900">{orderEntry.order_from?.trim() || '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Weaving unit</div>
+            <div className="mt-1 text-sm text-gray-900">{orderEntry.weaving_unit?.trim() || '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">P.O number</div>
+            <div className="mt-1 text-sm text-gray-900">{orderEntry.po_number?.trim() || '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Customer</div>
+            <div className="mt-1 text-sm text-gray-900">{orderEntry.customer?.trim() || '—'}</div>
+          </div>
+          <div>
+            <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">PO date</div>
+            <div className="mt-1 text-sm text-gray-900">{formatOrderDate(orderEntry.po_date)}</div>
+          </div>
+          <div>
+            <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Delivery date</div>
+            <div className="mt-1 text-sm text-gray-900">{formatOrderDate(orderEntry.delivery_date)}</div>
+          </div>
+        </div>
       )}
 
       <Card>
@@ -1518,7 +1482,12 @@ export function YarnStockEntry() {
                       </td>
                       <td className="px-1 py-1.5 align-top">
                         {canEdit && (
-                          <div className="flex flex-wrap items-center justify-end gap-1">
+                          <div
+                            ref={(el) => {
+                              receiptRowActionsRef.current[rowIndex] = el;
+                            }}
+                            className="flex flex-wrap items-center justify-end gap-1"
+                          >
                             {isSessionRow && (
                               <>
                                 <button
@@ -1687,6 +1656,30 @@ export function YarnStockEntry() {
                             </td>
                           );
                         }
+                        if (colKey === 'weave_technique') {
+                          const wOpts = mergeMasterOptionForCurrentValue(weaveTechniqueMasterOptions, row.weave_technique);
+                          return (
+                            <td key={colKey} className="p-0 align-top px-1 py-0.5">
+                              <SearchableSelect
+                                ref={setFabricCell(rowIndex, colIndex)}
+                                options={wOpts}
+                                value={row.weave_technique ?? ''}
+                                onChange={(v) => handleFabricCellChange(rowIndex, 'weave_technique', v || '')}
+                                onKeyDown={(e) => handleFabricGridKeyDown(e, rowIndex, colIndex)}
+                                onMenuOpen={() => {
+                                  ensureFabricSession(rowIndex);
+                                  setActiveCellFabric({ rowIndex, colKey });
+                                }}
+                                placeholder={fabricGridColumnLabel(colKey)}
+                                isDisabled={!cellOn}
+                                isClearable
+                                compact
+                                hideIndicators
+                                menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
+                              />
+                            </td>
+                          );
+                        }
                         if (colKey === 'warp_count' || colKey === 'weft_count') {
                           return (
                             <td key={colKey} className="p-0 align-top px-1 py-0.5">
@@ -1752,7 +1745,12 @@ export function YarnStockEntry() {
                       })}
                       <td className="px-1 py-1.5 align-top">
                         {canEdit && (
-                          <div className="flex flex-wrap items-center justify-end gap-1">
+                          <div
+                            ref={(el) => {
+                              fabricRowActionsRef.current[rowIndex] = el;
+                            }}
+                            className="flex flex-wrap items-center justify-end gap-1"
+                          >
                             {isSessionRow && (
                               <>
                                 <button
@@ -1955,7 +1953,12 @@ export function YarnStockEntry() {
                         ))}
                         <td className="p-1 align-top">
                           {canEdit && (
-                            <div className="flex flex-wrap items-center justify-end gap-1">
+                            <div
+                              ref={(el) => {
+                                yarnReqRowActionsRef.current[rowIndex] = el;
+                              }}
+                              className="flex flex-wrap items-center justify-end gap-1"
+                            >
                               {isSessionRow && (
                                 <>
                                   <button
@@ -2318,6 +2321,10 @@ function FabricModal({ yarnOrderId, fabric, onClose, onSaved }) {
     fallback: FALLBACK_PLANNING_COLOURS,
     dropdownType: 'MASTER',
   });
+  const { options: weaveTechniqueOptionsRaw } = useGenericCode(GENERIC_CODE_TYPES.WEAVE_TECHNIQUE, {
+    fallback: FALLBACK_WEAVE_TECHNIQUE,
+    dropdownType: 'MASTER',
+  });
   const { options: yarnReceiptCountOptions } = useGenericCode(GENERIC_CODE_TYPES.YARN_RECEIPT_COUNT, {
     fallback: FALLBACK_YARN_RECEIPT_COUNT_CONTENT,
     dropdownType: 'MASTER',
@@ -2348,6 +2355,11 @@ function FabricModal({ yarnOrderId, fabric, onClose, onSaved }) {
   } : { ...fabricEmptyForm });
   const [loading, setLoading] = useState(false);
   const update = (field, value) => setForm((f) => ({ ...f, [field]: value }));
+
+  const weaveTechniqueOptions = useMemo(
+    () => mergeMasterOptionForCurrentValue(weaveTechniqueOptionsRaw, form.weave_technique),
+    [weaveTechniqueOptionsRaw, form.weave_technique],
+  );
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -2400,7 +2412,16 @@ function FabricModal({ yarnOrderId, fabric, onClose, onSaved }) {
                 />
               </div>
               <FormInput label="Design" value={form.design} onChange={(e) => update('design', e.target.value)} className={cell} />
-              <FormInput label="Weave Technique" value={form.weave_technique} onChange={(e) => update('weave_technique', e.target.value)} className={cell} />
+              <div className={cell}>
+                <FormSelect
+                  label="Weave Technique"
+                  options={weaveTechniqueOptions}
+                  value={form.weave_technique}
+                  onChange={(e) => update('weave_technique', e.target.value)}
+                  emptyLabel="Select weave technique"
+                  className="!mb-0"
+                />
+              </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
               <div className={cell}>

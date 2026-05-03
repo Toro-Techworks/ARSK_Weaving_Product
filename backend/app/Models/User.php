@@ -14,16 +14,24 @@ class User extends Authenticatable
 
     const STATUS_ACTIVE = 'active';
 
+    const STATUS_INACTIVE = 'inactive';
+
+    const STATUS_LEFT = 'left';
+
+    /** @deprecated Legacy DB value; migrated to {@see STATUS_INACTIVE}. */
     const STATUS_DISABLED = 'disabled';
 
-    const STATUSES = [
+    public const STATUSES = [
         self::STATUS_ACTIVE => 'Active',
-        self::STATUS_DISABLED => 'Disabled',
+        self::STATUS_INACTIVE => 'Inactive',
+        self::STATUS_LEFT => 'Left',
+        self::STATUS_DISABLED => 'Inactive',
     ];
 
     protected $fillable = [
         'name',
         'username',
+        'designation',
         'password',
         'role_id',
         'status',

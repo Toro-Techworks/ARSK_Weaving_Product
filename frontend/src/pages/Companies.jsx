@@ -13,6 +13,10 @@ import { usePagePermission } from '../hooks/usePagePermission';
 import { useRefreshOnSameMenuClick } from '../hooks/useRefreshOnSameMenuClick';
 import { TablePagination } from '../components/TablePagination';
 import { normalizePaginatedResponse } from '../utils/pagination';
+import { getGstinValidationError, normalizeGstinInput } from '../utils/gstin';
+import { GstinFormField } from '../components/GstinFormField';
+import { FormPhoneInput } from '../components/FormPhoneInput';
+import { ensureInternationalFormat, isValidInternationalPhone } from '../utils/phoneInternational';
 
 export function CompanyList() {
   const { user } = useAuth();
@@ -58,6 +62,7 @@ export function CompanyList() {
   const columns = [
     { key: 'company_name', label: 'Company Name' },
     { key: 'contact_person', label: 'Contact' },
+    { key: 'email', label: 'Email', render: (v) => (v && String(v).trim() ? v : '—') },
     { key: 'gst_number', label: 'GST No.' },
     { key: 'phone', label: 'Phone' },
     ...(canEdit ? [{
@@ -98,7 +103,7 @@ export function CompanyList() {
       </div>
       <Card>
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
-          <FormInput placeholder="Search company or GST..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full sm:max-w-xs" />
+          <FormInput placeholder="Search company, GST, or email..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full sm:max-w-xs" />
         </div>
         <Table columns={columns} data={data} isLoading={loading} emptyMessage="No companies yet." />
         {(meta.total > 0 || page > 1) && (
@@ -131,11 +136,6 @@ export function CompanyList() {
   );
 }
 
-function normalizePhone(v) {
-  const digits = String(v || '').replace(/\D/g, '');
-  return digits.slice(0, 10);
-}
-
 /** Map API row (list or show) to edit form — list already returns full CompanyResource fields. */
 function companyRowToForm(c) {
   if (!c) {
@@ -144,39 +144,40 @@ function companyRowToForm(c) {
       gst_number: '',
       address: '',
       contact_person: '',
+      email: '',
       phone: '',
       payment_terms: '',
     };
   }
   return {
     company_name: c.company_name ?? '',
-    gst_number: c.gst_number ?? '',
+    gst_number: normalizeGstinInput(c.gst_number ?? ''),
     address: c.address ?? '',
     contact_person: c.contact_person ?? '',
-    phone: normalizePhone(c.phone),
+    email: c.email ?? '',
+    phone: ensureInternationalFormat(c.phone),
     payment_terms: c.payment_terms ?? '',
   };
-}
-
-function isValidPhone(v) {
-  return /^\d{10}$/.test(String(v || ''));
 }
 
 function CompanyAddModal({ onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
-    company_name: '', gst_number: '', address: '', contact_person: '', phone: '', payment_terms: '',
+    company_name: '', gst_number: '', address: '', contact_person: '', email: '', phone: '', payment_terms: '',
   });
+  const [gstinBlurred, setGstinBlurred] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const phone = normalizePhone(form.phone);
-    if (phone && !isValidPhone(phone)) {
-      toast.error('Phone number must be exactly 10 digits');
+    setSubmitAttempted(true);
+    if (getGstinValidationError(form.gst_number, { required: true })) return;
+    if (form.phone && !isValidInternationalPhone(form.phone)) {
+      toast.error('Enter a valid phone number for the selected country');
       return;
     }
     setLoading(true);
-    api.post('/companies', { ...form, phone })
+    api.post('/companies', { ...form, email: form.email?.trim() || null, phone: form.phone || null })
       .then(() => { toast.success('Company added'); onSuccess?.(); })
       .catch((err) => toast.error(err.response?.data?.message || 'Failed'))
       .finally(() => setLoading(false));
@@ -203,20 +204,36 @@ function CompanyAddModal({ onClose, onSuccess }) {
               <FormInput label="Company Name" required value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormInput label="GST Number" value={form.gst_number} onChange={(e) => setForm({ ...form, gst_number: e.target.value })} className="!mb-0" />
+              <GstinFormField
+                id="company-add-gstin"
+                value={form.gst_number}
+                onValueChange={(v) => setForm({ ...form, gst_number: v })}
+                fieldBlurred={gstinBlurred}
+                onFieldBlur={() => setGstinBlurred(true)}
+                submitAttempted={submitAttempted}
+                required
+              />
             </div>
             <div className={fieldClass}>
               <FormInput label="Contact Person" value={form.contact_person} onChange={(e) => setForm({ ...form, contact_person: e.target.value })} className="!mb-0" />
             </div>
             <div className={fieldClass}>
               <FormInput
+                label="Email"
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder="name@company.com"
+                className="!mb-0"
+              />
+            </div>
+            <div className={fieldClass}>
+              <FormPhoneInput
+                id="company-add-phone"
                 label="Phone"
                 value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: normalizePhone(e.target.value) })}
-                inputMode="numeric"
-                maxLength={10}
-                placeholder="10-digit phone (optional)"
-                title="Up to 10 digits; leave blank if not applicable"
+                onChange={(next) => setForm({ ...form, phone: next })}
+                placeholder="Mobile number (optional)"
                 className="!mb-0"
               />
             </div>
@@ -244,19 +261,22 @@ function CompanyAddModal({ onClose, onSuccess }) {
 function CompanyEditModal({ company, onClose, onSuccess }) {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(() => companyRowToForm(company));
+  const [gstinBlurred, setGstinBlurred] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   // Row from grid already includes full CompanyResource; no extra fetch — form is instant.
   // If the list API is ever trimmed, reintroduce a background GET here and merge into form.
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const phone = normalizePhone(form.phone);
-    if (phone && !isValidPhone(phone)) {
-      toast.error('Phone number must be exactly 10 digits');
+    setSubmitAttempted(true);
+    if (getGstinValidationError(form.gst_number, { required: true })) return;
+    if (form.phone && !isValidInternationalPhone(form.phone)) {
+      toast.error('Enter a valid phone number for the selected country');
       return;
     }
     setSaving(true);
-    api.put(`/companies/${company.id}`, { ...form, phone })
+    api.put(`/companies/${company.id}`, { ...form, email: form.email?.trim() || null, phone: form.phone || null })
       .then(() => { toast.success('Company updated'); onSuccess?.(); })
       .catch((err) => toast.error(err.response?.data?.message || 'Failed'))
       .finally(() => setSaving(false));
@@ -283,20 +303,36 @@ function CompanyEditModal({ company, onClose, onSuccess }) {
               <FormInput label="Company Name" required value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormInput label="GST Number" value={form.gst_number} onChange={(e) => setForm({ ...form, gst_number: e.target.value })} className="!mb-0" />
+              <GstinFormField
+                id="company-edit-gstin"
+                value={form.gst_number}
+                onValueChange={(v) => setForm({ ...form, gst_number: v })}
+                fieldBlurred={gstinBlurred}
+                onFieldBlur={() => setGstinBlurred(true)}
+                submitAttempted={submitAttempted}
+                required
+              />
             </div>
             <div className={fieldClass}>
               <FormInput label="Contact Person" value={form.contact_person} onChange={(e) => setForm({ ...form, contact_person: e.target.value })} className="!mb-0" />
             </div>
             <div className={fieldClass}>
               <FormInput
+                label="Email"
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder="name@company.com"
+                className="!mb-0"
+              />
+            </div>
+            <div className={fieldClass}>
+              <FormPhoneInput
+                id="company-edit-phone"
                 label="Phone"
                 value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: normalizePhone(e.target.value) })}
-                inputMode="numeric"
-                maxLength={10}
-                placeholder="10-digit phone (optional)"
-                title="Up to 10 digits; leave blank if not applicable"
+                onChange={(next) => setForm({ ...form, phone: next })}
+                placeholder="Mobile number (optional)"
                 className="!mb-0"
               />
             </div>
@@ -326,24 +362,39 @@ export function CompanyForm({ id, onSuccess }) {
   const isEdit = !!id;
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
-    company_name: '', gst_number: '', address: '', contact_person: '', phone: '', payment_terms: '',
+    company_name: '', gst_number: '', address: '', contact_person: '', email: '', phone: '', payment_terms: '',
   });
+  const [gstinBlurred, setGstinBlurred] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   useEffect(() => {
-    if (id) api.get(`/companies/${id}`).then(({ data }) => setForm(data.data)).catch(() => toast.error('Failed to load'));
+    if (!id) return;
+    api
+      .get(`/companies/${id}`)
+      .then(({ data }) => {
+        const d = data.data;
+        setForm({
+          ...d,
+          gst_number: normalizeGstinInput(d.gst_number ?? ''),
+          email: d.email ?? '',
+          phone: ensureInternationalFormat(d.phone),
+        });
+      })
+      .catch(() => toast.error('Failed to load'));
   }, [id]);
 
   if (!canEdit) return <Navigate to="/companies" replace />;
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const phone = normalizePhone(form.phone);
-    if (phone && !isValidPhone(phone)) {
-      toast.error('Phone number must be exactly 10 digits');
+    setSubmitAttempted(true);
+    if (getGstinValidationError(form.gst_number, { required: true })) return;
+    if (form.phone && !isValidInternationalPhone(form.phone)) {
+      toast.error('Enter a valid phone number for the selected country');
       return;
     }
     setLoading(true);
-    const payload = { ...form, phone };
+    const payload = { ...form, email: form.email?.trim() || null, phone: form.phone || null };
     const promise = isEdit ? api.put(`/companies/${id}`, payload) : api.post('/companies', payload);
     promise
       .then(() => { toast.success(isEdit ? 'Updated' : 'Company added'); onSuccess?.(); })
@@ -376,20 +427,36 @@ export function CompanyForm({ id, onSuccess }) {
               <FormInput label="Company Name" required value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormInput label="GST Number" value={form.gst_number} onChange={(e) => setForm({ ...form, gst_number: e.target.value })} className="!mb-0" />
+              <GstinFormField
+                id="company-form-gstin"
+                value={form.gst_number}
+                onValueChange={(v) => setForm({ ...form, gst_number: v })}
+                fieldBlurred={gstinBlurred}
+                onFieldBlur={() => setGstinBlurred(true)}
+                submitAttempted={submitAttempted}
+                required
+              />
             </div>
             <div className={fieldClass}>
               <FormInput label="Contact Person" value={form.contact_person} onChange={(e) => setForm({ ...form, contact_person: e.target.value })} className="!mb-0" />
             </div>
             <div className={fieldClass}>
               <FormInput
+                label="Email"
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder="name@company.com"
+                className="!mb-0"
+              />
+            </div>
+            <div className={fieldClass}>
+              <FormPhoneInput
+                id="company-form-phone"
                 label="Phone"
                 value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: normalizePhone(e.target.value) })}
-                inputMode="numeric"
-                maxLength={10}
-                placeholder="10-digit phone (optional)"
-                title="Up to 10 digits; leave blank if not applicable"
+                onChange={(next) => setForm({ ...form, phone: next })}
+                placeholder="Mobile number (optional)"
                 className="!mb-0"
               />
             </div>

@@ -13,6 +13,38 @@ export function tryFocusCell(el) {
   return true;
 }
 
+/** First enabled action button inside a row's actions cell (Save / Edit / etc.). */
+export function firstFocusableActionButton(container) {
+  if (!container || typeof container.querySelector !== 'function') return null;
+  return container.querySelector('button:not([disabled])');
+}
+
+/** Menu is portaled to body; detect by stable class from SearchableSelect. */
+function isSearchableSelectMenuOpen() {
+  if (typeof document === 'undefined') return false;
+  const el = document.querySelector('.searchable-select-dropdown');
+  if (!el) return false;
+  const s = getComputedStyle(el);
+  if (s.display === 'none' || s.visibility === 'hidden' || Number(s.opacity) === 0) return false;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0;
+}
+
+/**
+ * When focus is in a react-select cell, do not steal keys needed to open the menu,
+ * filter options, or choose a value — those are handled by react-select.
+ */
+export function shouldPassThroughForSearchableSelect(e) {
+  if (!e?.target?.closest?.('[data-searchable-select-wrap]')) return false;
+  const menuOpen = isSearchableSelectMenuOpen();
+  const passWhenClosed = ['ArrowDown', 'ArrowUp', 'Enter', ' ', 'Escape'];
+  if (passWhenClosed.includes(e.key)) return true;
+  if (menuOpen) {
+    return ['Tab', 'Home', 'End', 'PageUp', 'PageDown', 'ArrowLeft', 'ArrowRight'].includes(e.key);
+  }
+  return false;
+}
+
 /**
  * Tab order: left → right, wrap to next row first column; Shift+Tab reverses.
  */
@@ -25,6 +57,8 @@ export function gridTabNavigate({
   forward,
   shouldSkip,
   onLand,
+  /** Forward Tab from the last data column focuses this (e.g. first Save button) before advancing to the next row. */
+  endOfRowTabTarget = null,
 }) {
   let r = rowIndex;
   let c = colIndex;
@@ -32,12 +66,18 @@ export function gridTabNavigate({
 
   for (let step = 0; step < maxSteps; step++) {
     if (forward) {
-      if (c < numCols - 1) c += 1;
-      else if (r < numRows - 1) {
-        r += 1;
-        c = 0;
+      if (c < numCols - 1) {
+        c += 1;
       } else {
-        return;
+        if (endOfRowTabTarget != null && tryFocusCell(endOfRowTabTarget)) {
+          return;
+        }
+        if (r < numRows - 1) {
+          r += 1;
+          c = 0;
+        } else {
+          return;
+        }
       }
     } else {
       if (c > 0) c -= 1;
@@ -107,7 +147,12 @@ export function handleGridNavKeyDown(e, ctx) {
     onLand,
     enableArrows = true,
     enableEnterDown = true,
+    endOfRowTabTarget = null,
   } = ctx;
+
+  if (shouldPassThroughForSearchableSelect(e)) {
+    return false;
+  }
 
   if (e.key === 'Tab') {
     e.preventDefault();
@@ -120,6 +165,7 @@ export function handleGridNavKeyDown(e, ctx) {
       forward: !e.shiftKey,
       shouldSkip,
       onLand,
+      endOfRowTabTarget: !e.shiftKey ? endOfRowTabTarget : null,
     });
     return true;
   }
