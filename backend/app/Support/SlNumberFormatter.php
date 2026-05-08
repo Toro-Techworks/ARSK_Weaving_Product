@@ -3,7 +3,6 @@
 namespace App\Support;
 
 use App\Models\Fabric;
-use App\Models\YarnOrder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -148,8 +147,9 @@ final class SlNumberFormatter
      */
     public static function forFabric(Fabric $fabric, ?array $sequenceByFabricId = null): string
     {
+        $fabric->loadMissing('yarnOrder');
+        $yo = $fabric->yarnOrder;
         $oid = (int) $fabric->yarn_order_id;
-        $yo = YarnOrder::withoutGlobalScopes()->find($oid);
         $seqMap = $sequenceByFabricId ?? self::sequenceByFabricIdForYarnOrder($oid);
         $seq = $seqMap[(int) $fabric->id] ?? 1;
         $po = $yo?->po_date;

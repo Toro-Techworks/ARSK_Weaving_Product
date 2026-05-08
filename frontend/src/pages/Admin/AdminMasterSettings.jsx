@@ -4,18 +4,22 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import api from '../../api/client';
 import { Card } from '../../components/Card';
+import { StatusToggle } from '../../components/StatusToggle';
 import Button from '../../components/Button';
 import { FormInput, FormSelect, FormTextarea } from '../../components/FormInput';
+import { FormPhoneInput } from '../../components/FormPhoneInput';
 import { usePagePermission } from '../../hooks/usePagePermission';
 import { useRefreshOnSameMenuClick } from '../../hooks/useRefreshOnSameMenuClick';
 import { normalizePaginatedResponse } from '../../utils/pagination';
+import { appendWeaverFieldsToFormData } from '../../utils/weaverFormData';
+import { ensureInternationalFormat, isValidInternationalPhone } from '../../utils/phoneInternational';
+import { getGstinValidationError, normalizeGstinInput } from '../../utils/gstin';
+import { GstinFormField } from '../../components/GstinFormField';
 import { GENERIC_CODE_TYPES, FALLBACK_ACTIVE_INACTIVE } from '../../constants/genericCodeTypes';
 import { useGenericCode } from '../../hooks/useGenericCode';
 
 /** Must match App\Models\GenericCode::DROPDOWN_TYPE_MASTER */
 const MASTER_DROPDOWN_TYPE = 'MASTER';
-
-const BRAND = '#7b2979';
 
 function formatCodeTypeLabel(codeType) {
   const key = String(codeType || '');
@@ -23,6 +27,8 @@ function formatCodeTypeLabel(codeType) {
   if (key === 'yarn_receipt_count') return 'Count';
   if (key === 'yarn_receipt_content') return 'Content';
   if (key === 'expense_category') return 'Expense Category';
+  if (key === 'weave_technique') return 'Weave Technique';
+  if (key === 'design') return 'Design';
   // Default: "some_key" -> "Some Key"
   return key
     .replace(/_/g, ' ')
@@ -36,7 +42,8 @@ export function AdminMasterSettings() {
   const [windingUnits, setWindingUnits] = useState([]);
   const [weavers, setWeavers] = useState([]);
   const [looms, setLooms] = useState([]);
-  const [loading, setLoading] = useState(true);
+  /** After the first full load, section refetches no longer hide the whole page. */
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [loadingMasters, setLoadingMasters] = useState({ generic: true, units: true, windingUnits: true, weavers: true, looms: true });
 
   const [addOpen, setAddOpen] = useState(false);
@@ -46,20 +53,15 @@ export function AdminMasterSettings() {
   const [expanded, setExpanded] = useState(() => ({}));
   const [unitAddOpen, setUnitAddOpen] = useState(false);
   const [unitEdit, setUnitEdit] = useState(null);
-  const [unitDelete, setUnitDelete] = useState(null);
   const [windingAddOpen, setWindingAddOpen] = useState(false);
   const [windingEdit, setWindingEdit] = useState(null);
-  const [windingDelete, setWindingDelete] = useState(null);
   const [weaverAddOpen, setWeaverAddOpen] = useState(false);
   const [weaverEdit, setWeaverEdit] = useState(null);
-  const [weaverDelete, setWeaverDelete] = useState(null);
   const [loomAddOpen, setLoomAddOpen] = useState(false);
   const [loomEdit, setLoomEdit] = useState(null);
-  const [loomDelete, setLoomDelete] = useState(null);
 
   const fetchGenericCodes = useCallback(() => {
     let alive = true;
-    setLoading(true);
     setLoadingMasters((p) => ({ ...p, generic: true }));
 
     async function run() {
@@ -90,7 +92,6 @@ export function AdminMasterSettings() {
       } finally {
         if (!alive) return;
         setLoadingMasters((p) => ({ ...p, generic: false }));
-        setLoading(false);
       }
     }
 
@@ -241,6 +242,18 @@ export function AdminMasterSettings() {
     return () => { cleanups.forEach((fn) => (typeof fn === 'function' ? fn() : null)); };
   }, [fetchGenericCodes, fetchWeavingUnits, fetchWindingUnits, fetchWeavers, fetchLooms]);
 
+  useEffect(() => {
+    const anyBusy =
+      loadingMasters.generic ||
+      loadingMasters.units ||
+      loadingMasters.windingUnits ||
+      loadingMasters.weavers ||
+      loadingMasters.looms;
+    if (!anyBusy) {
+      setInitialLoadComplete(true);
+    }
+  }, [loadingMasters]);
+
   useRefreshOnSameMenuClick(() => {
     fetchGenericCodes();
     fetchWeavingUnits();
@@ -294,49 +307,97 @@ export function AdminMasterSettings() {
     }
   };
 
-  const deleteWeavingUnit = async (unit) => {
-    try {
-      await api.delete(`/weaving-units/${unit.id}`);
-      toast.success('Deleted');
-      setUnitDelete(null);
-      fetchWeavingUnits();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Delete failed');
-    }
-  };
+  const toggleWeaverStatus = useCallback(
+    async (it) => {
+      if (!canEdit) return;
+      const raw = it?.raw;
+      if (!raw?.id) return;
+      const isActive = String(raw.status ?? 'Active').trim() === 'Active';
+      const next = isActive ? 'Inactive' : 'Active';
+      setWeavers((prev) => prev.map((w) => (w.id === raw.id ? { ...w, status: next } : w)));
+      try {
+        await api.put(`/weavers/${raw.id}`, { status: next });
+        toast.success(next === 'Active' ? 'Weaver activated' : 'Weaver deactivated');
+      } catch (err) {
+        toast.error(err.response?.data?.message || 'Update failed');
+        fetchWeavers();
+      }
+    },
+    [canEdit, fetchWeavers],
+  );
 
-  const deleteWindingUnit = async (unit) => {
-    try {
-      await api.delete(`/winding-units/${unit.id}`);
-      toast.success('Deleted');
-      setWindingDelete(null);
-      fetchWindingUnits();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Delete failed');
-    }
-  };
+  const toggleLoomStatus = useCallback(
+    async (it) => {
+      if (!canEdit) return;
+      const raw = it?.raw;
+      if (!raw?.id) return;
+      const isActive = String(raw.status ?? 'Active').trim() === 'Active';
+      const next = isActive ? 'Inactive' : 'Active';
+      const defaultInactiveReason = 'Marked inactive from Master settings.';
+      setLooms((prev) =>
+        prev.map((l) =>
+          l.id === raw.id
+            ? {
+                ...l,
+                status: next,
+                inactive_reason: next === 'Active' ? null : String(l.inactive_reason || '').trim() || defaultInactiveReason,
+              }
+            : l,
+        ),
+      );
+      try {
+        if (next === 'Inactive') {
+          const reason = String(raw.inactive_reason || '').trim() || defaultInactiveReason;
+          await api.put(`/looms/${raw.id}`, { status: 'Inactive', inactive_reason: reason });
+        } else {
+          await api.put(`/looms/${raw.id}`, { status: 'Active' });
+        }
+        toast.success(next === 'Active' ? 'Loom activated' : 'Loom deactivated');
+      } catch (err) {
+        toast.error(err.response?.data?.message || 'Update failed');
+        fetchLooms();
+      }
+    },
+    [canEdit, fetchLooms],
+  );
 
-  const deleteWeaver = async (w) => {
-    try {
-      await api.delete(`/weavers/${w.id}`);
-      toast.success('Deleted');
-      setWeaverDelete(null);
-      fetchWeavers();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Delete failed');
-    }
-  };
+  const toggleWeavingUnitStatus = useCallback(
+    async (it) => {
+      if (!canEdit) return;
+      const raw = it?.raw;
+      if (!raw?.id) return;
+      const isActive = String(raw.status ?? 'Active').trim() === 'Active';
+      const next = isActive ? 'Inactive' : 'Active';
+      setWeavingUnits((prev) => prev.map((u) => (u.id === raw.id ? { ...u, status: next } : u)));
+      try {
+        await api.put(`/weaving-units/${raw.id}`, { status: next });
+        toast.success(next === 'Active' ? 'Weaving unit activated' : 'Weaving unit deactivated');
+      } catch (err) {
+        toast.error(err.response?.data?.message || 'Update failed');
+        fetchWeavingUnits();
+      }
+    },
+    [canEdit, fetchWeavingUnits],
+  );
 
-  const deleteLoom = async (l) => {
-    try {
-      await api.delete(`/looms/${l.id}`);
-      toast.success('Deleted');
-      setLoomDelete(null);
-      fetchLooms();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Delete failed');
-    }
-  };
+  const toggleWindingUnitStatus = useCallback(
+    async (it) => {
+      if (!canEdit) return;
+      const raw = it?.raw;
+      if (!raw?.id) return;
+      const isActive = String(raw.status ?? 'Active').trim() === 'Active';
+      const next = isActive ? 'Inactive' : 'Active';
+      setWindingUnits((prev) => prev.map((u) => (u.id === raw.id ? { ...u, status: next } : u)));
+      try {
+        await api.put(`/winding-units/${raw.id}`, { status: next });
+        toast.success(next === 'Active' ? 'Winding unit activated' : 'Winding unit deactivated');
+      } catch (err) {
+        toast.error(err.response?.data?.message || 'Update failed');
+        fetchWindingUnits();
+      }
+    },
+    [canEdit, fetchWindingUnits],
+  );
 
   return (
     <div className="font-sans" style={{ fontFamily: "'Poppins', 'Inter', system-ui, sans-serif" }}>
@@ -353,7 +414,7 @@ export function AdminMasterSettings() {
       </div>
 
       <div className="space-y-4">
-        {(loading || loadingMasters.units || loadingMasters.windingUnits || loadingMasters.weavers || loadingMasters.looms) ? (
+        {!initialLoadComplete ? (
           <Card className="p-6">
             <div className="text-sm text-gray-500">Loading…</div>
           </Card>
@@ -378,7 +439,8 @@ export function AdminMasterSettings() {
                 raw: l,
               }))}
               onItemClick={(it) => setLoomEdit(it.raw)}
-              onItemDelete={(it) => setLoomDelete(it.raw)}
+              entityStatusActive={(it) => String(it.raw?.status ?? 'Active').trim() === 'Active'}
+              onToggleEntityStatus={toggleLoomStatus}
             />
 
             <EntityCard
@@ -392,11 +454,12 @@ export function AdminMasterSettings() {
               items={weavingUnits.map((u) => ({
                 id: u.id,
                 primary: u.company_name,
-                secondary: [u.contact_person, u.phone].filter(Boolean).join(' • '),
+                secondary: [u.contact_person, u.phone, u.status].filter(Boolean).join(' • '),
                 raw: u,
               }))}
               onItemClick={(it) => setUnitEdit(it.raw)}
-              onItemDelete={(it) => setUnitDelete(it.raw)}
+              entityStatusActive={(it) => String(it.raw?.status ?? 'Active').trim() === 'Active'}
+              onToggleEntityStatus={toggleWeavingUnitStatus}
             />
 
             <EntityCard
@@ -410,11 +473,12 @@ export function AdminMasterSettings() {
               items={windingUnits.map((u) => ({
                 id: u.id,
                 primary: u.company_name,
-                secondary: [u.contact_person, u.phone].filter(Boolean).join(' • '),
+                secondary: [u.contact_person, u.phone, u.status].filter(Boolean).join(' • '),
                 raw: u,
               }))}
               onItemClick={(it) => setWindingEdit(it.raw)}
-              onItemDelete={(it) => setWindingDelete(it.raw)}
+              entityStatusActive={(it) => String(it.raw?.status ?? 'Active').trim() === 'Active'}
+              onToggleEntityStatus={toggleWindingUnitStatus}
             />
 
             <EntityCard
@@ -432,7 +496,8 @@ export function AdminMasterSettings() {
                 raw: w,
               }))}
               onItemClick={(it) => setWeaverEdit(it.raw)}
-              onItemDelete={(it) => setWeaverDelete(it.raw)}
+              entityStatusActive={(it) => String(it.raw?.status ?? 'Active').trim() === 'Active'}
+              onToggleEntityStatus={toggleWeaverStatus}
             />
 
             {grouped.map(({ codeType, items }) => (
@@ -514,16 +579,6 @@ export function AdminMasterSettings() {
           onSaved={() => { setUnitEdit(null); fetchWeavingUnits(); toast.success('Updated'); }}
         />
       )}
-      {unitDelete && (
-        <ConfirmModal
-          title="Delete weaving unit?"
-          message={`Delete "${unitDelete.company_name}"? This cannot be undone.`}
-          confirmLabel="Delete"
-          onCancel={() => setUnitDelete(null)}
-          onConfirm={() => deleteWeavingUnit(unitDelete)}
-        />
-      )}
-
       {windingAddOpen && (
         <WindingUnitModal
           title="Add Winding Unit"
@@ -540,16 +595,6 @@ export function AdminMasterSettings() {
           onSaved={() => { setWindingEdit(null); fetchWindingUnits(); toast.success('Updated'); }}
         />
       )}
-      {windingDelete && (
-        <ConfirmModal
-          title="Delete winding unit?"
-          message={`Delete "${windingDelete.company_name}"? This cannot be undone.`}
-          confirmLabel="Delete"
-          onCancel={() => setWindingDelete(null)}
-          onConfirm={() => deleteWindingUnit(windingDelete)}
-        />
-      )}
-
       {weaverAddOpen && (
         <WeaverModal
           title="Add Weaver"
@@ -566,16 +611,6 @@ export function AdminMasterSettings() {
           onSaved={() => { setWeaverEdit(null); fetchWeavers(); toast.success('Updated'); }}
         />
       )}
-      {weaverDelete && (
-        <ConfirmModal
-          title="Delete weaver?"
-          message={`Delete "${weaverDelete.weaver_name}"? This cannot be undone.`}
-          confirmLabel="Delete"
-          onCancel={() => setWeaverDelete(null)}
-          onConfirm={() => deleteWeaver(weaverDelete)}
-        />
-      )}
-
       {loomAddOpen && (
         <LoomModal
           title="Add Loom"
@@ -590,15 +625,6 @@ export function AdminMasterSettings() {
           initial={loomEdit}
           onClose={() => setLoomEdit(null)}
           onSaved={() => { setLoomEdit(null); fetchLooms(); toast.success('Updated'); }}
-        />
-      )}
-      {loomDelete && (
-        <ConfirmModal
-          title="Delete loom?"
-          message={`Delete "${loomDelete.loom_number}"? This cannot be undone.`}
-          confirmLabel="Delete"
-          onCancel={() => setLoomDelete(null)}
-          onConfirm={() => deleteLoom(loomDelete)}
         />
       )}
     </div>
@@ -616,6 +642,9 @@ function EntityCard({
   items,
   onItemClick,
   onItemDelete,
+  /** When set with `onToggleEntityStatus`, each tile shows an Active/Inactive toggle like generic MASTER values. */
+  entityStatusActive,
+  onToggleEntityStatus,
 }) {
   const reduceMotion = useReducedMotion();
   const countLabel = `${count} item${count === 1 ? '' : 's'}`;
@@ -623,7 +652,7 @@ function EntityCard({
     <div className="rounded-2xl bg-white shadow-sm ring-1 ring-gray-200/60 overflow-hidden">
       <div className="p-4 sm:p-5 flex items-center justify-between gap-3">
         <button type="button" onClick={onToggleExpanded} className="flex items-center gap-3 min-w-0 text-left">
-          <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-[#7b2979]/10 text-[#7b2979] shrink-0" aria-hidden>
+          <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-brand/10 text-brand shrink-0" aria-hidden>
             <ChevronDown className={`w-5 h-5 transition-transform ${expanded ? 'rotate-0' : '-rotate-90'}`} />
           </span>
           <div className="min-w-0">
@@ -639,8 +668,7 @@ function EntityCard({
           <button
             type="button"
             onClick={onAdd}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-white shadow-sm"
-            style={{ backgroundColor: BRAND }}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-white shadow-sm bg-brand hover:bg-brand-dark transition-colors"
             title={`Add ${title}`}
           >
             <Plus className="w-4 h-4" />
@@ -665,46 +693,93 @@ function EntityCard({
                     <button
                       type="button"
                       onClick={onAdd}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-white"
-                      style={{ backgroundColor: BRAND }}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-white bg-brand hover:bg-brand-dark transition-colors"
                     >
                       <Plus className="w-4 h-4" /> Add
                     </button>
                   )}
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {items.map((it) => (
-                    <div
-                      key={it.id}
-                      className="group rounded-xl bg-white border border-gray-200/70 px-3 py-3 sm:px-4 sm:py-3.5 flex items-center justify-between gap-3 hover:shadow-sm hover:-translate-y-[1px] transition-all"
-                    >
-                      <button type="button" className="min-w-0 text-left flex-1" onClick={() => onItemClick?.(it)}>
-                        <div className="text-sm font-medium text-gray-900 truncate">{it.primary}</div>
-                        {it.secondary ? <div className="text-xs text-gray-500 mt-0.5 truncate">{it.secondary}</div> : null}
-                      </button>
-                      {canEdit && (
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => onItemClick?.(it)}
-                            className="p-2 rounded-lg text-gray-500 hover:text-[#7b2979] hover:bg-[#7b2979]/10 transition-colors"
-                            title="Edit"
-                          >
-                            <Pencil className="w-4 h-4" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
+                  {items.map((it) => {
+                    const showStatusToggle = typeof onToggleEntityStatus === 'function' && typeof entityStatusActive === 'function';
+                    if (showStatusToggle) {
+                      return (
+                        <div
+                          key={it.id}
+                          className="group rounded-xl bg-white border border-gray-200/70 px-3 py-3 sm:px-4 sm:py-3.5 flex flex-col gap-2.5 hover:shadow-sm hover:-translate-y-[1px] transition-all min-w-0 h-full"
+                        >
+                          <button type="button" className="min-w-0 text-left w-full" onClick={() => onItemClick?.(it)}>
+                            <div className="text-sm font-medium text-gray-900 truncate">{it.primary}</div>
+                            {it.secondary ? <div className="text-xs text-gray-500 mt-0.5 truncate">{it.secondary}</div> : null}
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => onItemDelete?.(it)}
-                            className="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center justify-between gap-2 shrink-0 pt-1 border-t border-gray-100">
+                            <StatusToggle
+                              checked={Boolean(entityStatusActive(it))}
+                              disabled={!canEdit}
+                              onChange={() => onToggleEntityStatus(it)}
+                              ariaLabel={`${title}: toggle active`}
+                            />
+                            {canEdit && (
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => onItemClick?.(it)}
+                                  className="p-2 rounded-lg text-gray-500 hover:text-brand hover:bg-brand/10 transition-colors"
+                                  title="Edit"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </button>
+                                {onItemDelete && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onItemDelete(it)}
+                                    className="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  ))}
+                      );
+                    }
+                    return (
+                      <div
+                        key={it.id}
+                        className="group rounded-xl bg-white border border-gray-200/70 px-3 py-3 sm:px-4 sm:py-3.5 flex items-center justify-between gap-3 hover:shadow-sm hover:-translate-y-[1px] transition-all min-w-0"
+                      >
+                        <button type="button" className="min-w-0 text-left flex-1" onClick={() => onItemClick?.(it)}>
+                          <div className="text-sm font-medium text-gray-900 truncate">{it.primary}</div>
+                          {it.secondary ? <div className="text-xs text-gray-500 mt-0.5 truncate">{it.secondary}</div> : null}
+                        </button>
+                        {canEdit && (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => onItemClick?.(it)}
+                              className="p-2 rounded-lg text-gray-500 hover:text-brand hover:bg-brand/10 transition-colors"
+                              title="Edit"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            {onItemDelete && (
+                              <button
+                                type="button"
+                                onClick={() => onItemDelete(it)}
+                                className="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -715,37 +790,32 @@ function EntityCard({
   );
 }
 
-function normalizePhone(v) {
-  const digits = String(v || '').replace(/\D/g, '');
-  return digits.slice(0, 10);
-}
-
-function isValidPhone(v) {
-  return /^\d{10}$/.test(String(v || ''));
-}
-
 function WeavingUnitModal({ title, initial, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(() => ({
     company_name: initial?.company_name ?? '',
-    gst_number: initial?.gst_number ?? '',
+    gst_number: normalizeGstinInput(initial?.gst_number ?? ''),
     address: initial?.address ?? '',
     contact_person: initial?.contact_person ?? '',
-    phone: normalizePhone(initial?.phone),
+    phone: ensureInternationalFormat(initial?.phone),
     payment_terms: initial?.payment_terms ?? '',
+    status: initial?.status ?? 'Active',
   }));
+  const [gstinBlurred, setGstinBlurred] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   const isEdit = Boolean(initial?.id);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const phone = normalizePhone(form.phone);
-    if (phone && !isValidPhone(phone)) {
-      toast.error('Phone number must be exactly 10 digits');
+    setSubmitAttempted(true);
+    if (getGstinValidationError(form.gst_number, { required: true })) return;
+    if (form.phone && !isValidInternationalPhone(form.phone)) {
+      toast.error('Enter a valid phone number for the selected country');
       return;
     }
     setSaving(true);
-    const payload = { ...form, phone };
+    const payload = { ...form, phone: form.phone || null, status: form.status || 'Active' };
     const req = isEdit ? api.put(`/weaving-units/${initial.id}`, payload) : api.post('/weaving-units', payload);
     req
       .then(() => onSaved?.())
@@ -769,19 +839,26 @@ function WeavingUnitModal({ title, initial, onClose, onSaved }) {
               <FormInput label="Weaving Unit Name" required value={form.company_name} onChange={(e) => setForm((f) => ({ ...f, company_name: e.target.value }))} className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormInput label="GST Number" value={form.gst_number} onChange={(e) => setForm((f) => ({ ...f, gst_number: e.target.value }))} className="!mb-0" />
+              <GstinFormField
+                id={`master-weaving-gst-${initial?.id ?? 'new'}`}
+                value={form.gst_number}
+                onValueChange={(v) => setForm((f) => ({ ...f, gst_number: v }))}
+                fieldBlurred={gstinBlurred}
+                onFieldBlur={() => setGstinBlurred(true)}
+                submitAttempted={submitAttempted}
+                required
+              />
             </div>
             <div className={fieldClass}>
               <FormInput label="Contact Person" value={form.contact_person} onChange={(e) => setForm((f) => ({ ...f, contact_person: e.target.value }))} className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormInput
+              <FormPhoneInput
+                id={`master-weaving-phone-${initial?.id ?? 'new'}`}
                 label="Phone"
                 value={form.phone}
-                onChange={(e) => setForm((f) => ({ ...f, phone: normalizePhone(e.target.value) }))}
-                inputMode="numeric"
-                maxLength={10}
-                placeholder="10-digit phone (optional)"
+                onChange={(next) => setForm((f) => ({ ...f, phone: next }))}
+                placeholder="Mobile number (optional)"
                 className="!mb-0"
               />
             </div>
@@ -793,6 +870,23 @@ function WeavingUnitModal({ title, initial, onClose, onSaved }) {
             <div className="md:col-span-2">
               <div className={fieldClass}>
                 <FormInput label="Payment Terms" value={form.payment_terms} onChange={(e) => setForm((f) => ({ ...f, payment_terms: e.target.value }))} className="!mb-0" />
+              </div>
+            </div>
+            <div className={fieldClass}>
+              <span className="block text-sm font-medium text-gray-700">Status</span>
+              <div className="flex items-center gap-3 mt-2">
+                <StatusToggle
+                  checked={String(form.status || '').trim() === 'Active'}
+                  disabled={false}
+                  onChange={() =>
+                    setForm((f) => ({
+                      ...f,
+                      status: String(f.status || '').trim() === 'Active' ? 'Inactive' : 'Active',
+                    }))
+                  }
+                  ariaLabel="Toggle weaving unit active"
+                />
+                <span className="text-sm text-gray-600">{String(form.status || '').trim() === 'Active' ? 'Active' : 'Inactive'}</span>
               </div>
             </div>
           </div>
@@ -810,24 +904,28 @@ function WindingUnitModal({ title, initial, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(() => ({
     company_name: initial?.company_name ?? '',
-    gst_number: initial?.gst_number ?? '',
+    gst_number: normalizeGstinInput(initial?.gst_number ?? ''),
     address: initial?.address ?? '',
     contact_person: initial?.contact_person ?? '',
-    phone: normalizePhone(initial?.phone),
+    phone: ensureInternationalFormat(initial?.phone),
     payment_terms: initial?.payment_terms ?? '',
+    status: initial?.status ?? 'Active',
   }));
+  const [gstinBlurred, setGstinBlurred] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   const isEdit = Boolean(initial?.id);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const phone = normalizePhone(form.phone);
-    if (phone && !isValidPhone(phone)) {
-      toast.error('Phone number must be exactly 10 digits');
+    setSubmitAttempted(true);
+    if (getGstinValidationError(form.gst_number, { required: true })) return;
+    if (form.phone && !isValidInternationalPhone(form.phone)) {
+      toast.error('Enter a valid phone number for the selected country');
       return;
     }
     setSaving(true);
-    const payload = { ...form, phone };
+    const payload = { ...form, phone: form.phone || null, status: form.status || 'Active' };
     const req = isEdit ? api.put(`/winding-units/${initial.id}`, payload) : api.post('/winding-units', payload);
     req
       .then(() => onSaved?.())
@@ -851,19 +949,26 @@ function WindingUnitModal({ title, initial, onClose, onSaved }) {
               <FormInput label="Winding Unit Name" required value={form.company_name} onChange={(e) => setForm((f) => ({ ...f, company_name: e.target.value }))} className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormInput label="GST Number" value={form.gst_number} onChange={(e) => setForm((f) => ({ ...f, gst_number: e.target.value }))} className="!mb-0" />
+              <GstinFormField
+                id={`master-winding-gst-${initial?.id ?? 'new'}`}
+                value={form.gst_number}
+                onValueChange={(v) => setForm((f) => ({ ...f, gst_number: v }))}
+                fieldBlurred={gstinBlurred}
+                onFieldBlur={() => setGstinBlurred(true)}
+                submitAttempted={submitAttempted}
+                required
+              />
             </div>
             <div className={fieldClass}>
               <FormInput label="Contact Person" value={form.contact_person} onChange={(e) => setForm((f) => ({ ...f, contact_person: e.target.value }))} className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormInput
+              <FormPhoneInput
+                id={`master-winding-phone-${initial?.id ?? 'new'}`}
                 label="Phone"
                 value={form.phone}
-                onChange={(e) => setForm((f) => ({ ...f, phone: normalizePhone(e.target.value) }))}
-                inputMode="numeric"
-                maxLength={10}
-                placeholder="10-digit phone (optional)"
+                onChange={(next) => setForm((f) => ({ ...f, phone: next }))}
+                placeholder="Mobile number (optional)"
                 className="!mb-0"
               />
             </div>
@@ -875,6 +980,23 @@ function WindingUnitModal({ title, initial, onClose, onSaved }) {
             <div className="md:col-span-2">
               <div className={fieldClass}>
                 <FormInput label="Payment Terms" value={form.payment_terms} onChange={(e) => setForm((f) => ({ ...f, payment_terms: e.target.value }))} className="!mb-0" />
+              </div>
+            </div>
+            <div className={fieldClass}>
+              <span className="block text-sm font-medium text-gray-700">Status</span>
+              <div className="flex items-center gap-3 mt-2">
+                <StatusToggle
+                  checked={String(form.status || '').trim() === 'Active'}
+                  disabled={false}
+                  onChange={() =>
+                    setForm((f) => ({
+                      ...f,
+                      status: String(f.status || '').trim() === 'Active' ? 'Inactive' : 'Active',
+                    }))
+                  }
+                  ariaLabel="Toggle winding unit active"
+                />
+                <span className="text-sm text-gray-600">{String(form.status || '').trim() === 'Active' ? 'Active' : 'Inactive'}</span>
               </div>
             </div>
           </div>
@@ -896,11 +1018,16 @@ function WeaverModal({ title, initial, onClose, onSaved }) {
   const [form, setForm] = useState(() => ({
     employee_code: initial?.employee_code ?? '',
     weaver_name: initial?.weaver_name ?? '',
-    phone: normalizePhone(initial?.phone),
+    phone: ensureInternationalFormat(initial?.phone),
     address: initial?.address ?? '',
     joining_date: initial?.joining_date ? String(initial.joining_date).slice(0, 10) : '',
     status: initial?.status ?? (statusOptions?.[0]?.value || 'Active'),
+    account_number: initial?.account_number ?? '',
+    aadhar_number: initial?.aadhar_number ?? '',
+    pan_number: (initial?.pan_number ?? '').toUpperCase(),
   }));
+  const [aadharFile, setAadharFile] = useState(null);
+  const [panFile, setPanFile] = useState(null);
 
   const isEdit = Boolean(initial?.id);
 
@@ -911,19 +1038,39 @@ function WeaverModal({ title, initial, onClose, onSaved }) {
     }
   }, [statusOptions, form.status]);
 
+  useEffect(() => {
+    if (isEdit) return;
+    let cancelled = false;
+    api.get('/weavers/next-employee-code')
+      .then(({ data: res }) => {
+        const code = res?.data?.employee_code;
+        if (!cancelled && code) {
+          setForm((f) => ({ ...f, employee_code: code }));
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isEdit]);
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    const phone = normalizePhone(form.phone);
-    if (phone && !isValidPhone(phone)) {
-      toast.error('Phone number must be exactly 10 digits');
+    if (form.phone && !isValidInternationalPhone(form.phone)) {
+      toast.error('Enter a valid phone number for the selected country');
       return;
     }
     setSaving(true);
-    const payload = { ...form, phone };
-    const req = isEdit ? api.put(`/weavers/${initial.id}`, payload) : api.post('/weavers', payload);
+    const fd = new FormData();
+    appendWeaverFieldsToFormData(fd, form);
+    if (aadharFile) fd.append('aadhar_document', aadharFile);
+    if (panFile) fd.append('pan_document', panFile);
+    const req = isEdit ? api.put(`/weavers/${initial.id}`, fd) : api.post('/weavers', fd);
     req
       .then(() => onSaved?.())
-      .catch((err) => toast.error(err.response?.data?.message || 'Save failed'))
+      .catch((err) => {
+        const msg = err.response?.data?.message
+          || (err.response?.data?.errors ? Object.values(err.response.data.errors).flat().join(' ') : 'Save failed');
+        toast.error(msg);
+      })
       .finally(() => setSaving(false));
   };
 
@@ -940,19 +1087,28 @@ function WeaverModal({ title, initial, onClose, onSaved }) {
         <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className={fieldClass}>
-              <FormInput label="Employee Code" required value={form.employee_code} onChange={(e) => setForm((f) => ({ ...f, employee_code: e.target.value }))} className="!mb-0" />
+              <FormInput
+                label="Employee Code"
+                required
+                value={form.employee_code}
+                onChange={(e) => setForm((f) => ({ ...f, employee_code: e.target.value }))}
+                placeholder="EMP001"
+                className="!mb-0"
+              />
+              {!isEdit && (
+                <p className="text-xs text-gray-500 mt-0.5">Suggested automatically (EMP001, EMP002, …). You can edit if needed.</p>
+              )}
             </div>
             <div className={fieldClass}>
               <FormInput label="Weaver Name" required value={form.weaver_name} onChange={(e) => setForm((f) => ({ ...f, weaver_name: e.target.value }))} className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormInput
+              <FormPhoneInput
+                id={`master-weaver-phone-${initial?.id ?? 'new'}`}
                 label="Phone"
                 value={form.phone}
-                onChange={(e) => setForm((f) => ({ ...f, phone: normalizePhone(e.target.value) }))}
-                inputMode="numeric"
-                maxLength={10}
-                placeholder="10-digit phone (optional)"
+                onChange={(next) => setForm((f) => ({ ...f, phone: next }))}
+                placeholder="Mobile number (optional)"
                 className="!mb-0"
               />
             </div>
@@ -966,13 +1122,72 @@ function WeaverModal({ title, initial, onClose, onSaved }) {
               />
             </div>
             <div className={fieldClass}>
-              <FormSelect
-                label="Status"
-                options={statusOptions}
-                isClearable={false}
-                value={form.status}
-                onChange={(e) => setForm((f) => ({ ...f, status: e.target.value || statusOptions?.[0]?.value || 'Active' }))}
+              <span className="block text-sm font-medium text-gray-700">Status</span>
+              <div className="flex items-center gap-3 mt-2">
+                <StatusToggle
+                  checked={String(form.status || '').trim() === 'Active'}
+                  disabled={false}
+                  onChange={() =>
+                    setForm((f) => ({
+                      ...f,
+                      status: String(f.status || '').trim() === 'Active' ? 'Inactive' : 'Active',
+                    }))
+                  }
+                  ariaLabel="Toggle weaver active"
+                />
+                <span className="text-sm text-gray-600">{String(form.status || '').trim() === 'Active' ? 'Active' : 'Inactive'}</span>
+              </div>
+            </div>
+            <div className={fieldClass}>
+              <FormInput
+                label="Account number"
+                value={form.account_number}
+                onChange={(e) => setForm((f) => ({ ...f, account_number: e.target.value }))}
                 className="!mb-0"
+              />
+            </div>
+            <div className={fieldClass}>
+              <FormInput
+                label="Aadhar number"
+                value={form.aadhar_number}
+                onChange={(e) => setForm((f) => ({ ...f, aadhar_number: e.target.value.replace(/\D/g, '').slice(0, 12) }))}
+                inputMode="numeric"
+                maxLength={12}
+                className="!mb-0"
+              />
+            </div>
+            <div className={fieldClass}>
+              <FormInput
+                label="PAN"
+                value={form.pan_number}
+                onChange={(e) => setForm((f) => ({ ...f, pan_number: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10) }))}
+                maxLength={10}
+                placeholder="ABCDE1234F"
+                className="!mb-0"
+              />
+            </div>
+            <div className={fieldClass}>
+              <span className="block text-sm font-medium text-gray-700 mb-1">Aadhar document (PDF / JPG / PNG, max 5MB)</span>
+              {isEdit && initial?.aadhar_document_url && (
+                <a href={initial.aadhar_document_url} target="_blank" rel="noopener noreferrer" className="text-xs text-brand hover:underline block mb-1">View current file</a>
+              )}
+              <input
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                className="block w-full text-sm text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-gray-100 file:text-gray-800"
+                onChange={(e) => setAadharFile(e.target.files?.[0] ?? null)}
+              />
+            </div>
+            <div className={fieldClass}>
+              <span className="block text-sm font-medium text-gray-700 mb-1">PAN document (PDF / JPG / PNG, max 5MB)</span>
+              {isEdit && initial?.pan_document_url && (
+                <a href={initial.pan_document_url} target="_blank" rel="noopener noreferrer" className="text-xs text-brand hover:underline block mb-1">View current file</a>
+              )}
+              <input
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                className="block w-full text-sm text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-gray-100 file:text-gray-800"
+                onChange={(e) => setPanFile(e.target.files?.[0] ?? null)}
               />
             </div>
             <div className="md:col-span-2">
@@ -1060,14 +1275,24 @@ function LoomModal({ title, initial, onClose, onSaved }) {
               <FormInput label="Location" value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} className="!mb-0" />
             </div>
             <div className={fieldClass}>
-              <FormSelect
-                label="Status"
-                options={statusOptions}
-                isClearable={false}
-                value={form.status}
-                onChange={(e) => setForm((f) => ({ ...f, status: e.target.value || statusOptions?.[0]?.value || 'Active' }))}
-                className="!mb-0"
-              />
+              <span className="block text-sm font-medium text-gray-700">Status</span>
+              <div className="flex items-center gap-3 mt-2">
+                <StatusToggle
+                  checked={String(form.status || '').trim() === 'Active'}
+                  disabled={false}
+                  onChange={() =>
+                    setForm((f) => {
+                      const nextActive = String(f.status || '').trim() !== 'Active';
+                      return {
+                        ...f,
+                        status: nextActive ? 'Active' : 'Inactive',
+                      };
+                    })
+                  }
+                  ariaLabel="Toggle loom active"
+                />
+                <span className="text-sm text-gray-600">{String(form.status || '').trim() === 'Active' ? 'Active' : 'Inactive'}</span>
+              </div>
             </div>
             {form.status === 'Inactive' && (
               <div className="md:col-span-2">
@@ -1116,7 +1341,7 @@ function CodeTypeCard({
           className="flex items-center gap-3 min-w-0 text-left"
         >
           <span
-            className={`inline-flex items-center justify-center w-9 h-9 rounded-xl bg-[#7b2979]/10 text-[#7b2979] shrink-0`}
+            className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-brand/10 text-brand shrink-0"
             aria-hidden
           >
             <ChevronDown className={`w-5 h-5 transition-transform ${expanded ? 'rotate-0' : '-rotate-90'}`} />
@@ -1134,8 +1359,7 @@ function CodeTypeCard({
           <button
             type="button"
             onClick={onAdd}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-white shadow-sm"
-            style={{ backgroundColor: BRAND }}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-white shadow-sm bg-brand hover:bg-brand-dark transition-colors"
             title={`Add under ${title}`}
           >
             <Plus className="w-4 h-4" />
@@ -1160,15 +1384,14 @@ function CodeTypeCard({
                     <button
                       type="button"
                       onClick={onAdd}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-white"
-                      style={{ backgroundColor: BRAND }}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-white bg-brand hover:bg-brand-dark transition-colors"
                     >
                       <Plus className="w-4 h-4" /> Add
                     </button>
                   )}
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
                   {items.map((row) => (
                     <SubCodeItem
                       key={row.id}
@@ -1189,50 +1412,31 @@ function CodeTypeCard({
   );
 }
 
-function Toggle({ checked, disabled, onChange }) {
-  return (
-    <button
-      type="button"
-      onClick={onChange}
-      disabled={disabled}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-        checked ? 'bg-[#7b2979]' : 'bg-gray-200'
-      } ${disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
-      style={{ '--tw-ring-color': BRAND }}
-      aria-pressed={checked}
-      aria-label="Toggle active"
-    >
-      <span
-        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
-          checked ? 'translate-x-5' : 'translate-x-1'
-        }`}
-      />
-    </button>
-  );
-}
-
 function SubCodeItem({ row, canEdit, onEdit, onDelete, onToggleActive }) {
   return (
     <div
-      className="group rounded-xl bg-white border border-gray-200/70 px-3 py-3 sm:px-4 sm:py-3.5 flex items-center justify-between gap-3 hover:shadow-sm hover:-translate-y-[1px] transition-all"
+      className="group rounded-xl bg-white border border-gray-200/70 px-3 py-3 sm:px-4 sm:py-3.5 flex flex-col gap-2.5 hover:shadow-sm hover:-translate-y-[1px] transition-all min-w-0 h-full"
     >
       <div className="min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="text-sm font-medium text-gray-900 truncate">{row.code_description}</div>
-        </div>
-        <div className="text-xs text-gray-500 mt-0.5">
+        <div className="text-sm font-medium text-gray-900 line-clamp-2">{row.code_description}</div>
+        <div className="text-xs text-gray-500 mt-1 truncate">
           Key: <span className="font-medium text-gray-600">{row.code_type}</span>
         </div>
       </div>
 
-      <div className="flex items-center gap-2 shrink-0">
-        <Toggle checked={Boolean(row.is_active)} disabled={!canEdit} onChange={onToggleActive} />
+      <div className="flex items-center justify-between gap-2 shrink-0 pt-1 border-t border-gray-100">
+        <StatusToggle
+          checked={Boolean(row.is_active)}
+          disabled={!canEdit}
+          onChange={onToggleActive}
+          ariaLabel="Toggle active for this value"
+        />
         {canEdit && (
           <div className="flex items-center gap-1">
             <button
               type="button"
               onClick={onEdit}
-              className="p-2 rounded-lg text-gray-500 hover:text-[#7b2979] hover:bg-[#7b2979]/10 transition-colors"
+              className="p-2 rounded-lg text-gray-500 hover:text-brand hover:bg-brand/10 transition-colors"
               title="Edit"
             >
               <Pencil className="w-4 h-4" />
@@ -1352,17 +1556,16 @@ function GenericCodeFormModal({ title, initial, dropdownType, onClose, onSaved }
             />
           </div>
           <div className={fieldClass}>
-            <FormSelect
-              label="Active"
-              options={[
-                { value: '1', label: 'Yes' },
-                { value: '0', label: 'No' },
-              ]}
-              value={form.is_active}
-              onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.value }))}
-              isClearable={false}
-              className="!mb-0"
-            />
+            <span className="block text-sm font-medium text-gray-700">Active</span>
+            <div className="flex items-center gap-3 mt-2">
+              <StatusToggle
+                checked={form.is_active === '1'}
+                disabled={false}
+                onChange={() => setForm((f) => ({ ...f, is_active: f.is_active === '1' ? '0' : '1' }))}
+                ariaLabel="Toggle active"
+              />
+              <span className="text-sm text-gray-600">{form.is_active === '1' ? 'Yes' : 'No'}</span>
+            </div>
           </div>
           <div className="flex flex-col-reverse sm:flex-row gap-2 justify-end pt-4 border-t border-gray-100">
             <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>

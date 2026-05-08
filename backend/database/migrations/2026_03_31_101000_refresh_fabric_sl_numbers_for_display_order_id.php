@@ -15,7 +15,7 @@ return new class extends Migration
             return;
         }
 
-        YarnOrder::withoutGlobalScopes()->orderBy('id')->chunk(100, function ($orders) {
+        YarnOrder::query()->orderBy('id')->chunk(100, function ($orders) {
             foreach ($orders as $order) {
                 SlNumberFormatter::refreshSlNumbersForYarnOrder((int) $order->id);
             }

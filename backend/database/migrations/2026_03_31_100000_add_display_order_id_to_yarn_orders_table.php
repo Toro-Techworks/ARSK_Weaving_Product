@@ -20,7 +20,7 @@ return new class extends Migration
             $table->string('display_order_id', 32)->nullable()->after('id');
         });
 
-        YarnOrder::withoutGlobalScopes()->orderBy('id')->chunk(100, function ($orders) {
+        YarnOrder::query()->orderBy('id')->chunk(100, function ($orders) {
             foreach ($orders as $order) {
                 $order->persistDisplayOrderId();
             }

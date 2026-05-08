@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\WindingUnitResource;
+use App\Models\GenericCode;
 use App\Models\WindingUnit;
+use App\Support\Gstin;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -14,6 +16,7 @@ class WindingUnitController extends Controller
     {
         $perPage = $this->clampPerPage($request, 10, 100);
         $units = WindingUnit::query()
+            ->when($request->boolean('active_only'), fn ($q) => $q->where('status', 'Active'))
             ->when($request->search, fn ($q) => $q->where('company_name', 'like', "%{$request->search}%")
                 ->orWhere('gst_number', 'like', "%{$request->search}%"))
             ->orderBy('company_name')
@@ -55,14 +58,24 @@ class WindingUnitController extends Controller
     {
         $validated = $request->validate([
             'company_name' => 'required|string|max:255',
-            'gst_number' => 'nullable|string|max:50',
+            'gst_number' => [
+                'required',
+                'string',
+                'max:15',
+                fn (string $attribute, mixed $value, \Closure $fail) => Gstin::isValid($value) || $fail('Invalid GSTIN format.'),
+            ],
             'address' => 'nullable|string',
             'contact_person' => 'nullable|string|max:255',
             'phone' => 'nullable|string|max:20',
             'payment_terms' => 'nullable|string|max:255',
+            'status' => GenericCode::validationRule('active_inactive'),
         ]);
+        $validated['gst_number'] = Gstin::normalize($validated['gst_number']);
+
+        $validated['status'] = $validated['status'] ?? 'Active';
 
         $unit = WindingUnit::create($validated);
+
         return response()->json(['data' => new WindingUnitResource($unit)], 201);
     }
 
@@ -75,20 +88,32 @@ class WindingUnitController extends Controller
     {
         $validated = $request->validate([
             'company_name' => 'sometimes|required|string|max:255',
-            'gst_number' => 'nullable|string|max:50',
+            'gst_number' => [
+                'sometimes',
+                'required',
+                'string',
+                'max:15',
+                fn (string $attribute, mixed $value, \Closure $fail) => Gstin::isValid($value) || $fail('Invalid GSTIN format.'),
+            ],
             'address' => 'nullable|string',
             'contact_person' => 'nullable|string|max:255',
             'phone' => 'nullable|string|max:20',
             'payment_terms' => 'nullable|string|max:255',
+            'status' => GenericCode::validationRule('active_inactive'),
         ]);
+        if (array_key_exists('gst_number', $validated)) {
+            $validated['gst_number'] = Gstin::normalize($validated['gst_number']);
+        }
 
         $windingUnit->update($validated);
+
         return response()->json(['data' => new WindingUnitResource($windingUnit->fresh())]);
     }
 
     public function destroy(WindingUnit $windingUnit): JsonResponse
     {
         $windingUnit->delete();
+
         return response()->json(['message' => 'Winding unit deleted successfully']);
     }
 }

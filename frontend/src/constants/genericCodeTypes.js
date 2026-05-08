@@ -9,6 +9,8 @@ export const GENERIC_CODE_TYPES = {
   YARN_COLOUR: 'colour',
   /** Production planning multi-colour (MASTER); GET /api/generic-code/colour?dropdown_type=MASTER */
   COLOUR: 'colour',
+  /** Production planning fabric.weave_technique (MASTER). */
+  WEAVE_TECHNIQUE: 'weave_technique',
   YARN_RECEIPT_COUNT: 'yarn_receipt_count',
   YARN_RECEIPT_CONTENT: 'yarn_receipt_content',
   ACTIVE_INACTIVE: 'active_inactive',
@@ -40,6 +42,14 @@ export const FALLBACK_PLANNING_COLOURS = [
   { value: 'Red', label: 'Red' },
   { value: 'Blue', label: 'Blue' },
   { value: 'Green', label: 'Green' },
+];
+
+export const FALLBACK_WEAVE_TECHNIQUE = [
+  { value: 'Plain', label: 'Plain' },
+  { value: 'Twill', label: 'Twill' },
+  { value: 'Satin', label: 'Satin' },
+  { value: 'Dobby', label: 'Dobby' },
+  { value: 'Jacquard', label: 'Jacquard' },
 ];
 
 /** MASTER; used for yarn receipt Count and Content (same options). */
@@ -87,7 +97,8 @@ export const FALLBACK_EXPENSE_CATEGORY_OPTIONS = [
 
 export const FALLBACK_USER_STATUS = [
   { value: 'active', label: 'Active' },
-  { value: 'disabled', label: 'Disabled' },
+  { value: 'inactive', label: 'Inactive' },
+  { value: 'left', label: 'Left' },
 ];
 
 /** code_type `roles`; only **active** generic rows (e.g. admin, user — not inactive super_admin). */

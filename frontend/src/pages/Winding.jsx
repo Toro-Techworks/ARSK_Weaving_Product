@@ -289,7 +289,7 @@ function WindingFormModal({ title, initial, onClose, onSaved }) {
     (async () => {
       try {
         const [units, companyRes] = await Promise.all([
-          fetchAllPaginated(api, '/winding-units', { perPage: 100 }),
+          fetchAllPaginated(api, '/winding-units', { perPage: 100, active_only: 1 }),
           api.get('/companies-list'),
         ]);
         if (cancelled) return;

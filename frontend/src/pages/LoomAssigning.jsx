@@ -5,12 +5,28 @@ import api from '../api/client';
 import { Card } from '../components/Card';
 import Button from '../components/Button';
 import { Table } from '../components/Table';
-import { FormInput } from '../components/FormInput';
+import { FormInput, FormSelect, FormTextarea } from '../components/FormInput';
 import AnimatedModal from '../components/AnimatedModal';
 import SearchableSelect from '../components/ui/SearchableSelect';
 import { usePagePermission } from '../hooks/usePagePermission';
 import { fetchAllPaginated } from '../utils/pagination';
 import { formatOrderId } from '../utils/formatOrderId';
+import { GENERIC_CODE_TYPES, FALLBACK_ACTIVE_INACTIVE } from '../constants/genericCodeTypes';
+import { useGenericCode } from '../hooks/useGenericCode';
+import { isLoomInactiveStatus, normalizeLoomStatus } from '../utils/loomStatus';
+
+/** Label for SL dropdown: human-readable; value remains fabric id for API. */
+function fabricAssignSelectLabel(f) {
+  const size =
+    f.required_width != null && f.required_width !== ''
+      ? String(f.required_width).trim()
+      : '';
+  const parts = [f.description, f.colour, f.design, f.weave_technique, size ? `Width ${size}` : '']
+    .map((x) => (x != null && String(x).trim() !== '' ? String(x).trim() : null))
+    .filter(Boolean);
+  if (parts.length > 0) return parts.join(' · ');
+  return `Row #${f.id}`;
+}
 
 function rowAssignment(loom) {
   const assigned = Array.isArray(loom?.assigned_fabrics) ? loom.assigned_fabrics : [];
@@ -18,8 +34,36 @@ function rowAssignment(loom) {
   return [...assigned].sort((a, b) => Number(b?.id || 0) - Number(a?.id || 0))[0];
 }
 
+/** Prefill company / order / fabric from existing fabrics.loom_id mapping on this loom. */
+function assignmentFormFieldsFromLoom(loom, orders) {
+  if (!loom) {
+    return { company_name: '', yarn_order_id: '', fabric_id: '' };
+  }
+  const a = rowAssignment(loom);
+  if (!a?.yarn_order_id) {
+    return { company_name: '', yarn_order_id: '', fabric_id: '' };
+  }
+  const order = (orders || []).find((o) => Number(o.id) === Number(a.yarn_order_id));
+  return {
+    company_name: order ? String(order.order_from || '').trim() : '',
+    yarn_order_id: String(a.yarn_order_id),
+    fabric_id: a.id != null ? String(a.id) : '',
+  };
+}
+
+function fabricOptionLabelFromAssignment(a) {
+  if (!a) return '';
+  const parts = [a.design, a.colour, a.weave_technique, a.sl_number]
+    .map((x) => (x != null && String(x).trim() !== '' ? String(x).trim() : null))
+    .filter(Boolean);
+  return parts.length ? parts.join(' · ') : `Row #${a.id}`;
+}
+
 export function LoomAssigningPage() {
   const { canEdit } = usePagePermission();
+  const { options: loomStatusOptions } = useGenericCode(GENERIC_CODE_TYPES.ACTIVE_INACTIVE, {
+    fallback: FALLBACK_ACTIVE_INACTIVE,
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [openAssign, setOpenAssign] = useState(false);
@@ -29,10 +73,14 @@ export function LoomAssigningPage() {
   const [fabrics, setFabrics] = useState([]);
   const [form, setForm] = useState({
     loom_id: '',
+    loom_status: 'Active',
+    inactive_reason: '',
     company_name: '',
     yarn_order_id: '',
     fabric_id: '',
   });
+
+  const assignmentSectionDisabled = isLoomInactiveStatus(form.loom_status);
 
   const orderById = useMemo(() => {
     const map = new Map();
@@ -98,14 +146,20 @@ export function LoomAssigningPage() {
     [looms],
   );
 
-  const slOptions = useMemo(
-    () =>
-      (fabrics || []).map((f) => ({
-        value: String(f.id),
-        label: String(f.sl_number || `Line #${f.id}`),
-      })),
-    [fabrics],
-  );
+  const slOptions = useMemo(() => {
+    const base = (fabrics || []).map((f) => ({
+      value: String(f.id),
+      label: fabricAssignSelectLabel(f),
+    }));
+    const fid = String(form.fabric_id || '');
+    if (!fid || base.some((o) => o.value === fid)) return base;
+    const loom = form.loom_id ? looms.find((l) => String(l.id) === String(form.loom_id)) : null;
+    const a = loom ? rowAssignment(loom) : null;
+    if (a && String(a.id) === fid) {
+      return [{ value: fid, label: fabricOptionLabelFromAssignment(a) }, ...base];
+    }
+    return [{ value: fid, label: `Fabric #${fid}` }, ...base];
+  }, [fabrics, form.fabric_id, form.loom_id, looms]);
 
   const companyOptions = useMemo(
     () =>
@@ -192,29 +246,67 @@ export function LoomAssigningPage() {
   );
 
   const resetForm = () => {
-    setForm({ loom_id: '', company_name: '', yarn_order_id: '', fabric_id: '' });
+    setForm({
+      loom_id: '',
+      loom_status: 'Active',
+      inactive_reason: '',
+      company_name: '',
+      yarn_order_id: '',
+      fabric_id: '',
+    });
     setFabrics([]);
   };
 
   const handleSaveAssignment = async (e) => {
     e.preventDefault();
-    if (!form.loom_id || !form.company_name || !form.yarn_order_id || !form.fabric_id) {
-      toast.error('Loom number, Company, Order, and SL No are required.');
+    if (!form.loom_id) {
+      toast.error('Loom number is required.');
       return;
     }
+    const loomId = Number(form.loom_id);
+    const targetLoom = looms.find((l) => Number(l.id) === loomId);
+    if (!targetLoom) {
+      toast.error('Selected loom not found.');
+      return;
+    }
+
+    const nextStatus = normalizeLoomStatus(form.loom_status);
+    const prevStatus = normalizeLoomStatus(targetLoom.status);
+    const nextReason = String(form.inactive_reason || '').trim();
+    const prevReason = String(targetLoom.inactive_reason || '').trim();
+
+    if (nextStatus === 'Inactive') {
+      if (!nextReason) {
+        toast.error('A reason is required when status is Inactive.');
+        return;
+      }
+      setSaving(true);
+      try {
+        await api.put(`/looms/${loomId}`, { status: 'Inactive', inactive_reason: nextReason });
+        toast.success('Loom status updated.');
+        setOpenAssign(false);
+        resetForm();
+        await loadBase();
+      } catch (err) {
+        toast.error(err?.response?.data?.message || 'Failed to update loom.');
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
+    if (!form.company_name || !form.yarn_order_id || !form.fabric_id) {
+      toast.error('Company, order, and fabric line are required when the loom is Active.');
+      return;
+    }
+
     setSaving(true);
     try {
-      const loomId = Number(form.loom_id);
       const fabricId = Number(form.fabric_id);
-      const targetLoom = looms.find((l) => Number(l.id) === loomId);
-      if (!targetLoom) {
-        toast.error('Selected loom not found.');
-        return;
+      if (prevStatus !== 'Active' || prevReason !== '') {
+        await api.put(`/looms/${loomId}`, { status: 'Active', inactive_reason: null });
       }
-      if (String(targetLoom.status || '').toLowerCase() === 'inactive') {
-        toast.error('Cannot assign an inactive loom.');
-        return;
-      }
+
       const assigned = Array.isArray(targetLoom?.assigned_fabrics) ? targetLoom.assigned_fabrics : [];
       const clearCalls = assigned
         .filter((f) => Number(f.id) !== fabricId)
@@ -275,11 +367,55 @@ export function LoomAssigningPage() {
               <SearchableSelect
                 options={loomOptions}
                 value={form.loom_id}
-                onChange={(v) => setForm((prev) => ({ ...prev, loom_id: v ? String(v) : '' }))}
+                onChange={(v) => {
+                  const id = v ? String(v) : '';
+                  const loom = id ? looms.find((l) => String(l.id) === id) : null;
+                  const mapping = assignmentFormFieldsFromLoom(loom, orders);
+                  setForm((prev) => ({
+                    ...prev,
+                    loom_id: id,
+                    loom_status: loom ? normalizeLoomStatus(loom.status) : 'Active',
+                    inactive_reason:
+                      loom && isLoomInactiveStatus(loom.status)
+                        ? String(loom.inactive_reason ?? '')
+                        : '',
+                    company_name: mapping.company_name,
+                    yarn_order_id: mapping.yarn_order_id,
+                    fabric_id: mapping.fabric_id,
+                  }));
+                }}
                 placeholder="Select loom"
                 isClearable
               />
             </div>
+
+            <div className="space-y-1.5">
+              <FormSelect
+                label="Loom status"
+                options={loomStatusOptions}
+                isClearable={false}
+                value={form.loom_status}
+                onChange={(e) => {
+                  const v = e.target.value || loomStatusOptions[0]?.value || 'Active';
+                  setForm((prev) => ({
+                    ...prev,
+                    loom_status: v,
+                    inactive_reason: normalizeLoomStatus(v) === 'Active' ? '' : prev.inactive_reason,
+                  }));
+                }}
+                className="!mb-0"
+              />
+            </div>
+
+            {isLoomInactiveStatus(form.loom_status) && (
+              <FormTextarea
+                label="Inactive reason"
+                required
+                value={form.inactive_reason}
+                onChange={(e) => setForm((prev) => ({ ...prev, inactive_reason: e.target.value }))}
+                className="!mb-0"
+              />
+            )}
 
             <div className="space-y-1.5">
               <label className="block text-sm font-medium text-gray-700">Order from (Company)</label>
@@ -296,6 +432,7 @@ export function LoomAssigningPage() {
                 }
                 placeholder="Select company"
                 isClearable
+                isDisabled={assignmentSectionDisabled}
               />
             </div>
 
@@ -306,51 +443,55 @@ export function LoomAssigningPage() {
                 value={form.yarn_order_id}
                 onChange={(v) => setForm((prev) => ({ ...prev, yarn_order_id: v ? String(v) : '', fabric_id: '' }))}
                 placeholder={form.company_name ? 'Select order' : 'Select company first'}
-                isDisabled={!form.company_name}
+                isDisabled={!form.company_name || assignmentSectionDisabled}
                 isClearable
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-gray-700">SL No</label>
+              <label className="block text-sm font-medium text-gray-700">Fabric line</label>
               <SearchableSelect
                 options={slOptions}
                 value={form.fabric_id}
                 onChange={(v) => setForm((prev) => ({ ...prev, fabric_id: v ? String(v) : '' }))}
-                placeholder={form.yarn_order_id ? 'Select SL number' : 'Select order first'}
-                isDisabled={!form.yarn_order_id}
+                placeholder={form.yarn_order_id ? 'Select fabric line' : 'Select order first'}
+                isDisabled={!form.yarn_order_id || assignmentSectionDisabled}
                 isClearable
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormInput
-                label="Design planning"
-                value={selectedFabric?.design || ''}
-                readOnly
-                className="!mb-0"
-              />
-              <FormInput
-                label="Weaving technique"
-                value={selectedFabric?.weave_technique || ''}
-                readOnly
-                className="!mb-0"
-              />
-            </div>
+            {!assignmentSectionDisabled && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormInput
+                    label="Design planning"
+                    value={selectedFabric?.design || ''}
+                    readOnly
+                    className="!mb-0"
+                  />
+                  <FormInput
+                    label="Weaving technique"
+                    value={selectedFabric?.weave_technique || ''}
+                    readOnly
+                    className="!mb-0"
+                  />
+                </div>
 
-            <FormInput
-              label="Colour from production planning"
-              value={selectedFabric?.colour || ''}
-              readOnly
-              className="!mb-0"
-            />
+                <FormInput
+                  label="Colour from production planning"
+                  value={selectedFabric?.colour || ''}
+                  readOnly
+                  className="!mb-0"
+                />
+              </>
+            )}
 
             <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
               <Button type="button" variant="secondary" onClick={() => { setOpenAssign(false); resetForm(); }}>
                 Cancel
               </Button>
               <Button type="submit" disabled={saving || !canEdit}>
-                {saving ? 'Saving...' : 'Save Assignment'}
+                {saving ? 'Saving...' : assignmentSectionDisabled ? 'Save status' : 'Save assignment'}
               </Button>
             </div>
           </form>

@@ -25,7 +25,7 @@ return new class extends Migration
             $table->unique('sl_number');
         });
 
-        YarnOrder::withoutGlobalScopes()->orderBy('id')->chunk(50, function ($orders) {
+        YarnOrder::query()->orderBy('id')->chunk(50, function ($orders) {
             foreach ($orders as $yarnOrder) {
                 SlNumberFormatter::refreshSlNumbersForYarnOrder((int) $yarnOrder->id);
             }

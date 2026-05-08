@@ -63,7 +63,7 @@ export function OrderGridTable({ canEdit = true }) {
     Promise.allSettled([
       api.get('/yarn-orders', { params: listParams }).then((r) => normalizePaginatedResponse(r.data)),
       api.get('/companies-list').then((r) => r.data?.data || r.data || []).catch(() => []),
-      api.get('/weaving-units', { params: { page: 1, per_page: 500 } }).then((r) => normalizePaginatedResponse(r.data).data || []).catch(() => []),
+      api.get('/weaving-units', { params: { page: 1, per_page: 500, active_only: 1 } }).then((r) => normalizePaginatedResponse(r.data).data || []).catch(() => []),
     ])
       .then(([ordersRes, companiesRes, weavingUnitsRes]) => {
         const companyList = companiesRes.status === 'fulfilled' ? (companiesRes.value || []) : [];

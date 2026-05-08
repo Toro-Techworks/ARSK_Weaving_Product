@@ -18,5 +18,6 @@ class WeavingUnit extends Model
         'contact_person',
         'phone',
         'payment_terms',
+        'status',
     ];
 }
