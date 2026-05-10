@@ -34,24 +34,64 @@ jobs:
           python3 << 'PY'
           import os
           import pathlib
+          import re
 
-          keys = [
-              "STAGING_APP_KEY",
-              "STAGING_APP_URL",
-              "STAGING_DB_HOST",
-              "STAGING_DB_PORT",
-              "STAGING_DB_DATABASE",
-              "STAGING_DB_USERNAME",
-              "STAGING_DB_PASSWORD",
-          ]
           path = pathlib.Path("hostinger/staging/backend-env-staging.txt")
           text = path.read_text(encoding="utf-8")
+
+          # Discover all __STAGING_*__ placeholders in the template so that
+          # adding a new key only requires:
+          #   1) adding a line in backend-env-staging.txt
+          #   2) creating the matching STAGING_* secret/variable in GitHub
+          placeholder_pattern = re.compile(r"__([A-Z0-9_]+)__")
+          placeholders = set(placeholder_pattern.findall(text))
+          keys = sorted(k for k in placeholders if k.startswith("STAGING_"))
+
+          missing = [k for k in keys if not os.environ.get(k)]
+          if missing:
+              raise SystemExit(
+                  "Missing required staging env vars for placeholders: "
+                  + ", ".join(missing)
+              )
+
           for key in keys:
-              text = text.replace("__" + key + "__", os.environ.get(key, ""))
+              value = os.environ.get(key, "")
+              text = text.replace(f"__{key}__", value)
           pathlib.Path(".ci-deploy/staging").mkdir(parents=True, exist_ok=True)
           pathlib.Path(".ci-deploy/staging/backend-staging.env").write_text(
               text, encoding="utf-8"
           )
+          PY
+
+      - name: Assemble frontend .env
+        env:
+          STAGING_VITE_API_BASE_URL: ${{ vars.STAGING_VITE_API_BASE_URL }}
+        run: |
+          python3 << 'PY'
+          import os
+          import pathlib
+          import re
+
+          path = pathlib.Path("hostinger/staging/frontend-env-staging.txt")
+          text = path.read_text(encoding="utf-8")
+
+          placeholder_pattern = re.compile(r"__([A-Z0-9_]+)__")
+          placeholders = set(placeholder_pattern.findall(text))
+          keys = sorted(k for k in placeholders if k.startswith("STAGING_"))
+
+          missing = [k for k in keys if not os.environ.get(k)]
+          if missing:
+              raise SystemExit(
+                  "Missing required staging env vars for frontend placeholders: "
+                  + ", ".join(missing)
+              )
+
+          for key in keys:
+              value = os.environ.get(key, "")
+              text = text.replace(f"__{key}__", value)
+
+          frontend_env_path = pathlib.Path("frontend/.env")
+          frontend_env_path.write_text(text, encoding="utf-8")
           PY
 
       - name: Render staging document-root index.php
@@ -63,8 +103,6 @@ jobs:
 
       - name: Build Frontend
         working-directory: frontend
-        env:
-          VITE_API_URL: ${{ secrets.STAGING_VITE_API_BASE_URL }}
         run: |
           npm ci
           npm run build
@@ -125,7 +163,6 @@ jobs:
           port: ${{ secrets.PORT }}
           key: ${{ secrets.SSH_KEY }}
           script: |
-            set -e
             cd ${{ vars.STAGING_REMOTE_BASE }}${{ vars.STAGING_BACKEND_DIR }}
 
             rm -rf vendor
@@ -139,4 +176,4 @@ jobs:
             /opt/alt/php83/usr/bin/php artisan cache:clear
             /opt/alt/php83/usr/bin/php artisan config:cache
             /opt/alt/php83/usr/bin/php artisan route:cache
-            /opt/alt/php83/usr/bin/php artisan view:cache || true
+            /opt/alt/php83/usr/bin/php artisan view:cache
