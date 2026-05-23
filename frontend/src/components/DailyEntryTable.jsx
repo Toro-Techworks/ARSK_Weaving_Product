@@ -14,7 +14,10 @@ import {
   buildDateShiftColumns,
   canonicalizeShiftForPivot,
   makeDateShiftSlotKey,
+  configForColumn,
+  computeDailyEntrySummaries,
 } from '../utils/productionPivotReport';
+import { SummaryFooterRows } from './ProductionPivotTable';
 import {
   ROW_METERS,
   ROW_ORDER,
@@ -28,6 +31,9 @@ import {
   selectIdsFromRange,
 } from '../utils/dailyEntryCells';
 import { isLoomInactiveStatus, loomStatusPillClassName, normalizeLoomStatus } from '../utils/loomStatus';
+import { useAuth } from '../context/AuthContext';
+import { canManageLoomStatus } from '../utils/loomPermissions';
+import { LoomInactiveModal } from './LoomInactiveModal';
 
 /** Portal overlay above grid/transform contexts (matches Looms page pattern). */
 const LOOM_STATUS_MODAL_OVERLAY =
@@ -50,6 +56,43 @@ function formatDayHeader(ymd) {
   const [y, m, d] = ymd.split('-').map(Number);
   if (!y) return ymd;
   return `${String(d).padStart(2, '0')} ${MONTHS[m - 1]}`;
+}
+
+/** Match Day/Night across API labels and UI state. */
+function shiftsMatch(a, b) {
+  return String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+}
+
+function isActiveSectionColumn(activeSection, col) {
+  if (!activeSection || !col) return false;
+  return col.date === activeSection.date && shiftsMatch(col.shift, activeSection.shift);
+}
+
+function sectionHeaderClass(col, activeSection, canEdit) {
+  const edge =
+    col.shift === 'Night' ? 'border-r-2 border-gray-300' : 'border-r border-gray-200';
+  const base = `px-1 py-1.5 text-center text-[11px] font-semibold uppercase tracking-wide border-b border-gray-300 transition-all duration-200 ease-out ${edge}`;
+  if (isActiveSectionColumn(activeSection, col)) {
+    return `${base} bg-blue-100 text-blue-900 border-blue-400 ring-2 ring-inset ring-blue-300/80 shadow-sm`;
+  }
+  if (activeSection) {
+    return `${base} text-gray-500 opacity-75`;
+  }
+  if (canEdit) {
+    return `${base} text-gray-600 cursor-pointer hover:bg-blue-50/80 hover:text-blue-800`;
+  }
+  return `${base} text-gray-600`;
+}
+
+function sectionDataCellClass(col, activeSection, baseClass = '') {
+  if (!col) return baseClass;
+  if (isActiveSectionColumn(activeSection, col)) {
+    return `${baseClass} bg-blue-50/55 transition-colors duration-200 ease-out`.trim();
+  }
+  if (activeSection) {
+    return `${baseClass} opacity-[0.88] transition-opacity duration-200 ease-out`.trim();
+  }
+  return baseClass;
 }
 
 function displayNum(v) {
@@ -138,6 +181,12 @@ function fabricIdValidForSlot(s, fabricsByOrderId) {
   return opts.some((o) => o.value === String(s.fabric_id));
 }
 
+function configRowCellClass(col) {
+  const base = 'border-r border-gray-100 px-2 py-1.5 align-middle text-sm text-gray-900 text-center';
+  if (col.shift === 'Night') return `${base} border-r-2 border-gray-300`;
+  return base;
+}
+
 const EditableLoomPivotRows = memo(function EditableLoomPivotRows({
   loom,
   dates,
@@ -145,17 +194,17 @@ const EditableLoomPivotRows = memo(function EditableLoomPivotRows({
   slots,
   commitSlotPatch,
   canEdit,
+  isColumnEditable,
+  sectionCellClass,
   wrapRef,
   cellShellClass,
   onSelectPointerDown,
   onSelectPointerEnter,
   onLoomStatusBadgeClick,
-  loomConfig,
+  loomConfigByDate,
 }) {
   const lid = String(loom.id);
   const loomInactive = isLoomInactiveStatus(loom.status);
-  const rowCanEdit = canEdit && !loomInactive;
-  const conf = loomConfig || { design: null, weave_tech: null, colour: null };
 
   const onKeyDown = (e) => {
     if (!wrapRef?.current || e.key !== 'Enter') return;
@@ -186,9 +235,9 @@ const EditableLoomPivotRows = memo(function EditableLoomPivotRows({
             </span>
             <button
               type="button"
-              disabled={!canEdit || !onLoomStatusBadgeClick}
+              disabled={!onLoomStatusBadgeClick}
               title={
-                canEdit && onLoomStatusBadgeClick
+                onLoomStatusBadgeClick
                   ? isLoomInactiveStatus(loom.status)
                     ? 'Click to reactivate this loom'
                     : 'Click to mark this loom inactive'
@@ -201,7 +250,7 @@ const EditableLoomPivotRows = memo(function EditableLoomPivotRows({
               }}
               className={`inline-flex text-[10px] font-semibold px-1.5 py-0.5 rounded-md border leading-none transition-opacity ${loomStatusPillClassName(
                 loom.status,
-              )} ${canEdit && onLoomStatusBadgeClick ? 'cursor-pointer hover:opacity-90' : 'cursor-default opacity-95'}`}
+              )} ${onLoomStatusBadgeClick ? 'cursor-pointer hover:opacity-90' : 'cursor-default opacity-95'}`}
             >
               {normalizeLoomStatus(loom.status)}
             </button>
@@ -213,12 +262,20 @@ const EditableLoomPivotRows = memo(function EditableLoomPivotRows({
         >
           Design
         </td>
-        <td
-          colSpan={dateShiftColumns.length}
-          className="border-r-2 border-gray-300 px-2 py-1.5 align-middle text-sm text-gray-900"
-        >
-          <span className="tabular-nums">{displayConfigField(conf.design)}</span>
-        </td>
+        {dateShiftColumns.map((col) => {
+          const conf = configForColumn(loomConfigByDate, lid, col);
+          return (
+            <td
+              key={`design-${col.key}`}
+              className={sectionCellClass(
+                col,
+                `${configRowCellClass(col)} ${loomInactive ? 'bg-amber-50' : 'bg-white'}`,
+              )}
+            >
+              <span className="tabular-nums">{displayConfigField(conf.design)}</span>
+            </td>
+          );
+        })}
       </tr>
       <tr
         className={`border-b border-gray-100 ${
@@ -231,12 +288,20 @@ const EditableLoomPivotRows = memo(function EditableLoomPivotRows({
         >
           Weave Tech
         </td>
-        <td
-          colSpan={dateShiftColumns.length}
-          className="border-r-2 border-gray-300 px-2 py-1.5 align-middle text-sm text-gray-900 bg-inherit"
-        >
-          <span className="tabular-nums">{displayConfigField(conf.weave_tech)}</span>
-        </td>
+        {dateShiftColumns.map((col) => {
+          const conf = configForColumn(loomConfigByDate, lid, col);
+          return (
+            <td
+              key={`weave-${col.key}`}
+              className={sectionCellClass(
+                col,
+                `${configRowCellClass(col)} ${loomInactive ? 'bg-amber-50' : 'bg-slate-50'}`,
+              )}
+            >
+              <span className="tabular-nums">{displayConfigField(conf.weave_tech)}</span>
+            </td>
+          );
+        })}
       </tr>
       <tr
         className={`border-b border-gray-100 ${
@@ -249,12 +314,20 @@ const EditableLoomPivotRows = memo(function EditableLoomPivotRows({
         >
           Colour
         </td>
-        <td
-          colSpan={dateShiftColumns.length}
-          className="border-r-2 border-gray-300 px-2 py-1.5 align-middle text-sm text-gray-900"
-        >
-          <span className="tabular-nums">{displayConfigField(conf.colour)}</span>
-        </td>
+        {dateShiftColumns.map((col) => {
+          const conf = configForColumn(loomConfigByDate, lid, col);
+          return (
+            <td
+              key={`colour-${col.key}`}
+              className={sectionCellClass(
+                col,
+                `${configRowCellClass(col)} ${loomInactive ? 'bg-amber-50' : 'bg-white'}`,
+              )}
+            >
+              <span className="tabular-nums">{displayConfigField(conf.colour)}</span>
+            </td>
+          );
+        })}
       </tr>
       <tr
         className={`border-b border-gray-100 ${
@@ -269,10 +342,11 @@ const EditableLoomPivotRows = memo(function EditableLoomPivotRows({
         </td>
         {dateShiftColumns.map((col) => {
           const s = slots[lid]?.[col.key] ?? emptySlot();
+          const colEditable = canEdit && !loomInactive && isColumnEditable(col);
           return (
             <td
               key={col.key}
-              className={`${slotNumCellClass(col)} ${cellShellClass(lid, col.key, ROW_METERS)}`}
+              className={`${sectionCellClass(col, slotNumCellClass(col))} ${cellShellClass(lid, col.key, ROW_METERS)}`}
               onMouseDown={(e) => onSelectPointerDown(e, makeSelectIdSlot(lid, col.key, ROW_METERS))}
               onMouseEnter={() => onSelectPointerEnter(makeSelectIdSlot(lid, col.key, ROW_METERS))}
             >
@@ -283,9 +357,10 @@ const EditableLoomPivotRows = memo(function EditableLoomPivotRows({
                 value={s.meters}
                 onChange={(e) => commitSlotPatch(lid, col.key, { meters: e.target.value })}
                 onKeyDown={onKeyDown}
-                disabled={!rowCanEdit}
+                disabled={!colEditable}
+                readOnly={!colEditable}
                 placeholder="0"
-                className="w-full px-1.5 py-1 text-xs font-mono tabular-nums text-right rounded border border-gray-200 focus:ring-1 focus:ring-brand focus:border-brand disabled:bg-gray-100"
+                className="w-full px-1.5 py-1 text-xs font-mono tabular-nums text-right rounded border border-gray-200 focus:ring-1 focus:ring-brand focus:border-brand disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
             </td>
           );
@@ -328,6 +403,8 @@ const EditableLoomPivotRows = memo(function EditableLoomPivotRows({
 });
 
 export function DailyEntryTable({ canEdit = true }) {
+  const { user } = useAuth();
+  const canChangeLoomStatus = canManageLoomStatus(user);
   useGenericCode(GENERIC_CODE_TYPES.SHIFT, { fallback: FALLBACK_SHIFT_OPTIONS });
 
   const dates = useMemo(() => buildDateColumns(7), []);
@@ -340,14 +417,16 @@ export function DailyEntryTable({ canEdit = true }) {
   const [yarnOrders, setYarnOrders] = useState([]);
   const [slots, setSlots] = useState({});
   const [fabricsByOrderId, setFabricsByOrderId] = useState({});
-  /** Per loom id: design / weave_tech / colour from GET /looms/configurations (read-only). */
-  const [loomConfig, setLoomConfig] = useState({});
+  /** Per loom id → date|shift → design / weave_tech / colour (read-only; locked after save). */
+  const [loomConfigByDate, setLoomConfigByDate] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editedCells, setEditedCells] = useState({});
   const [loomStatusModalLoom, setLoomStatusModalLoom] = useState(null);
-  const [inactiveReasonDraft, setInactiveReasonDraft] = useState('');
+  const [loomInactiveModalOpen, setLoomInactiveModalOpen] = useState(false);
   const [loomStatusSaving, setLoomStatusSaving] = useState(false);
+  /** { date: 'YYYY-MM-DD', shift: 'Day' | 'Night' } — only this column is editable when set. */
+  const [activeSection, setActiveSection] = useState(null);
   const [selectedIdsArr, setSelectedIdsArr] = useState([]);
   const [savingSelectIds, setSavingSelectIds] = useState([]);
   const wrapRef = useRef(null);
@@ -357,6 +436,23 @@ export function DailyEntryTable({ canEdit = true }) {
   const selectionAnchorFlatRef = useRef(null);
 
   const flatCells = useMemo(() => buildFlatSelectableCells(looms, dateShiftColumns), [looms, dateShiftColumns]);
+
+  const selectSection = useCallback((date, shift) => {
+    setActiveSection((prev) => {
+      if (prev && prev.date === date && shiftsMatch(prev.shift, shift)) return prev;
+      return { date, shift };
+    });
+  }, []);
+
+  const isColumnEditable = useCallback(
+    (col) => canEdit && isActiveSectionColumn(activeSection, col),
+    [canEdit, activeSection],
+  );
+
+  const sectionCellClass = useCallback(
+    (col, baseClass = '') => sectionDataCellClass(col, activeSection, baseClass),
+    [activeSection],
+  );
 
   const selectedSet = useMemo(() => new Set(selectedIdsArr), [selectedIdsArr]);
 
@@ -430,8 +526,13 @@ export function DailyEntryTable({ canEdit = true }) {
       setYarnOrders(yarnOrdersList || []);
 
       const idsParam = sortedLooms.map((l) => l.id).join(',');
-      const configurations = idsParam
-        ? await api.get('/looms/configurations', { params: { ids: idsParam } }).then((r) => r.data?.data || {}).catch(() => ({}))
+      const configurationsByLoomNumber = idsParam
+        ? await api
+            .get('/daily-entry/loom-configurations', {
+              params: { start: dateFrom, end: dateTo, loom_ids: idsParam },
+            })
+            .then((r) => r.data || {})
+            .catch(() => ({}))
         : {};
 
       const nextSlots = initEmptySlots(sortedLooms);
@@ -471,17 +572,14 @@ export function DailyEntryTable({ canEdit = true }) {
       });
       await prefetchFabricsForOrders([...orderIdsToPrefetch]);
 
-      const nextLoomConfig = {};
+      const nextLoomConfigByDate = {};
       for (const loom of sortedLooms) {
         const lid = String(loom.id);
-        const c = configurations[lid] || {};
-        nextLoomConfig[lid] = {
-          design: c.design ?? null,
-          weave_tech: c.weave_tech ?? null,
-          colour: c.colour ?? null,
-        };
+        const loomKey = loom.loom_number != null && String(loom.loom_number).trim() !== '' ? String(loom.loom_number) : lid;
+        const byDate = configurationsByLoomNumber[loomKey] || configurationsByLoomNumber[lid] || {};
+        nextLoomConfigByDate[lid] = byDate;
       }
-      setLoomConfig(nextLoomConfig);
+      setLoomConfigByDate(nextLoomConfigByDate);
 
       baselineRef.current = JSON.parse(JSON.stringify(nextSlots));
       setEditedCells({});
@@ -557,79 +655,71 @@ export function DailyEntryTable({ canEdit = true }) {
     );
   }, []);
 
-  const openLoomStatusModal = useCallback((loom) => {
-    setInactiveReasonDraft('');
-    setLoomStatusModalLoom(loom);
-  }, []);
+  const openLoomStatusModal = useCallback(
+    (loom) => {
+      if (!canChangeLoomStatus) return;
+      setLoomStatusModalLoom(loom);
+      if (!isLoomInactiveStatus(loom.status)) {
+        setLoomInactiveModalOpen(true);
+      }
+    },
+    [canChangeLoomStatus],
+  );
 
   const closeLoomStatusModal = useCallback(() => {
     if (loomStatusSaving) return;
     setLoomStatusModalLoom(null);
-    setInactiveReasonDraft('');
+    setLoomInactiveModalOpen(false);
   }, [loomStatusSaving]);
 
-  const submitLoomStatusChange = useCallback(async () => {
-    if (!loomStatusModalLoom || !canEdit) return;
-    const lid = String(loomStatusModalLoom.id);
-    const isInactive = isLoomInactiveStatus(loomStatusModalLoom.status);
-    if (!isInactive) {
-      const reason = inactiveReasonDraft.trim();
-      if (!reason) {
-        toast.error('Please enter a reason for marking this loom inactive.');
-        return;
-      }
+  const applyLoomUpdate = useCallback(
+    (lid, updated) => {
+      setLooms((prev) =>
+        sortLoomsList(prev.map((l) => (String(l.id) === lid ? { ...l, ...updated } : l))),
+      );
+    },
+    [sortLoomsList],
+  );
+
+  const confirmMarkInactive = useCallback(
+    async ({ inactive_reason, remarks }) => {
+      if (!loomStatusModalLoom) return;
+      const lid = String(loomStatusModalLoom.id);
       setLoomStatusSaving(true);
       try {
         const { data: body } = await api.put(`/looms/${loomStatusModalLoom.id}`, {
           status: 'Inactive',
-          inactive_reason: reason,
+          inactive_reason,
+          remarks: remarks || null,
         });
-        const updated = body?.data;
         toast.success('Loom marked inactive');
-        setLooms((prev) =>
-          sortLoomsList(
-            prev.map((l) => {
-              if (String(l.id) !== lid) return l;
-              return updated ? { ...l, ...updated } : { ...l, status: 'Inactive', inactive_reason: reason };
-            }),
-          ),
-        );
+        applyLoomUpdate(lid, body?.data || { status: 'Inactive', inactive_reason });
         setLoomStatusModalLoom(null);
-        setInactiveReasonDraft('');
+        setLoomInactiveModalOpen(false);
       } catch (e) {
         toast.error(e.response?.data?.message || 'Could not update loom');
       } finally {
         setLoomStatusSaving(false);
       }
-      return;
-    }
+    },
+    [loomStatusModalLoom, applyLoomUpdate],
+  );
 
+  const submitReactivateLoom = useCallback(async () => {
+    if (!loomStatusModalLoom || !canChangeLoomStatus) return;
+    const lid = String(loomStatusModalLoom.id);
     setLoomStatusSaving(true);
     try {
       const { data: body } = await api.put(`/looms/${loomStatusModalLoom.id}`, { status: 'Active' });
-      const updated = body?.data;
       toast.success('Loom set to Active');
-      if (updated) {
-        setLooms((prev) =>
-          sortLoomsList(
-            prev.map((l) => (String(l.id) === lid ? { ...l, ...updated } : l)),
-          ),
-        );
-      }
+      applyLoomUpdate(lid, body?.data || { status: 'Active', inactive_reason: null, current_inactive_period: null });
       setLoomStatusModalLoom(null);
-      setInactiveReasonDraft('');
     } catch (e) {
       toast.error(e.response?.data?.message || 'Could not update loom');
     } finally {
       setLoomStatusSaving(false);
     }
-  }, [
-    loomStatusModalLoom,
-    inactiveReasonDraft,
-    baselineRef,
-    canEdit,
-    sortLoomsList,
-  ]);
+  }, [loomStatusModalLoom, canChangeLoomStatus, applyLoomUpdate]);
 
   const weaverOptions = useMemo(() => {
     const opts = (weavers || []).map((w) => ({
@@ -788,6 +878,11 @@ export function DailyEntryTable({ canEdit = true }) {
 
   const editedCount = useMemo(() => Object.keys(editedCells).length, [editedCells]);
 
+  const entrySummaries = useMemo(
+    () => computeDailyEntrySummaries(looms, dateShiftColumns, dates, slots),
+    [looms, dateShiftColumns, dates, slots],
+  );
+
   const saveBulk = async () => {
     const inactiveLoomIds = new Set(
       looms.filter((l) => isLoomInactiveStatus(l.status)).map((l) => Number(l.id)),
@@ -894,6 +989,34 @@ export function DailyEntryTable({ canEdit = true }) {
         return next;
       });
 
+      const configPatches = {};
+      for (const e of respEntries) {
+        const lid = String(e.loom_id);
+        const dateStr = e.date ? String(e.date).slice(0, 10) : '';
+        const sh = canonicalizeShiftForPivot(e.shift);
+        if (!lid || !dateStr || !sh) continue;
+        const slotKey = makeDateShiftSlotKey(dateStr, sh);
+        if (e.design || e.weave_technique || e.colour) {
+          configPatches[lid] = {
+            ...(configPatches[lid] || {}),
+            [slotKey]: {
+              design: e.design ?? null,
+              weave_tech: e.weave_technique ?? null,
+              colour: e.colour ?? null,
+            },
+          };
+        }
+      }
+      if (Object.keys(configPatches).length) {
+        setLoomConfigByDate((prev) => {
+          const next = { ...prev };
+          for (const [lid, slots] of Object.entries(configPatches)) {
+            next[lid] = { ...(next[lid] || {}), ...slots };
+          }
+          return next;
+        });
+      }
+
       setEditedCells({});
       setSelectedIdsArr([]);
       const msg = `${toSave.length} cell change${toSave.length === 1 ? '' : 's'}`;
@@ -924,7 +1047,9 @@ export function DailyEntryTable({ canEdit = true }) {
   }
 
   const statusModalNode =
-    loomStatusModalLoom && typeof document !== 'undefined'
+    loomStatusModalLoom &&
+    isLoomInactiveStatus(loomStatusModalLoom.status) &&
+    typeof document !== 'undefined'
       ? createPortal(
           <div className={LOOM_STATUS_MODAL_OVERLAY} role="presentation">
             <div
@@ -964,33 +1089,14 @@ export function DailyEntryTable({ canEdit = true }) {
                       server.
                     </p>
                   </>
-                ) : (
-                  <>
-                    <label htmlFor="loom-inactive-reason" className="block text-sm font-medium text-gray-800">
-                      Reason <span className="text-red-600">*</span>
-                    </label>
-                    <textarea
-                      id="loom-inactive-reason"
-                      rows={3}
-                      value={inactiveReasonDraft}
-                      onChange={(e) => setInactiveReasonDraft(e.target.value)}
-                      disabled={loomStatusSaving}
-                      placeholder="Explain why this loom is inactive…"
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand disabled:bg-gray-50"
-                    />
-                  </>
-                )}
+                ) : null}
               </div>
               <div className="flex justify-end gap-2 border-t border-gray-100 px-4 py-3">
                 <Button type="button" variant="secondary" onClick={closeLoomStatusModal} disabled={loomStatusSaving}>
                   Cancel
                 </Button>
-                <Button type="button" onClick={submitLoomStatusChange} disabled={loomStatusSaving}>
-                  {loomStatusSaving
-                    ? 'Saving…'
-                    : isLoomInactiveStatus(loomStatusModalLoom.status)
-                      ? 'Set Active'
-                      : 'Mark inactive'}
+                <Button type="button" onClick={submitReactivateLoom} disabled={loomStatusSaving}>
+                  {loomStatusSaving ? 'Saving…' : 'Set Active'}
                 </Button>
               </div>
             </div>
@@ -998,6 +1104,16 @@ export function DailyEntryTable({ canEdit = true }) {
           document.body,
         )
       : null;
+
+  const inactiveModalNode = (
+    <LoomInactiveModal
+      open={loomInactiveModalOpen && Boolean(loomStatusModalLoom)}
+      loomLabel={loomStatusModalLoom?.loom_number ?? loomStatusModalLoom?.id}
+      saving={loomStatusSaving}
+      onClose={closeLoomStatusModal}
+      onConfirm={confirmMarkInactive}
+    />
+  );
 
   return (
     <div className="space-y-3" ref={wrapRef}>
@@ -1013,7 +1129,7 @@ export function DailyEntryTable({ canEdit = true }) {
             onClick={saveBulk}
             disabled={saving || editedCount === 0}
             className="gap-1.5"
-            title="Saves edited grid cells for this 7-day window. Design / weave / colour are read-only here — edit via loom configuration. Drag / Shift+click cell padding to highlight (Esc clears)."
+            title="Saves edited grid cells for this 7-day window. Design / weave / colour are locked per shift when you save meters (audit). Drag / Shift+click cell padding to highlight (Esc clears)."
           >
             <Save className="w-4 h-4" />{' '}
             {saving ? 'Saving…' : editedCount > 0 ? `Save (${editedCount})` : 'Save'}
@@ -1022,6 +1138,59 @@ export function DailyEntryTable({ canEdit = true }) {
       </div>
 
       <div className="rounded-lg border border-gray-300 bg-white shadow-sm overflow-hidden">
+        {entrySummaries?.period ? (
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-gray-700 bg-amber-50 border-b border-amber-200 px-3 py-2">
+            <span>
+              <span className="font-semibold text-amber-950">Total Day:</span>{' '}
+              {entrySummaries.period.dayMeters > 0 ? `${entrySummaries.period.dayMeters.toLocaleString()} mtr` : '—'}
+            </span>
+            <span>
+              <span className="font-semibold text-amber-950">Total Night:</span>{' '}
+              {entrySummaries.period.nightMeters > 0 ? `${entrySummaries.period.nightMeters.toLocaleString()} mtr` : '—'}
+            </span>
+            <span>
+              <span className="font-semibold text-amber-950">Looms woven:</span>{' '}
+              {entrySummaries.period.loomsWoven > 0 ? entrySummaries.period.loomsWoven : '—'}
+            </span>
+            <span>
+              <span className="font-semibold text-amber-950">Weekly avg:</span>{' '}
+              {entrySummaries.period.weeklyAverage != null
+                ? `${entrySummaries.period.weeklyAverage.toLocaleString()} mtr`
+                : '—'}
+            </span>
+          </div>
+        ) : null}
+        {canEdit && (
+          <div
+            className={`flex items-center justify-between gap-2 px-3 py-2 border-b text-xs transition-colors duration-200 ${
+              activeSection
+                ? 'bg-blue-50/90 border-blue-200 text-blue-900'
+                : 'bg-amber-50/80 border-amber-200 text-amber-950'
+            }`}
+          >
+            <span className="font-medium">
+              {activeSection ? (
+                <>
+                  Currently editing:{' '}
+                  <span className="font-semibold">
+                    {formatDayHeader(activeSection.date)} · {activeSection.shift}
+                  </span>
+                </>
+              ) : (
+                'Select a Day or Night column header below to start editing that section.'
+              )}
+            </span>
+            {activeSection ? (
+              <button
+                type="button"
+                onClick={() => setActiveSection(null)}
+                className="shrink-0 rounded-md px-2 py-0.5 text-[11px] font-medium text-blue-800 hover:bg-blue-100/80 transition-colors"
+              >
+                Clear selection
+              </button>
+            ) : null}
+          </div>
+        )}
         <div
           className={`overflow-x-auto max-h-[min(78vh,1200px)] overflow-y-auto ${
             selectionDragRef.current ? 'select-none' : ''
@@ -1059,10 +1228,26 @@ export function DailyEntryTable({ canEdit = true }) {
                 {dateShiftColumns.map((col) => (
                   <th
                     key={col.key}
-                    className={`px-1 py-1.5 text-center text-[11px] font-semibold uppercase tracking-wide text-gray-600 border-b border-gray-300 ${
-                      col.shift === 'Night' ? 'border-r-2 border-gray-300' : 'border-r border-gray-200'
-                    }`}
-                    title={`${col.date} · ${col.shift}`}
+                    className={sectionHeaderClass(col, activeSection, canEdit)}
+                    title={
+                      canEdit
+                        ? `Click to edit ${formatDayHeader(col.date)} · ${col.shift}`
+                        : `${col.date} · ${col.shift}`
+                    }
+                    onClick={canEdit ? () => selectSection(col.date, col.shift) : undefined}
+                    onKeyDown={
+                      canEdit
+                        ? (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              selectSection(col.date, col.shift);
+                            }
+                          }
+                        : undefined
+                    }
+                    tabIndex={canEdit ? 0 : undefined}
+                    role={canEdit ? 'button' : undefined}
+                    aria-pressed={isActiveSectionColumn(activeSection, col)}
                   >
                     {col.shift}
                   </th>
@@ -1089,7 +1274,7 @@ export function DailyEntryTable({ canEdit = true }) {
                     key={col.key}
                     className={`text-xs text-violet-950 px-0.5 py-0.5 align-top ${
                       col.shift === 'Night' ? 'border-r-2 border-violet-200' : 'border-r border-violet-100'
-                    } ${cellShellClass(null, col.key, ROW_WEAVER1)}`}
+                    } ${sectionCellClass(col, '')} ${cellShellClass(null, col.key, ROW_WEAVER1)}`}
                     onMouseDown={(e) => onSelectPointerDown(e, makeSelectIdWeaver(col.key, ROW_WEAVER1))}
                     onMouseEnter={() => onSelectPointerEnter(makeSelectIdWeaver(col.key, ROW_WEAVER1))}
                   >
@@ -1098,7 +1283,7 @@ export function DailyEntryTable({ canEdit = true }) {
                       value={globalWeaverValue(looms, slots, col.key, 'weaver1_id')}
                       onChange={(v) => setGlobalWeaver(col.key, 'weaver1_id', v)}
                       placeholder="W1"
-                      isDisabled={!canEdit}
+                      isDisabled={!isColumnEditable(col)}
                       compact
                       menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
                     />
@@ -1117,7 +1302,7 @@ export function DailyEntryTable({ canEdit = true }) {
                     key={col.key}
                     className={`text-xs text-violet-950 px-0.5 py-0.5 align-top ${
                       col.shift === 'Night' ? 'border-r-2 border-violet-200' : 'border-r border-violet-100'
-                    } ${cellShellClass(null, col.key, ROW_WEAVER2)}`}
+                    } ${sectionCellClass(col, '')} ${cellShellClass(null, col.key, ROW_WEAVER2)}`}
                     onMouseDown={(e) => onSelectPointerDown(e, makeSelectIdWeaver(col.key, ROW_WEAVER2))}
                     onMouseEnter={() => onSelectPointerEnter(makeSelectIdWeaver(col.key, ROW_WEAVER2))}
                   >
@@ -1126,7 +1311,7 @@ export function DailyEntryTable({ canEdit = true }) {
                       value={globalWeaverValue(looms, slots, col.key, 'weaver2_id')}
                       onChange={(v) => setGlobalWeaver(col.key, 'weaver2_id', v)}
                       placeholder="W2"
-                      isDisabled={!canEdit}
+                      isDisabled={!isColumnEditable(col)}
                       compact
                       menuPortalTarget={typeof document !== 'undefined' ? document.body : null}
                     />
@@ -1147,24 +1332,23 @@ export function DailyEntryTable({ canEdit = true }) {
                     onSelectPointerDown={onSelectPointerDown}
                     onSelectPointerEnter={onSelectPointerEnter}
                     canEdit={canEdit}
+                    isColumnEditable={isColumnEditable}
+                    sectionCellClass={sectionCellClass}
                     wrapRef={wrapRef}
-                    onLoomStatusBadgeClick={canEdit ? openLoomStatusModal : undefined}
-                    loomConfig={loomConfig[lid]}
+                    onLoomStatusBadgeClick={canChangeLoomStatus ? openLoomStatusModal : undefined}
+                    loomConfigByDate={loomConfigByDate}
                   />
                 );
               })}
+              {looms.length > 0 ? (
+                <SummaryFooterRows displayColumns={dateShiftColumns} summaries={entrySummaries} />
+              ) : null}
             </tbody>
           </table>
         </div>
-        <p className="text-[11px] text-gray-500 px-3 py-2 border-t border-gray-200 bg-gray-50">
-          <strong>Weaver 1 / 2</strong>: choose once per date and shift — applied to every loom for that slot.{' '}
-          <strong>Design</strong>, <strong>Weave Tech</strong> and <strong>Colour</strong> are read-only from loom configuration (loaded with the grid). Edited cells are highlighted.{' '}
-          <strong>Shift Mtr</strong> is meters only. Click or drag empty parts of cells (not inputs/dropdowns) to highlight a range; Shift+click extends; Esc clears.{' '}
-          <strong>Save</strong> persists this 7-day window (grid cells only).{' '}
-          <strong>Status</strong> badge (per loom): click to mark inactive (reason required) or reactivate.
-        </p>
       </div>
       {statusModalNode}
+      {inactiveModalNode}
     </div>
   );
 }

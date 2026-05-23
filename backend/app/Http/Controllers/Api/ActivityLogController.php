@@ -11,7 +11,7 @@ use Illuminate\Http\Request;
 class ActivityLogController extends Controller
 {
     /**
-     * GET /notifications — activity log (middleware: super_admin, admin).
+     * GET /notifications — activity log (super_admin only).
      */
     public function index(Request $request): JsonResponse
     {
@@ -76,8 +76,8 @@ class ActivityLogController extends Controller
     private function ensureNotificationsViewer(Request $request): User
     {
         $user = $request->user();
-        if (! $user || ! $user->isSuperAdminOrAdmin()) {
-            abort(403, 'Only administrators can view notifications.');
+        if (! $user || ! $user->isSuperAdmin()) {
+            abort(403, 'Only super administrators can view notifications.');
         }
 
         return $user;

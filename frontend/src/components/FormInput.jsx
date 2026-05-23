@@ -65,6 +65,7 @@ export function FormSelect({ label, error, required, options, emptyLabel = 'Sele
     defaultOptions = true,
     compact = false,
     hideIndicators = false,
+    valueOption = null,
     ...rest
   } = props;
 
@@ -89,6 +90,7 @@ export function FormSelect({ label, error, required, options, emptyLabel = 'Sele
         isDisabled={isDisabled || rest.disabled}
         loadOptions={loadOptions}
         defaultOptions={defaultOptions}
+        valueOption={valueOption}
         compact={compact}
         hideIndicators={hideIndicators}
       />

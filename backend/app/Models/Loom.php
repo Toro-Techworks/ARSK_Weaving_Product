@@ -39,4 +39,17 @@ class Loom extends Model
     {
         return $this->hasMany(LoomEntry::class);
     }
+
+    public function inactiveHistories(): HasMany
+    {
+        return $this->hasMany(LoomInactiveHistory::class);
+    }
+
+    public function openInactiveHistory(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(LoomInactiveHistory::class)
+            ->whereNull('inactive_end_date')
+            ->whereNotNull('inactive_start_date')
+            ->latestOfMany('inactive_start_date');
+    }
 }

@@ -7,6 +7,7 @@ use App\Http\Resources\LoomEntryResource;
 use App\Models\GenericCode;
 use App\Models\LoomEntry;
 use App\Models\Weaver;
+use App\Services\DailyEntryLoomConfigurationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -14,6 +15,9 @@ use Illuminate\Validation\ValidationException;
 
 class LoomProductionController extends Controller
 {
+    public function __construct(
+        private readonly DailyEntryLoomConfigurationService $loomConfigurationService,
+    ) {}
     /**
      * Batch-apply daily entry cell changes grouped by (loom_id, date, shift).
      * Single transaction; avoids N sequential HTTP round-trips.
@@ -77,12 +81,22 @@ class LoomProductionController extends Controller
                 $row = $existing ? [
                     'yarn_order_id' => $existing->yarn_order_id,
                     'fabric_id' => $existing->fabric_id,
+                    'design' => $existing->design,
+                    'weave_technique' => $existing->weave_technique,
+                    'colour' => $existing->colour,
+                    'customer' => $existing->customer,
+                    'snapshot_order_label' => $existing->snapshot_order_label,
                     'meters_produced' => (float) $existing->meters_produced,
                     'weaver1_id' => $existing->weaver1_id,
                     'weaver2_id' => $existing->weaver2_id,
                 ] : [
                     'yarn_order_id' => null,
                     'fabric_id' => null,
+                    'design' => null,
+                    'weave_technique' => null,
+                    'colour' => null,
+                    'customer' => null,
+                    'snapshot_order_label' => null,
                     'meters_produced' => 0.0,
                     'weaver1_id' => null,
                     'weaver2_id' => null,
@@ -92,11 +106,33 @@ class LoomProductionController extends Controller
                     $this->applyPatch($row, $patch);
                 }
 
-                $shouldPersist = ((float) $row['meters_produced']) > 0
+                $willPersist = ((float) $row['meters_produced']) > 0
                     || ! empty($row['weaver1_id'])
                     || ! empty($row['weaver2_id'])
                     || ! empty($row['yarn_order_id'])
                     || ! empty($row['fabric_id']);
+
+                $this->loomConfigurationService->applyAssignmentSnapshotToRow(
+                    $row,
+                    $loomId,
+                    $date,
+                    $willPersist,
+                );
+
+                if ($existing) {
+                    $row['yarn_order_id'] = $existing->yarn_order_id ?? $row['yarn_order_id'];
+                    $row['snapshot_order_label'] = $existing->snapshot_order_label ?? $row['snapshot_order_label'];
+                    $row['customer'] = $existing->customer ?? $row['customer'];
+                }
+
+                $shouldPersist = ((float) $row['meters_produced']) > 0
+                    || ! empty($row['weaver1_id'])
+                    || ! empty($row['weaver2_id'])
+                    || ! empty($row['yarn_order_id'])
+                    || ! empty($row['fabric_id'])
+                    || ! empty($row['design'])
+                    || ! empty($row['weave_technique'])
+                    || ! empty($row['colour']);
 
                 if (! $shouldPersist) {
                     if ($existing) {
@@ -129,6 +165,11 @@ class LoomProductionController extends Controller
                     'shift' => $shift,
                     'yarn_order_id' => $row['yarn_order_id'],
                     'fabric_id' => $row['fabric_id'],
+                    'design' => $row['design'],
+                    'weave_technique' => $row['weave_technique'],
+                    'colour' => $row['colour'],
+                    'customer' => $row['customer'],
+                    'snapshot_order_label' => $row['snapshot_order_label'],
                     'meters_produced' => round((float) $row['meters_produced'], 2),
                     'weaver1_id' => $row['weaver1_id'],
                     'weaver2_id' => $row['weaver2_id'],
@@ -278,6 +319,8 @@ class LoomProductionController extends Controller
                     'design' => $existing->design,
                     'weave_technique' => $existing->weave_technique,
                     'colour' => $existing->colour,
+                    'customer' => $existing->customer,
+                    'snapshot_order_label' => $existing->snapshot_order_label,
                     'meters_produced' => (float) $existing->meters_produced,
                     'weaver1_id' => $existing->weaver1_id,
                     'weaver2_id' => $existing->weaver2_id,
@@ -287,6 +330,8 @@ class LoomProductionController extends Controller
                     'design' => null,
                     'weave_technique' => null,
                     'colour' => null,
+                    'customer' => null,
+                    'snapshot_order_label' => null,
                     'meters_produced' => 0.0,
                     'weaver1_id' => null,
                     'weaver2_id' => null,
@@ -297,9 +342,30 @@ class LoomProductionController extends Controller
                 }
 
                 if ($spec = $specByLoom[$loomId] ?? null) {
-                    $row['design'] = $spec['design'] ?? null;
-                    $row['weave_technique'] = $spec['weave_technique'] ?? null;
-                    $row['colour'] = $spec['colour'] ?? null;
+                    if (! $this->loomConfigurationService->rowHasConfigSnapshot($row)) {
+                        $row['design'] = $spec['design'] ?? null;
+                        $row['weave_technique'] = $spec['weave_technique'] ?? null;
+                        $row['colour'] = $spec['colour'] ?? null;
+                    }
+                }
+
+                $willPersist = ((float) $row['meters_produced']) > 0
+                    || ! empty($row['weaver1_id'])
+                    || ! empty($row['weaver2_id'])
+                    || ! empty($row['yarn_order_id'])
+                    || ! empty($row['fabric_id']);
+
+                $this->loomConfigurationService->applyAssignmentSnapshotToRow(
+                    $row,
+                    $loomId,
+                    $date,
+                    $willPersist,
+                );
+
+                if ($existing) {
+                    $row['yarn_order_id'] = $existing->yarn_order_id ?? $row['yarn_order_id'];
+                    $row['snapshot_order_label'] = $existing->snapshot_order_label ?? $row['snapshot_order_label'];
+                    $row['customer'] = $existing->customer ?? $row['customer'];
                 }
 
                 $shouldPersist = ((float) $row['meters_produced']) > 0
@@ -345,6 +411,8 @@ class LoomProductionController extends Controller
                     'design' => $row['design'],
                     'weave_technique' => $row['weave_technique'],
                     'colour' => $row['colour'],
+                    'customer' => $row['customer'],
+                    'snapshot_order_label' => $row['snapshot_order_label'],
                     'meters_produced' => round((float) $row['meters_produced'], 2),
                     'weaver1_id' => $row['weaver1_id'],
                     'weaver2_id' => $row['weaver2_id'],
@@ -366,6 +434,9 @@ class LoomProductionController extends Controller
                         ->where('loom_id', (int) $spec['loom_id'])
                         ->whereDate('date', '>=', $dateFrom)
                         ->whereDate('date', '<=', $dateTo)
+                        ->whereNull('design')
+                        ->whereNull('weave_technique')
+                        ->whereNull('colour')
                         ->update([
                             'design' => $spec['design'] ?? null,
                             'weave_technique' => $spec['weave_technique'] ?? null,

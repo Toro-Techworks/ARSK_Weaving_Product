@@ -4,11 +4,19 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import { RequireViewPermission } from './components/RequireViewPermission';
 import Auth from './pages/Auth';
+import { ProductOwnerRoute } from './components/ProductOwner/ProductOwnerRoute';
+import { ProductOwnerLayout } from './components/ProductOwner/ProductOwnerLayout';
+import { ProductOwnerDashboard } from './pages/ProductOwner/Dashboard';
+import { ProductOwnerUsers } from './pages/ProductOwner/Users';
+import { ProductOwnerSecurity } from './pages/ProductOwner/Security';
+import { ProductOwnerLogs } from './pages/ProductOwner/Logs';
 import AccessDenied from './pages/AccessDenied';
 import Dashboard from './pages/Dashboard';
 import { CompanyList } from './pages/Companies';
 import { OrderList } from './pages/Orders';
 import { LoomList } from './pages/Looms';
+import { LoomDetailPage } from './pages/LoomDetail';
+import { LoomHistoryPage } from './pages/LoomHistory';
 import { LoomDailyEntry } from './pages/LoomProduction';
 import LoomAssigningPage from './pages/LoomAssigning';
 import { PaymentList } from './pages/Payments';
@@ -44,8 +52,8 @@ function PageLoader() {
   );
 }
 
-function ProtectedRoute({ children, roles, rolesStrict = false }) {
-  const { user, authenticated, loading } = useAuth();
+function ProtectedRoute({ children, roles, rolesStrict = false, allowProductOwner = false }) {
+  const { user, authenticated, loading, isProductOwner } = useAuth();
 
   // Token-only auth: presence of token determines access.
   if (!authenticated) return <Navigate to="/login" replace />;
@@ -63,6 +71,10 @@ function ProtectedRoute({ children, roles, rolesStrict = false }) {
   // Token exists but user could not be loaded (token invalid/expired) → send to login.
   if (!user) return <Navigate to="/login" replace />;
 
+  if (isProductOwner && !allowProductOwner) {
+    return <Navigate to="/product-owner" replace />;
+  }
+
   if (roles && roles.length) {
     let allowed = roles.includes(user.role);
     if (!rolesStrict && !allowed && user.role === 'owner' && roles.includes('super_admin')) {
@@ -77,6 +89,19 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Auth />} />
+      <Route
+        path="/product-owner"
+        element={
+          <ProductOwnerRoute>
+            <ProductOwnerLayout />
+          </ProductOwnerRoute>
+        }
+      >
+        <Route index element={<ProductOwnerDashboard />} />
+        <Route path="users" element={<ProductOwnerUsers />} />
+        <Route path="security" element={<ProductOwnerSecurity />} />
+        <Route path="logs" element={<ProductOwnerLogs />} />
+      </Route>
       <Route path="/access-denied" element={<ProtectedRoute><Layout><AccessDenied /></Layout></ProtectedRoute>} />
       <Route
         path="/"
@@ -95,6 +120,7 @@ function AppRoutes() {
       <Route path="/orders/deleted" element={<ProtectedRoute roles={['super_admin']} rolesStrict><RequireViewPermission menuKey="orders"><Layout><DeletedOrdersPage /></Layout></RequireViewPermission></ProtectedRoute>} />
 
       <Route path="/loom-production/looms" element={<ProtectedRoute><RequireViewPermission menuKey="loom_production.looms"><Layout><LoomList /></Layout></RequireViewPermission></ProtectedRoute>} />
+      <Route path="/loom-production/looms/:loomId" element={<ProtectedRoute><RequireViewPermission menuKey="loom_production.looms"><Layout><LoomDetailPage /></Layout></RequireViewPermission></ProtectedRoute>} />
       <Route path="/loom-production/daily" element={<ProtectedRoute><RequireViewPermission menuKey="loom_production.daily"><Layout><LoomDailyEntry /></Layout></RequireViewPermission></ProtectedRoute>} />
       <Route path="/loom-production/assigning" element={<ProtectedRoute><RequireViewPermission menuKey="loom_production.assigning"><Layout><LoomAssigningPage /></Layout></RequireViewPermission></ProtectedRoute>} />
       <Route path="/loom-production/report" element={<ProtectedRoute><Navigate to="/reports/production" replace /></ProtectedRoute>} />
@@ -119,8 +145,9 @@ function AppRoutes() {
       <Route path="/admin/winding-units/deleted" element={<ProtectedRoute roles={['super_admin']} rolesStrict><RequireViewPermission menuKey="admin.winding_units"><Layout><DeletedWindingUnitsPage /></Layout></RequireViewPermission></ProtectedRoute>} />
       <Route path="/admin/weavers" element={<ProtectedRoute roles={['super_admin', 'admin']}><RequireViewPermission menuKey="admin.weavers"><Layout><WeaverList /></Layout></RequireViewPermission></ProtectedRoute>} />
       <Route path="/admin/weavers/deleted" element={<ProtectedRoute roles={['super_admin']} rolesStrict><RequireViewPermission menuKey="admin.weavers"><Layout><DeletedWeaversPage /></Layout></RequireViewPermission></ProtectedRoute>} />
+      <Route path="/admin/loom-history" element={<ProtectedRoute roles={['super_admin', 'admin']}><RequireViewPermission menuKey="admin.loom_history"><Layout><LoomHistoryPage /></Layout></RequireViewPermission></ProtectedRoute>} />
       <Route path="/admin/master-settings" element={<ProtectedRoute roles={['super_admin', 'admin']}><RequireViewPermission menuKey="admin.master_settings"><Layout><Suspense fallback={<PageLoader />}><AdminMasterSettingsLazy /></Suspense></Layout></RequireViewPermission></ProtectedRoute>} />
-      <Route path="/admin/notifications" element={<ProtectedRoute roles={['super_admin', 'admin']}><RequireViewPermission menuKey="admin.notifications"><Layout><Suspense fallback={<PageLoader />}><NotificationsPageLazy /></Suspense></Layout></RequireViewPermission></ProtectedRoute>} />
+      <Route path="/admin/notifications" element={<ProtectedRoute roles={['super_admin']} rolesStrict><RequireViewPermission menuKey="admin.notifications"><Layout><Suspense fallback={<PageLoader />}><NotificationsPageLazy /></Suspense></Layout></RequireViewPermission></ProtectedRoute>} />
       <Route path="/settings/profile" element={<ProtectedRoute><Layout><Profile /></Layout></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />

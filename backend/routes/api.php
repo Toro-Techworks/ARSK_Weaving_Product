@@ -12,11 +12,13 @@ use App\Http\Controllers\Api\FabricController;
 use App\Http\Controllers\Api\GenericCodeController;
 use App\Http\Controllers\Api\LoomAssignmentHistoryController;
 use App\Http\Controllers\Api\LoomController;
+use App\Http\Controllers\Api\LoomInactiveHistoryController;
 use App\Http\Controllers\Api\LoomEntryController;
 use App\Http\Controllers\Api\LoomProductionController;
 use App\Http\Controllers\Api\MasterController;
 use App\Http\Controllers\Api\MenuController;
 use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\ProductOwner\ProductOwnerController;
 use App\Http\Controllers\Api\PermissionController;
 use App\Http\Controllers\Api\ProductionReadinessController;
 use App\Http\Controllers\Api\ReportController;
@@ -46,6 +48,20 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', [AuthController::class, 'user']);
     Route::get('/menus/user', [MenuController::class, 'userMenus']);
 
+    Route::prefix('product-owner')->middleware('product.owner')->group(function () {
+        Route::get('/dashboard', [ProductOwnerController::class, 'dashboard']);
+        Route::get('/roles', [ProductOwnerController::class, 'roles']);
+        Route::get('/users', [ProductOwnerController::class, 'usersIndex']);
+        Route::post('/users', [ProductOwnerController::class, 'usersStore']);
+        Route::put('/users/{user}', [ProductOwnerController::class, 'usersUpdate']);
+        Route::post('/users/{user}/reset-password', [ProductOwnerController::class, 'resetPassword']);
+        Route::post('/users/{user}/generate-temporary-password', [ProductOwnerController::class, 'generateTemporaryPassword']);
+        Route::post('/users/{user}/force-password-change', [ProductOwnerController::class, 'forcePasswordChange']);
+        Route::post('/users/{user}/revoke-sessions', [ProductOwnerController::class, 'revokeSessions']);
+        Route::get('/security', [ProductOwnerController::class, 'securityOverview']);
+        Route::get('/logs', [ProductOwnerController::class, 'auditLogs']);
+    });
+
     Route::get('/dashboard', [DashboardController::class, 'index']);
 
     Route::middleware('role:super_admin')->group(function () {
@@ -73,6 +89,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/masters/weave-tech', [MasterController::class, 'weaveTech']);
     Route::get('/masters/colours', [MasterController::class, 'colours']);
 
+    Route::get('/daily-entry/loom-configurations', [DailyEntryController::class, 'loomConfigurations']);
     Route::post('/daily-entry', [DailyEntryController::class, 'store']);
 
     Route::get('/looms/configurations', [LoomController::class, 'configurations']);
@@ -80,6 +97,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('looms', LoomController::class);
     Route::get('/looms-list', [LoomController::class, 'list']);
     Route::get('/loom-assignment-history', [LoomAssignmentHistoryController::class, 'index']);
+
+    Route::get('/loom-inactive-histories/current', [LoomInactiveHistoryController::class, 'current']);
+    Route::middleware('role:super_admin,admin')->group(function () {
+        Route::get('/loom-inactive-histories', [LoomInactiveHistoryController::class, 'index']);
+        Route::get('/loom-inactive-histories/reasons', [LoomInactiveHistoryController::class, 'reasons']);
+    });
 
     Route::get('/fabrics/yarn-order/{yarnOrderId}', [FabricController::class, 'indexByYarnOrder']);
     Route::post('/fabrics/bulk', [FabricController::class, 'bulkStore']);
@@ -137,9 +160,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     /**
      * Debug: broadcast UserActionPerformed on public channel "notifications".
-     * GET /api/test-pusher (Authorization: Bearer …) as super_admin or admin — browser console should log EVENT RECEIVED.
+     * GET /api/test-pusher (Authorization: Bearer …) as super_admin — browser console should log EVENT RECEIVED.
      */
-    Route::middleware('role:super_admin,admin')->get('/test-pusher', function (Request $request) {
+    Route::middleware('role:super_admin')->get('/test-pusher', function (Request $request) {
         $driver = config('broadcasting.default');
         Log::info('test_pusher: invoked', ['broadcast_connection' => $driver]);
 
@@ -172,7 +195,7 @@ Route::middleware('auth:sanctum')->group(function () {
                 'listen' => 'Echo.channel("notifications").listen(".UserActionPerformed", …)',
                 'checklist' => [
                     'Frontend .env: VITE_PUSHER_APP_KEY and VITE_PUSHER_APP_CLUSTER must match Laravel (e.g. ap2).',
-                    'Logged-in as super_admin or admin so Echo subscribes (useActivityBroadcast).',
+                    'Logged-in as super_admin so Echo subscribes (useActivityBroadcast).',
                     'Restart Vite after changing VITE_*; hard-refresh browser.',
                 ],
             ]);
@@ -183,7 +206,7 @@ Route::middleware('auth:sanctum')->group(function () {
         }
     });
 
-    Route::middleware('role:super_admin,admin')->group(function () {
+    Route::middleware('role:super_admin')->group(function () {
         Route::get('/notifications', [ActivityLogController::class, 'index']);
         Route::get('/notifications/preview', [ActivityLogController::class, 'preview']);
         Route::get('/notifications/unread-count', [ActivityLogController::class, 'unreadCount']);

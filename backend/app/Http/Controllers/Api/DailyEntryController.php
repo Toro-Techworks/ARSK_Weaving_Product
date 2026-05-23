@@ -7,12 +7,48 @@ use App\Http\Resources\LoomEntryResource;
 use App\Models\GenericCode;
 use App\Models\LoomEntry;
 use App\Models\Weaver;
+use App\Services\DailyEntryLoomConfigurationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class DailyEntryController extends Controller
 {
+    public function __construct(
+        private readonly DailyEntryLoomConfigurationService $loomConfigurationService,
+    ) {}
+
+    /**
+     * GET /daily-entry/loom-configurations?start=YYYY-MM-DD&end=YYYY-MM-DD&loom_ids=1,2
+     *
+     * Per loom (keyed by loom_number) and date: design, weave_tech, colour from
+     * assignment history; persisted loom_entries override for that date.
+     */
+    public function loomConfigurations(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'start' => 'required|date_format:Y-m-d',
+            'end' => 'required|date_format:Y-m-d',
+            'loom_ids' => 'nullable|string',
+        ]);
+
+        $loomIds = null;
+        if (! empty($validated['loom_ids'])) {
+            $loomIds = array_values(array_filter(array_map(
+                fn ($x) => (int) trim($x),
+                explode(',', (string) $validated['loom_ids']),
+            )));
+        }
+
+        $data = $this->loomConfigurationService->resolveForDateRange(
+            $validated['start'],
+            $validated['end'],
+            $loomIds,
+        );
+
+        return response()->json($data);
+    }
+
     /**
      * POST /daily-entry
      *
@@ -40,11 +76,10 @@ class DailyEntryController extends Controller
         DB::transaction(function () use ($validated, &$entries) {
             $loomId = (int) $validated['loom_id'];
             $date = $validated['date'];
-            $design = $validated['design'] ?? null;
-            $weave = $validated['weave_tech'] ?? null;
-            $colour = $validated['colour'] ?? null;
-
             foreach ($validated['shifts'] as $row) {
+                $design = $validated['design'] ?? null;
+                $weave = $validated['weave_tech'] ?? null;
+                $colour = $validated['colour'] ?? null;
                 $shift = $row['shift'];
                 $meters = isset($row['meters']) ? round((float) $row['meters'], 2) : 0.0;
                 $yarnOrderId = $row['yarn_order_id'] ?? null;
@@ -75,6 +110,27 @@ class DailyEntryController extends Controller
                     continue;
                 }
 
+                $entryRow = [
+                    'design' => $existing?->design ?? $design,
+                    'weave_technique' => $existing?->weave_technique ?? $weave,
+                    'colour' => $existing?->colour ?? $colour,
+                    'yarn_order_id' => $existing?->yarn_order_id ?? $yarnOrderId,
+                    'snapshot_order_label' => $existing?->snapshot_order_label,
+                    'customer' => $existing?->customer,
+                ];
+                $this->loomConfigurationService->applyAssignmentSnapshotToRow(
+                    $entryRow,
+                    $loomId,
+                    $date,
+                    true,
+                );
+                $design = $entryRow['design'];
+                $weave = $entryRow['weave_technique'];
+                $colour = $entryRow['colour'];
+                $yarnOrderId = $existing?->yarn_order_id ?? ($entryRow['yarn_order_id'] ?? $yarnOrderId);
+                $snapshotOrderLabel = $existing?->snapshot_order_label ?? ($entryRow['snapshot_order_label'] ?? null);
+                $customerSnapshot = $existing?->customer ?? ($entryRow['customer'] ?? null);
+
                 $weaverIds = array_values(array_filter([(int) $w1 ?: null, (int) $w2 ?: null]));
                 $op = null;
                 if ($weaverIds !== []) {
@@ -96,6 +152,8 @@ class DailyEntryController extends Controller
                     'design' => $design,
                     'weave_technique' => $weave,
                     'colour' => $colour,
+                    'customer' => $customerSnapshot,
+                    'snapshot_order_label' => $snapshotOrderLabel,
                     'meters_produced' => $meters,
                     'weaver1_id' => $w1 ?: null,
                     'weaver2_id' => $w2 ?: null,

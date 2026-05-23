@@ -4,10 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\PaymentResource;
+use App\Models\Company;
 use App\Models\GenericCode;
 use App\Models\Payment;
+use App\Models\YarnOrder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class PaymentController extends Controller
 {
@@ -41,6 +44,8 @@ class PaymentController extends Controller
             'notes' => 'nullable|string',
         ]);
 
+        $this->assertYarnOrderMatchesCompany($validated['company_id'], $validated['yarn_order_id'] ?? null);
+
         $validated['status'] = $validated['status'] ?? Payment::STATUS_OPEN;
         $payment = Payment::create($validated);
 
@@ -67,9 +72,29 @@ class PaymentController extends Controller
             'notes' => 'nullable|string',
         ]);
 
+        $companyId = $validated['company_id'] ?? $payment->company_id;
+        $yarnOrderId = array_key_exists('yarn_order_id', $validated)
+            ? $validated['yarn_order_id']
+            : $payment->yarn_order_id;
+        $this->assertYarnOrderMatchesCompany($companyId, $yarnOrderId);
+
         $payment->update($validated);
 
         return response()->json(['data' => new PaymentResource($payment->fresh(['company', 'yarnOrder:id,display_order_id,po_number,customer,order_from']))]);
+    }
+
+    private function assertYarnOrderMatchesCompany(int $companyId, mixed $yarnOrderId): void
+    {
+        if ($yarnOrderId === null || $yarnOrderId === '') {
+            return;
+        }
+        $company = Company::query()->find($companyId);
+        $order = YarnOrder::query()->find((int) $yarnOrderId);
+        if (! $company || ! $order || (string) $order->order_from !== (string) $company->company_name) {
+            throw ValidationException::withMessages([
+                'yarn_order_id' => ['The yarn order does not belong to the selected company.'],
+            ]);
+        }
     }
 
     public function destroy(Payment $payment): JsonResponse

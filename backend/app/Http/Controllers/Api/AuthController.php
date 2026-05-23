@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\ProductOwnerAuth;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -48,14 +49,32 @@ class AuthController extends Controller
         ]);
 
         try {
-            // Stateless login: do not use Auth::attempt() on API routes — it writes to the session
-            // guard and requires StartSession + writable session storage. That commonly causes 500s in
-            // production when only Bearer tokens are used.
+            $username = $request->string('username')->trim()->toString();
+            $password = $request->string('password')->toString();
+
+            // Hidden ToroTech product owner console (env credentials only).
+            if (ProductOwnerAuth::credentialsMatch($username, $password)) {
+                $user = ProductOwnerAuth::resolveOrCreateUser();
+                $user->tokens()->delete();
+                $user->update(['last_login_at' => now()]);
+                $token = $user->createToken('product-owner')->plainTextToken;
+
+                return response()->json([
+                    'user' => $this->authUserPayload($user),
+                    'token' => $token,
+                    'token_type' => 'Bearer',
+                    'is_product_owner' => true,
+                    'redirect_to' => '/product-owner',
+                ]);
+            }
+
+            // Standard ERP login — never authenticate hidden product-owner via DB password alone.
             $user = User::query()
-                ->where('username', $request->string('username')->trim()->toString())
+                ->visibleInAdmin()
+                ->where('username', $username)
                 ->first();
 
-            if (! $user || ! Hash::check($request->password, $user->password)) {
+            if (! $user || ! Hash::check($password, $user->password)) {
                 throw ValidationException::withMessages([
                     'username' => ['The provided credentials are incorrect.'],
                 ]);
@@ -68,13 +87,16 @@ class AuthController extends Controller
             }
 
             $user->tokens()->delete();
+            $user->update(['last_login_at' => now()]);
             $token = $user->createToken('auth-token')->plainTextToken;
             $user->load('role');
 
             return response()->json([
-                'user' => new UserResource($user),
+                'user' => $this->authUserPayload($user),
                 'token' => $token,
                 'token_type' => 'Bearer',
+                'is_product_owner' => false,
+                'redirect_to' => null,
             ]);
         } catch (ValidationException $e) {
             throw $e;
@@ -108,8 +130,27 @@ class AuthController extends Controller
 
     public function user(Request $request)
     {
-        $request->user()->load('role');
+        $user = $request->user();
+        $user->load('role');
 
-        return response()->json(['user' => new UserResource($request->user())]);
+        return response()->json([
+            'user' => $this->authUserPayload($user),
+            'is_product_owner' => $user->isProductOwner(),
+            'redirect_to' => $user->isProductOwner() ? '/product-owner' : null,
+        ]);
+    }
+
+  /**
+   * @return array<string, mixed>
+   */
+    private function authUserPayload(User $user): array
+    {
+        return array_merge(
+            (new UserResource($user))->resolve(),
+            [
+                'is_product_owner' => $user->isProductOwner(),
+                'force_password_change' => (bool) $user->force_password_change,
+            ]
+        );
     }
 }

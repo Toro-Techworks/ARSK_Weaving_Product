@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
@@ -18,6 +18,7 @@ import {
 import { useGenericCode } from '../hooks/useGenericCode';
 import { SearchableOrderSelect } from '../components/SearchableOrderSelect';
 import { formatOrderId } from '../utils/formatOrderId';
+import { useCompaniesList } from '../hooks/useCompaniesList';
 
 function formatPaymentOrderCell(row) {
   const o = row.yarn_order;
@@ -31,14 +32,17 @@ export function PaymentList() {
   const { canEdit } = usePagePermission();
   const [data, setData] = useState([]);
   const [meta, setMeta] = useState({ current_page: 1, last_page: 1, per_page: 10, total: 0 });
-  const [companies, setCompanies] = useState([]);
+  const { companySelectOptions, loadCompanyOptions, loading: companiesLoading } = useCompaniesList();
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [companyId, setCompanyId] = useState('');
   const [loading, setLoading] = useState(true);
   const [addModalOpen, setAddModalOpen] = useState(false);
 
-  useEffect(() => { api.get('/companies-list').then(({ data: d }) => setCompanies(d.data || [])); }, []);
+  const filterCompanyOptions = useMemo(
+    () => [{ value: '', label: 'All companies' }, ...companySelectOptions],
+    [companySelectOptions],
+  );
 
   const fetch = () => {
     setLoading(true);
@@ -84,7 +88,18 @@ export function PaymentList() {
       </div>
       <Card>
         <div className="mb-4">
-          <FormSelect options={[{ value: '', label: 'All companies' }, ...companies.map((c) => ({ value: c.id, label: c.company_name }))]} value={companyId} onChange={(e) => { setCompanyId(e.target.value); setPage(1); }} />
+          <FormSelect
+            options={filterCompanyOptions}
+            value={companyId}
+            onChange={(e) => {
+              setCompanyId(e.target.value);
+              setPage(1);
+            }}
+            loadOptions={(input) => loadCompanyOptions(input, companyId)}
+            defaultOptions
+            emptyLabel="All companies"
+            isClearable
+          />
         </div>
         <Table columns={columns} data={data} isLoading={loading} />
         {(meta.total > 0 || page > 1) && (
@@ -101,6 +116,9 @@ export function PaymentList() {
       </Card>
       {addModalOpen && (
         <PaymentAddModal
+          companySelectOptions={companySelectOptions}
+          loadCompanyOptions={loadCompanyOptions}
+          companiesLoading={companiesLoading}
           onClose={() => setAddModalOpen(false)}
           onSuccess={() => { setAddModalOpen(false); fetch(); }}
         />
@@ -109,9 +127,8 @@ export function PaymentList() {
   );
 }
 
-function PaymentAddModal({ onClose, onSuccess }) {
+function PaymentAddModal({ onClose, onSuccess, companySelectOptions, loadCompanyOptions, companiesLoading }) {
   const [loading, setLoading] = useState(false);
-  const [companies, setCompanies] = useState([]);
   const { options: modeOptions } = useGenericCode(GENERIC_CODE_TYPES.PAYMENT_MODE, {
     fallback: FALLBACK_PAYMENT_MODES,
   });
@@ -129,7 +146,15 @@ function PaymentAddModal({ onClose, onSuccess }) {
     notes: '',
   });
 
-  useEffect(() => { api.get('/companies-list').then(({ data: d }) => setCompanies(d.data || [])); }, []);
+  const selectedCompanyOption = useMemo(
+    () => companySelectOptions.find((o) => String(o.value) === String(form.company_id)) ?? null,
+    [companySelectOptions, form.company_id],
+  );
+
+  const loadCompaniesForSelect = useCallback(
+    (input) => loadCompanyOptions(input, form.company_id),
+    [loadCompanyOptions, form.company_id],
+  );
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -160,14 +185,31 @@ function PaymentAddModal({ onClose, onSuccess }) {
           <p className="text-sm text-gray-600 -mt-2">Record a payment received from a company.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className={fieldClass}>
-              <FormSelect label="Company" required options={companies.map((c) => ({ value: c.id, label: c.company_name }))} value={form.company_id} onChange={(e) => setForm({ ...form, company_id: e.target.value })} className="!mb-0" />
+              <FormSelect
+                label="Company"
+                required
+                options={companySelectOptions}
+                value={form.company_id}
+                valueOption={selectedCompanyOption}
+                loadOptions={loadCompaniesForSelect}
+                defaultOptions
+                isClearable={false}
+                isDisabled={companiesLoading}
+                emptyLabel={companiesLoading ? 'Loading companies…' : 'Search company…'}
+                onChange={(e) =>
+                  setForm({ ...form, company_id: e.target.value, yarn_order_id: '' })
+                }
+                className="!mb-0"
+              />
             </div>
             <div className={`${fieldClass} md:col-span-2`}>
               <SearchableOrderSelect
                 label="Yarn order no. (optional)"
                 value={form.yarn_order_id}
+                companyId={form.company_id}
+                disabled={!form.company_id}
                 onChange={(orderId) => setForm({ ...form, yarn_order_id: orderId || '' })}
-                placeholder="Search by order id, P.O., or customer…"
+                placeholder="Select or search by order id, P.O., customer…"
               />
             </div>
             <div className={fieldClass}>

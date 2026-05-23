@@ -95,6 +95,7 @@ class MenusSeeder extends Seeder
             ['menu_key' => 'admin.weaving_units', 'menu_name' => 'Weaving Unit', 'route_path' => '/admin/weaving-units', 'icon' => 'Factory', 'sort_order' => 30, 'status' => 'inactive'],
             ['menu_key' => 'admin.winding_units', 'menu_name' => 'Winding Unit', 'route_path' => '/admin/winding-units', 'icon' => 'Factory', 'sort_order' => 35, 'status' => 'inactive'],
             ['menu_key' => 'admin.weavers', 'menu_name' => 'Weavers', 'route_path' => '/admin/weavers', 'icon' => 'Users', 'sort_order' => 40, 'status' => 'inactive'],
+            ['menu_key' => 'admin.loom_history', 'menu_name' => 'Loom History', 'route_path' => '/admin/loom-history', 'icon' => 'History', 'sort_order' => 45],
             ['menu_key' => 'admin.master_settings', 'menu_name' => 'Master', 'route_path' => '/admin/master-settings', 'icon' => 'Settings', 'sort_order' => 50],
         ] as $row) {
             $menu = Menu::updateOrCreate(
