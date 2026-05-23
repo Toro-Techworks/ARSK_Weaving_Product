@@ -95,11 +95,16 @@ const SearchableSelect = forwardRef(function SearchableSelect(
     onMenuOpen,
     onMenuClose,
     onKeyDown,
+    /** When using loadOptions, pass full option list (or selected row) so the control can show the current label. */
+    valueOption = null,
   },
   ref
 ) {
   const Comp = loadOptions ? AsyncSelect : Select;
-  const resolvedValue = options.find((opt) => String(opt.value) === String(value)) || null;
+  const resolvedValue =
+    valueOption && String(valueOption.value) === String(value)
+      ? valueOption
+      : options.find((opt) => String(opt.value) === String(value)) || null;
 
   const styles = useMemo(
     () => buildStyles({ compact, hideIndicators }),
@@ -128,6 +133,7 @@ const SearchableSelect = forwardRef(function SearchableSelect(
         options={options}
         loadOptions={loadOptions}
         defaultOptions={defaultOptions}
+        cacheOptions={Boolean(loadOptions)}
         value={resolvedValue}
         onChange={(selected) => onChange?.(selected?.value ?? '')}
         placeholder={placeholder}

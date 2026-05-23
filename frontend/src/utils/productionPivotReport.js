@@ -21,6 +21,24 @@ export function makeDateShiftSlotKey(date, shift) {
 }
 
 /**
+ * Design / weave / colour for one date×shift column (persisted snapshot or current assignment).
+ * @param {Record<string, Record<string, { design?: string|null, weave_tech?: string|null, colour?: string|null, order_id?: string|null, customer?: string|null }>>|undefined} loomConfigByLoom
+ * @param {string|number} loomId
+ * @param {{ key: string, date: string, shift: string }} col
+ */
+export function configForColumn(loomConfigByLoom, loomId, col) {
+  const bySlot = loomConfigByLoom?.[String(loomId)];
+  if (!bySlot || !col) {
+    return { design: null, weave_tech: null, colour: null, order_id: null, customer: null };
+  }
+  return (
+    bySlot[col.key] ||
+    bySlot[col.date] ||
+    { design: null, weave_tech: null, colour: null, order_id: null, customer: null }
+  );
+}
+
+/**
  * Map API shift string to pivot column (Day / Night only).
  * @param {string|null|undefined} raw
  * @returns {'Day' | 'Night' | null}
@@ -178,7 +196,7 @@ export function transformProductionToPivotModel(rows, dates, allLooms = null) {
   const dateShiftColumns = buildDateShiftColumns(dates);
   const slotSet = new Set(dateShiftColumns.map((c) => c.key));
 
-  /** @type {Map<string|number, { loom_number: string, bySlot: Map<string, { orderLabels: Set<string>, slLabels: Set<string>, meters: number }> }>} */
+  /** @type {Map<string|number, { loom_number: string, bySlot: Map<string, { orderLabels: Set<string>, customerLabels: Set<string>, slLabels: Set<string>, meters: number }> }>} */
   const byLoom = new Map();
 
   for (const r of rows || []) {
@@ -199,11 +217,13 @@ export function transformProductionToPivotModel(rows, dates, allLooms = null) {
     }
     const loom = byLoom.get(lid);
     if (!loom.bySlot.has(slotKey)) {
-      loom.bySlot.set(slotKey, { orderLabels: new Set(), slLabels: new Set(), meters: 0 });
+      loom.bySlot.set(slotKey, { orderLabels: new Set(), customerLabels: new Set(), slLabels: new Set(), meters: 0 });
     }
     const cell = loom.bySlot.get(slotKey);
     const ol = orderLabelFromProductionRow(r);
     if (ol) cell.orderLabels.add(ol);
+    const cust = r.customer != null ? String(r.customer).trim() : '';
+    if (cust) cell.customerLabels.add(cust);
     const sl = slLabelFromProductionRow(r);
     if (sl) cell.slLabels.add(sl);
     cell.meters += Number(r.production_meters ?? 0) || 0;
@@ -256,6 +276,8 @@ export function transformProductionToPivotModel(rows, dates, allLooms = null) {
     /** @type {Record<string, string>} */
     const orderIdVals = {};
     /** @type {Record<string, string>} */
+    const customerVals = {};
+    /** @type {Record<string, string>} */
     const slNoVals = {};
     /** @type {Record<string, number|null>} */
     const shiftMtrVals = {};
@@ -264,11 +286,13 @@ export function transformProductionToPivotModel(rows, dates, allLooms = null) {
       const agg = bySlot.get(key);
       if (!agg) {
         orderIdVals[key] = '';
+        customerVals[key] = '';
         slNoVals[key] = '';
         shiftMtrVals[key] = null;
         continue;
       }
       orderIdVals[key] = Array.from(agg.orderLabels).sort().join(', ') || '';
+      customerVals[key] = Array.from(agg.customerLabels).sort().join(', ') || '';
       slNoVals[key] = Array.from(agg.slLabels).sort().join(', ') || '';
       shiftMtrVals[key] = agg.meters > 0 ? round2(agg.meters) : null;
     }
@@ -279,6 +303,7 @@ export function transformProductionToPivotModel(rows, dates, allLooms = null) {
       loomId,
       loomNumber: loom_number,
       orderId: orderIdVals,
+      customer: customerVals,
       slNo: slNoVals,
       shiftMtr: shiftMtrVals,
       dateTotal: dateTotalVals,
@@ -297,7 +322,7 @@ export function transformProductionToPivotModel(rows, dates, allLooms = null) {
  * @param {ReturnType<typeof transformProductionToPivotModel>} model
  */
 export function computeProductionSummaries(model) {
-  const { dateShiftColumns, loomBlocks } = model;
+  const { dateShiftColumns, loomBlocks, dates = [] } = model;
 
   /** @type {Record<string, number>} */
   const totalMetersPerSlot = {};
@@ -321,10 +346,43 @@ export function computeProductionSummaries(model) {
     avgPerLoomPerSlot[key] = active > 0 ? round2(sum / active) : null;
   }
 
+  let periodDay = 0;
+  let periodNight = 0;
+  const loomsWovenSet = new Set();
+
+  for (const block of loomBlocks) {
+    let loomActive = false;
+    for (const col of dateShiftColumns) {
+      const v = block.shiftMtr[col.key];
+      if (v == null || v <= 0) continue;
+      loomActive = true;
+      if (col.shift === 'Day') periodDay += v;
+      else if (col.shift === 'Night') periodNight += v;
+    }
+    if (loomActive) loomsWovenSet.add(String(block.loomId));
+  }
+
+  periodDay = round2(periodDay);
+  periodNight = round2(periodNight);
+  const periodGrandTotal = round2(periodDay + periodNight);
+  const dayCount = dates.length || 0;
+  const weekSpan = dayCount > 0 ? dayCount / 7 : 0;
+  const weeklyAverage =
+    periodGrandTotal > 0 && weekSpan > 0 ? round2(periodGrandTotal / weekSpan) : null;
+
   return {
     totalMetersPerSlot,
     activeLoomsPerSlot,
     avgPerLoomPerSlot,
+    period: {
+      dayMeters: periodDay,
+      nightMeters: periodNight,
+      grandTotal: periodGrandTotal,
+      loomsWoven: loomsWovenSet.size,
+      weeklyAverage,
+      dayCount,
+      weekSpan: round2(weekSpan),
+    },
   };
 }
 
@@ -346,11 +404,42 @@ export function buildProductionPivotBundle(rows, fromStr, toStr, allLooms = null
         totalMetersPerSlot: {},
         activeLoomsPerSlot: {},
         avgPerLoomPerSlot: {},
+        period: {
+          dayMeters: 0,
+          nightMeters: 0,
+          grandTotal: 0,
+          loomsWoven: 0,
+          weeklyAverage: null,
+          dayCount: 0,
+          weekSpan: 0,
+        },
       },
     };
   }
   const model = transformProductionToPivotModel(rows, dates, allLooms);
   const globalWeavers = buildGlobalWeaverSlotLabels(rows, model.dateShiftColumns);
-  const summaries = computeProductionSummaries(model);
+  const summaries = computeProductionSummaries({ ...model, dates });
   return { ...model, summaries, globalWeavers };
+}
+
+/**
+ * Summaries from Daily Entry slot state (same footer metrics as production report).
+ * @param {{ id: number|string }[]} looms
+ * @param {DateShiftColumn[]} dateShiftColumns
+ * @param {string[]} dates
+ * @param {Record<string, Record<string, { meters?: string }>>} slots
+ */
+export function computeDailyEntrySummaries(looms, dateShiftColumns, dates, slots) {
+  const loomBlocks = (looms || []).map((loom) => {
+    const lid = String(loom.id);
+    /** @type {Record<string, number|null>} */
+    const shiftMtr = {};
+    for (const col of dateShiftColumns) {
+      const raw = slots[lid]?.[col.key]?.meters;
+      const n = raw === '' || raw == null ? NaN : Number(raw);
+      shiftMtr[col.key] = Number.isFinite(n) && n > 0 ? round2(n) : null;
+    }
+    return { loomId: lid, shiftMtr };
+  });
+  return computeProductionSummaries({ dateShiftColumns, loomBlocks, dates });
 }

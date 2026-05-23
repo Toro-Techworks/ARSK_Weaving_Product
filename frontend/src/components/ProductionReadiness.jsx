@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import api from '../api/client';
 import { Card } from './Card';
 
@@ -36,36 +37,57 @@ function statusBadge(status, title) {
 function overallBanner(overallStatus, errorMessage) {
   if (overallStatus === 'READY FOR PRODUCTION') {
     return (
-      <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">
-        READY FOR PRODUCTION
+      <div
+        className="flex items-start gap-2.5 rounded-xl border border-emerald-200/80 bg-emerald-50/90 px-3.5 py-2.5 text-sm font-medium text-emerald-900"
+        role="status"
+      >
+        <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-emerald-600" aria-hidden />
+        <span>READY FOR PRODUCTION</span>
       </div>
     );
   }
   if (overallStatus === 'NOT READY') {
     return (
       <div
-        className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900"
+        className="flex items-start gap-2.5 rounded-xl border border-red-200/80 bg-red-50/90 px-3.5 py-2.5 text-sm text-red-900"
         role="alert"
       >
-        <p className="font-semibold">Insufficient yarn</p>
+        <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-600" aria-hidden />
+        <div>
+          <p className="font-semibold leading-snug">Insufficient yarn</p>
+          {errorMessage ? (
+            <p className="mt-0.5 text-xs text-red-800/90 font-normal">{errorMessage}</p>
+          ) : null}
+        </div>
       </div>
     );
   }
   return (
-    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
-      No yarn requirements defined for this order. Add requirements to assess readiness.
+    <div
+      className="flex items-start gap-2.5 rounded-xl border border-amber-200/80 bg-amber-50/90 px-3.5 py-2.5 text-sm font-medium text-amber-900"
+      role="status"
+    >
+      <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" aria-hidden />
+      <span>No yarn requirements defined for this order. Add requirements to assess readiness.</span>
     </div>
   );
 }
+
+const TH_MAIN =
+  'px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide align-middle whitespace-nowrap';
+const TH_WEIGHT_GROUP =
+  'px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide text-center border-l border-gray-200';
+const TH_SUB = 'px-4 py-2 text-[10px] font-medium text-gray-400 uppercase tracking-wider text-right whitespace-nowrap';
+const TD_TEXT = 'px-4 py-2.5 align-middle text-sm text-gray-900';
+const TD_NUM = 'px-4 py-2.5 align-middle text-right tabular-nums text-sm';
 
 /**
  * One API row per yarn_requirements record: Required + Received pair, rowspan only within the pair.
  * received_weight = FIFO allocation from the combo receipt pool (order by requirement id). line_status drives the badge.
  */
 export function ProductionReadinessTable({ rows }) {
-  const trs = useMemo(() => {
-    const out = [];
-    (rows ?? []).forEach((row) => {
+  const bodyRows = useMemo(() => {
+    return (rows ?? []).map((row) => {
       const lineStatus = row.line_status ?? row.combo_status;
       const short = lineStatus !== 'PROCEED';
       const statusTitle =
@@ -75,53 +97,46 @@ export function ProductionReadinessTable({ rows }) {
             ? `Insufficient for this line. Combo totals — required ${formatWeight(row.total_required_for_combo)}, received ${formatWeight(row.total_received_for_combo)}`
             : `Line OK. Combo — required ${formatWeight(row.total_required_for_combo)} · received ${formatWeight(row.total_received_for_combo)}`;
 
-      const rowBgReq = short ? 'bg-red-50/45' : 'bg-gray-50/95';
-      const rowBgRec = short ? 'bg-red-50/45' : 'bg-sky-50/50';
       const id = row.req_id ?? row.id;
+      const receivedSufficient = lineStatus === 'PROCEED';
 
-      out.push(
-        <tr key={`${id}-required`} className={`border-t border-gray-100 ${rowBgReq}`}>
-          <td rowSpan={2} className="px-3 py-2 align-top text-gray-900 border-r border-gray-100">
-            {row.colour || '—'}
-          </td>
-          <td rowSpan={2} className="px-3 py-2 align-top text-gray-900 font-medium border-r border-gray-100">
-            {row.count || '—'}
-          </td>
-          <td rowSpan={2} className="px-3 py-2 align-top text-gray-900 capitalize border-r border-gray-100">
-            {row.content || '—'}
-          </td>
-          <td className="px-3 py-2 text-gray-700 whitespace-nowrap">Required</td>
-          <td className="px-3 py-2 text-right tabular-nums text-gray-900">
+      return (
+        <tr
+          key={id}
+          className={`border-t border-gray-100 transition-colors ${
+            short ? 'bg-red-50/35' : 'bg-white hover:bg-slate-50/60'
+          }`}
+        >
+          <td className={`${TD_TEXT} border-r border-gray-100/80`}>{row.colour || '—'}</td>
+          <td className={`${TD_TEXT} font-medium border-r border-gray-100/80`}>{row.count || '—'}</td>
+          <td className={`${TD_TEXT} capitalize border-r border-gray-100/80`}>{row.content || '—'}</td>
+          <td className={`${TD_NUM} font-semibold text-gray-900 border-l border-gray-100/80`}>
             {formatWeight(row.required_weight)}
           </td>
           <td
-            rowSpan={2}
-            className="px-3 py-2 align-middle text-right tabular-nums font-semibold border-l border-gray-100"
+            className={`${TD_NUM} font-medium ${
+              receivedSufficient ? 'text-emerald-600' : 'text-red-600'
+            } border-r border-gray-100/80`}
           >
+            {formatWeight(row.total_received_for_combo)}
+          </td>
+          <td className={`${TD_NUM} font-semibold`}>
             <span
-              className={(Number(row.total_received_for_combo) - Number(row.required_weight)) > 0
-                ? 'text-emerald-700'
-                : 'text-red-700'}
+              className={
+                Number(row.total_received_for_combo) - Number(row.required_weight) > 0
+                  ? 'text-emerald-700'
+                  : 'text-red-700'
+              }
             >
               {formatBalance(row.required_weight, row.total_received_for_combo)}
             </span>
           </td>
-          <td rowSpan={2} className="px-3 py-2 align-middle border-l border-gray-100" title={statusTitle}>
+          <td className={`${TD_TEXT} border-l border-gray-100/80`} title={statusTitle}>
             {statusBadge(lineStatus, statusTitle)}
           </td>
-        </tr>,
-      );
-
-      out.push(
-        <tr key={`${id}-received`} className={`border-t border-gray-100 ${rowBgRec}`}>
-          <td className="px-3 py-2 text-gray-700 whitespace-nowrap">Received</td>
-          <td className="px-3 py-2 text-right tabular-nums text-gray-900">
-            {formatWeight(row.total_received_for_combo)}
-          </td>
-        </tr>,
+        </tr>
       );
     });
-    return out;
   }, [rows]);
 
   if (!rows || rows.length === 0) {
@@ -129,21 +144,40 @@ export function ProductionReadinessTable({ rows }) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-200">
-      <table className="min-w-full border-collapse text-sm">
-        <thead className="bg-gray-50 border-b border-gray-200">
-          <tr>
-            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Colour</th>
-            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Count</th>
-            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Content</th>
-            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-            <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Weight</th>
-            <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Balance</th>
-            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-          </tr>
-        </thead>
-        <tbody>{trs}</tbody>
-      </table>
+    <div className="overflow-x-auto -mx-1 px-1">
+      <div className="inline-block min-w-full align-middle">
+        <div className="overflow-hidden rounded-xl border border-gray-200 shadow-sm">
+          <table className="min-w-full border-collapse text-sm">
+            <thead>
+              <tr className="bg-gray-50/95 border-b border-gray-200">
+                <th rowSpan={2} className={`${TH_MAIN} text-left`}>
+                  Colour
+                </th>
+                <th rowSpan={2} className={`${TH_MAIN} text-left`}>
+                  Count
+                </th>
+                <th rowSpan={2} className={`${TH_MAIN} text-left border-r border-gray-200`}>
+                  Content
+                </th>
+                <th colSpan={2} className={TH_WEIGHT_GROUP}>
+                  Weight
+                </th>
+                <th rowSpan={2} className={`${TH_MAIN} text-right`}>
+                  Balance
+                </th>
+                <th rowSpan={2} className={`${TH_MAIN} text-left border-l border-gray-200`}>
+                  Status
+                </th>
+              </tr>
+              <tr className="bg-gray-50/80 border-b border-gray-200">
+                <th className={`${TH_SUB} border-l border-gray-200`}>Required</th>
+                <th className={`${TH_SUB} border-r border-gray-200`}>Received</th>
+              </tr>
+            </thead>
+            <tbody>{bodyRows}</tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
@@ -218,12 +252,13 @@ export function ProductionReadiness({ yarnOrderId, receipts, yarnRequirements })
 
   return (
     <Card className="mt-6">
-      <div className="mb-4">
-        <h3 className="text-lg font-medium text-gray-900">Production Readiness</h3>
+      <div className="mb-3">
+        <h3 className="text-base font-semibold text-gray-900 tracking-tight">Production Readiness</h3>
+        <p className="text-xs text-gray-500 mt-0.5">Yarn received vs requirements for this order</p>
       </div>
 
       {loading && (
-        <p className="text-sm text-gray-500 py-6" role="status">
+        <p className="text-sm text-gray-500 py-5" role="status">
           Calculating…
         </p>
       )}
@@ -233,10 +268,10 @@ export function ProductionReadiness({ yarnOrderId, receipts, yarnRequirements })
       )}
 
       {!loading && !error && payload && (
-        <>
-          <div className="mb-4">{overallBanner(overall, overallError)}</div>
+        <div className="space-y-3">
+          {overallBanner(overall, overallError)}
           <ProductionReadinessTable rows={rows} />
-        </>
+        </div>
       )}
     </Card>
   );

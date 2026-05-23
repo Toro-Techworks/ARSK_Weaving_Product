@@ -1,0 +1,8 @@
+# Vite staging build (CI injects only what the build needs via GitHub variables).
+# See secrets-and-variables.log → STAGING_VITE_API_BASE_URL (variable).
+# Placeholder __STAGING_VITE_API_BASE_URL__ → written as VITE_API_URL for the build.
+# Weaving uses VITE_API_URL as the site origin; frontend/src/api/client.js appends /api.
+# Set STAGING_VITE_API_BASE_URL to e.g. https://<staging-domain>.torotech.in (no trailing /api).
+# Local dev → copy to frontend/.env (see Vite dev server URL).
+
+VITE_API_URL=__STAGING_VITE_API_BASE_URL__

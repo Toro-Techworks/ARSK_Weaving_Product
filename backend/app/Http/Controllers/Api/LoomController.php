@@ -4,19 +4,27 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\LoomResource;
+use App\Models\ActivityLog;
 use App\Models\Fabric;
 use App\Models\GenericCode;
 use App\Models\Loom;
+use App\Models\User;
+use App\Services\LoomInactiveHistoryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class LoomController extends Controller
 {
+    public function __construct(
+        private readonly LoomInactiveHistoryService $inactiveHistoryService,
+    ) {}
+
     public function index(Request $request): JsonResponse
     {
         $perPage = $this->clampPerPage($request, 10, 100);
         $looms = Loom::query()
-            ->with(['fabric:id,sl_number,yarn_order_id'])
+            ->with(['fabric:id,sl_number,yarn_order_id', 'openInactiveHistory'])
             ->when($request->search, fn ($q) => $q->where('loom_number', 'like', "%{$request->search}%")
                 ->orWhere('location', 'like', "%{$request->search}%"))
             ->orderBy('loom_number')
@@ -30,11 +38,16 @@ class LoomController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        if ($request->hasAny(['status', 'inactive_reason', 'remarks'])) {
+            $this->assertCanChangeLoomStatus($request);
+        }
+
         $validated = $request->validate([
             'loom_number' => 'required|string|max:50|unique:looms,loom_number',
             'location' => 'nullable|string|max:255',
             'status' => 'nullable|in:Active,Inactive',
-            'inactive_reason' => 'nullable|string|max:2000',
+            'inactive_reason' => ['nullable', 'string', 'max:255', Rule::in(config('loom_inactive.reasons', []))],
+            'remarks' => 'nullable|string|max:2000',
             'yarn_order_id' => 'nullable|exists:yarn_orders,id',
             'fabric_id' => 'nullable|exists:fabrics,id',
         ]);
@@ -45,12 +58,15 @@ class LoomController extends Controller
         }
 
         $validated['status'] = $validated['status'] ?? 'Active';
+        $remarks = isset($validated['remarks']) ? trim((string) $validated['remarks']) : null;
+        unset($validated['remarks']);
+
         if ($validated['status'] === 'Inactive') {
             $reason = trim((string) ($validated['inactive_reason'] ?? ''));
             if ($reason === '') {
                 return response()->json([
                     'message' => 'A reason is required when status is Inactive.',
-                    'errors' => ['inactive_reason' => ['Please provide a reason for marking this loom inactive.']],
+                    'errors' => ['inactive_reason' => ['Please select a reason for marking this loom inactive.']],
                 ], 422);
             }
             $validated['inactive_reason'] = $reason;
@@ -59,28 +75,67 @@ class LoomController extends Controller
         }
 
         $loom = Loom::create($validated);
-        $loom->load('fabric:id,sl_number,yarn_order_id');
+        $loom->load(['fabric:id,sl_number,yarn_order_id', 'openInactiveHistory']);
+
+        if ($this->loomStatusIsInactive($loom->status)) {
+            $reasonForHistory = $validated['inactive_reason'] ?? $loom->inactive_reason;
+            $this->inactiveHistoryService->recordStatusChange(
+                $loom,
+                'Active',
+                'Inactive',
+                $request->user()?->id,
+                $reasonForHistory,
+                $remarks !== '' ? $remarks : null,
+            );
+            $this->inactiveHistoryService->ensureOpenPeriod(
+                $loom,
+                $request->user()?->id,
+                $reasonForHistory,
+                $remarks !== '' ? $remarks : null,
+            );
+            $loom->load('openInactiveHistory');
+            $this->notifySuperAdminsLoomInactive($loom, $request->user()?->id, $remarks);
+        }
 
         return response()->json(['data' => new LoomResource($loom)], 201);
     }
 
     public function show(Loom $loom): JsonResponse
     {
-        $loom->load('fabric:id,sl_number,yarn_order_id');
+        $loom->load(['fabric:id,sl_number,yarn_order_id', 'openInactiveHistory']);
+        $timeline = $this->inactiveHistoryService->timelineForLoom((int) $loom->id);
 
-        return response()->json(['data' => new LoomResource($loom)]);
+        return response()->json([
+            'data' => new LoomResource($loom),
+            'inactivity' => [
+                'current_status' => $loom->status,
+                'latest_inactive_reason' => $loom->inactive_reason,
+                'total_inactive_days' => $timeline['total_inactive_days'],
+                'timeline' => $timeline['periods'],
+            ],
+        ]);
     }
 
     public function update(Request $request, Loom $loom): JsonResponse
     {
+        if ($request->hasAny(['status', 'inactive_reason', 'remarks'])) {
+            $this->assertCanChangeLoomStatus($request);
+        }
+
         $validated = $request->validate([
             'loom_number' => 'sometimes|string|max:50|unique:looms,loom_number,'.$loom->id,
             'location' => 'nullable|string|max:255',
             'status' => GenericCode::validationRule('active_inactive'),
-            'inactive_reason' => 'nullable|string|max:2000',
+            'inactive_reason' => ['nullable', 'string', 'max:255', Rule::in(config('loom_inactive.reasons', []))],
+            'remarks' => 'nullable|string|max:2000',
             'yarn_order_id' => 'nullable|exists:yarn_orders,id',
             'fabric_id' => 'nullable|exists:fabrics,id',
         ]);
+
+        $remarks = array_key_exists('remarks', $validated)
+            ? trim((string) ($validated['remarks'] ?? ''))
+            : null;
+        unset($validated['remarks']);
 
         $statusAfter = array_key_exists('status', $validated) ? $validated['status'] : $loom->status;
         if ($statusAfter === 'Inactive') {
@@ -123,8 +178,42 @@ class LoomController extends Controller
             $validated['fabric_id'] = $nextFabric;
         }
 
+        $previousStatus = (string) $loom->status;
+        $wasActive = ! $this->loomStatusIsInactive($previousStatus);
+        $reasonForHistory = array_key_exists('inactive_reason', $validated)
+            ? $validated['inactive_reason']
+            : null;
+
         $loom->update($validated);
-        $fresh = $loom->fresh(['fabric:id,sl_number,yarn_order_id']);
+        $fresh = $loom->fresh(['fabric:id,sl_number,yarn_order_id', 'openInactiveHistory']);
+        $newStatus = (string) $fresh->status;
+        $remarksForHistory = $remarks !== '' && $remarks !== null ? $remarks : null;
+
+        if (LoomInactiveHistoryService::normalizeStatus($previousStatus) !== LoomInactiveHistoryService::normalizeStatus($newStatus)) {
+            $this->inactiveHistoryService->recordStatusChange(
+                $fresh,
+                $previousStatus,
+                $newStatus,
+                $request->user()?->id,
+                $reasonForHistory ?? $fresh->inactive_reason,
+                $remarksForHistory,
+            );
+            $fresh->load('openInactiveHistory');
+        }
+
+        if ($this->loomStatusIsInactive($fresh->status)) {
+            $this->inactiveHistoryService->ensureOpenPeriod(
+                $fresh,
+                $request->user()?->id,
+                $reasonForHistory ?? $fresh->inactive_reason,
+                $remarksForHistory,
+            );
+            $fresh->load('openInactiveHistory');
+        }
+
+        if ($wasActive && $this->loomStatusIsInactive($fresh->status)) {
+            $this->notifySuperAdminsLoomInactive($fresh, $request->user()?->id, $remarks);
+        }
 
         return response()->json(['data' => new LoomResource($fresh)]);
     }
@@ -162,6 +251,7 @@ class LoomController extends Controller
             ->with([
                 'fabric:id,sl_number,yarn_order_id',
                 'assignedFabrics:id,loom_id,yarn_order_id,sl_number,design,weave_technique,colour',
+                'openInactiveHistory',
             ])
             ->orderBy('loom_number')
             ->get();
@@ -198,6 +288,54 @@ class LoomController extends Controller
         }
 
         return response()->json(['data' => $out]);
+    }
+
+    /**
+     * @return array{design: ?string, weave_tech: ?string, colour: ?string}
+     */
+    private function loomStatusIsInactive(mixed $status): bool
+    {
+        return is_string($status) && strcasecmp(trim($status), 'inactive') === 0;
+    }
+
+    /**
+     * Notify super admins (activity log + optional realtime broadcast) when a loom is marked inactive.
+     */
+    private function assertCanChangeLoomStatus(Request $request): void
+    {
+        $user = $request->user();
+        if (! $user || ! $user->isSuperAdminOrAdmin()) {
+            abort(403, 'Only administrators can change loom status.');
+        }
+    }
+
+    private function notifySuperAdminsLoomInactive(Loom $loom, ?int $actorUserId, ?string $remarks = null): void
+    {
+        $reason = trim((string) ($loom->inactive_reason ?? ''));
+        if ($reason === '') {
+            return;
+        }
+
+        $actor = $actorUserId ? User::query()->find($actorUserId) : null;
+        $actorLabel = $actor?->name ?? $actor?->username ?? 'System';
+        $loomLabel = $loom->loom_number
+            ? 'Loom '.$loom->loom_number
+            : 'Loom #'.$loom->id;
+
+        $description = "{$loomLabel} was marked inactive by {$actorLabel}. Reason: {$reason}";
+        $remarksTrim = $remarks !== null ? trim($remarks) : '';
+        if ($remarksTrim !== '') {
+            $description .= " Remarks: {$remarksTrim}";
+        }
+
+        ActivityLog::record(
+            $actorUserId,
+            'update',
+            'looms',
+            $description,
+            $loom->id,
+            alwaysRecord: true,
+        );
     }
 
     /**

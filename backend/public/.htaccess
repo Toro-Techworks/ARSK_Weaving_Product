@@ -1,33 +1,22 @@
 <IfModule mod_rewrite.c>
 RewriteEngine On
 
-# CORS headers
+# Apache CORS fallback (prefer Laravel CORS config). Requires mod_headers + AllowOverride FileInfo.
 <IfModule mod_headers.c>
   Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS, PUT, DELETE"
   Header always set Access-Control-Allow-Headers "Content-Type, Authorization"
 </IfModule>
 
-# Preserve Authorization header
+# Preserve Authorization header for PHP/FastCGI setups.
+# Without this, Laravel Sanctum Bearer tokens may not be visible, causing 401 after login.
 RewriteCond %{HTTP:Authorization} .
 RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
-# ----------------------------------------
-# ✅ SERVE REACT (NO LEADING /)
-# ----------------------------------------
-RewriteCond %{REQUEST_URI} !^/api
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^ index.html [L]
+# Laravel public directory should always land on index.php (not index.html).
+DirectoryIndex index.php
 
-# ----------------------------------------
-# ✅ LARAVEL FOR API
-# ----------------------------------------
-RewriteCond %{REQUEST_URI} ^/api
+# Standard Laravel front controller
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ index.php [L]
-
-# Default index priority
-DirectoryIndex index.html index.php
-
 </IfModule>

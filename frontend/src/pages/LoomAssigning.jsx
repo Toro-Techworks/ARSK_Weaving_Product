@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, History } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import { Card } from '../components/Card';
@@ -13,7 +14,15 @@ import { fetchAllPaginated } from '../utils/pagination';
 import { formatOrderId } from '../utils/formatOrderId';
 import { GENERIC_CODE_TYPES, FALLBACK_ACTIVE_INACTIVE } from '../constants/genericCodeTypes';
 import { useGenericCode } from '../hooks/useGenericCode';
-import { isLoomInactiveStatus, normalizeLoomStatus } from '../utils/loomStatus';
+import {
+  isLoomInactiveStatus,
+  loomStatusTablePillClassName,
+  normalizeLoomStatus,
+} from '../utils/loomStatus';
+import { LOOM_INACTIVE_REASONS } from '../constants/loomInactiveReasons';
+import { useAuth } from '../context/AuthContext';
+import { canManageLoomStatus } from '../utils/loomPermissions';
+import { LoomInactiveRecordModal } from '../components/LoomInactiveRecordModal';
 
 /** Label for SL dropdown: human-readable; value remains fabric id for API. */
 function fabricAssignSelectLabel(f) {
@@ -60,13 +69,16 @@ function fabricOptionLabelFromAssignment(a) {
 }
 
 export function LoomAssigningPage() {
+  const { user } = useAuth();
   const { canEdit } = usePagePermission();
+  const canViewFullHistory = canManageLoomStatus(user);
   const { options: loomStatusOptions } = useGenericCode(GENERIC_CODE_TYPES.ACTIVE_INACTIVE, {
     fallback: FALLBACK_ACTIVE_INACTIVE,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [openAssign, setOpenAssign] = useState(false);
+  const [inactiveRecordLoom, setInactiveRecordLoom] = useState(null);
   const [looms, setLooms] = useState([]);
   const [orders, setOrders] = useState([]);
   const [companies, setCompanies] = useState([]);
@@ -75,6 +87,7 @@ export function LoomAssigningPage() {
     loom_id: '',
     loom_status: 'Active',
     inactive_reason: '',
+    inactive_remarks: '',
     company_name: '',
     yarn_order_id: '',
     fabric_id: '',
@@ -188,7 +201,17 @@ export function LoomAssigningPage() {
   const columns = useMemo(
     () => [
       { key: 'loom_number', label: 'Loom Number', render: (v) => v || '—' },
-      { key: 'status', label: 'Status', render: (v) => v || '—' },
+      {
+        key: 'status',
+        label: 'Status',
+        render: (v) => (
+          <span
+            className={`inline-flex text-xs font-semibold px-2 py-0.5 rounded-md border ${loomStatusTablePillClassName(v)}`}
+          >
+            {normalizeLoomStatus(v)}
+          </span>
+        ),
+      },
       {
         key: 'company',
         label: 'Order From (Company)',
@@ -241,6 +264,23 @@ export function LoomAssigningPage() {
           return a?.colour ? String(a.colour) : '—';
         },
       },
+      {
+        key: '_inactive_record',
+        label: '',
+        render: (_, row) =>
+          isLoomInactiveStatus(row.status) ? (
+            <button
+              type="button"
+              onClick={() => setInactiveRecordLoom(row)}
+              className="inline-flex items-center gap-1 text-xs font-medium text-amber-800 hover:text-amber-950 hover:underline whitespace-nowrap"
+            >
+              <History className="w-3.5 h-3.5 shrink-0" />
+              Inactive record
+            </button>
+          ) : (
+            <span className="text-gray-300 text-xs">—</span>
+          ),
+      },
     ],
     [orderById],
   );
@@ -250,6 +290,7 @@ export function LoomAssigningPage() {
       loom_id: '',
       loom_status: 'Active',
       inactive_reason: '',
+    inactive_remarks: '',
       company_name: '',
       yarn_order_id: '',
       fabric_id: '',
@@ -282,7 +323,11 @@ export function LoomAssigningPage() {
       }
       setSaving(true);
       try {
-        await api.put(`/looms/${loomId}`, { status: 'Inactive', inactive_reason: nextReason });
+        await api.put(`/looms/${loomId}`, {
+          status: 'Inactive',
+          inactive_reason: nextReason,
+          remarks: String(form.inactive_remarks || '').trim() || null,
+        });
         toast.success('Loom status updated.');
         setOpenAssign(false);
         resetForm();
@@ -328,14 +373,24 @@ export function LoomAssigningPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Loom Assigning</h2>
-        {canEdit && (
-          <Button type="button" onClick={() => setOpenAssign(true)} className="gap-1.5">
-            <Plus className="w-4 h-4" />
-            Assign Loom
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {canViewFullHistory ? (
+            <Link to="/admin/loom-history">
+              <Button type="button" variant="secondary" className="gap-1.5">
+                <History className="w-4 h-4" />
+                All inactive history
+              </Button>
+            </Link>
+          ) : null}
+          {canEdit && (
+            <Button type="button" onClick={() => setOpenAssign(true)} className="gap-1.5">
+              <Plus className="w-4 h-4" />
+              Assign Loom
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card className="border-gray-100 overflow-hidden p-0">
@@ -408,13 +463,25 @@ export function LoomAssigningPage() {
             </div>
 
             {isLoomInactiveStatus(form.loom_status) && (
-              <FormTextarea
-                label="Inactive reason"
-                required
-                value={form.inactive_reason}
-                onChange={(e) => setForm((prev) => ({ ...prev, inactive_reason: e.target.value }))}
-                className="!mb-0"
-              />
+              <>
+                <div className="space-y-1.5">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Inactive reason <span className="text-red-600">*</span>
+                  </label>
+                  <SearchableSelect
+                    options={LOOM_INACTIVE_REASONS.map((r) => ({ value: r, label: r }))}
+                    value={form.inactive_reason}
+                    onChange={(v) => setForm((prev) => ({ ...prev, inactive_reason: v ? String(v) : '' }))}
+                    placeholder="Select reason"
+                  />
+                </div>
+                <FormTextarea
+                  label="Remarks"
+                  value={form.inactive_remarks}
+                  onChange={(e) => setForm((prev) => ({ ...prev, inactive_remarks: e.target.value }))}
+                  className="!mb-0"
+                />
+              </>
             )}
 
             <div className="space-y-1.5">
@@ -497,6 +564,13 @@ export function LoomAssigningPage() {
           </form>
         </div>
       </AnimatedModal>
+
+      <LoomInactiveRecordModal
+        open={Boolean(inactiveRecordLoom)}
+        loomId={inactiveRecordLoom?.id}
+        loomNumber={inactiveRecordLoom?.loom_number}
+        onClose={() => setInactiveRecordLoom(null)}
+      />
     </div>
   );
 }

@@ -50,5 +50,8 @@ class DatabaseSeeder extends Seeder
 
         // Menus + user_menu_permissions (requires users)
         $this->call(MenusSeeder::class);
+
+        // Optional: uncomment to seed sample looms
+        // $this->call(LoomSeeder::class);
     }
 }

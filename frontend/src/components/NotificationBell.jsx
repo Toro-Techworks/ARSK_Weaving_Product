@@ -52,7 +52,7 @@ export function NotificationBell() {
   const panelRef = useRef(null);
   const [panelPos, setPanelPos] = useState({ top: 0, right: 0 });
 
-  const canViewNotifications = user?.role === 'super_admin' || user?.role === 'admin';
+  const canViewNotifications = user?.role === 'super_admin';
 
   const updatePanelPosition = useCallback(() => {
     const el = buttonRef.current;

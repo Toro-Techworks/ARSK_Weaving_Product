@@ -8,7 +8,11 @@ import { useAuth } from '../context/AuthContext';
  * Use with ProtectedRoute: first check auth, then check view permission.
  */
 export function RequireViewPermission({ menuKey, children }) {
-  const { canView, loading, permissionsLoaded } = useAuth();
+  const { canView, loading, permissionsLoaded, isProductOwner } = useAuth();
+
+  if (isProductOwner) {
+    return <Navigate to="/product-owner" replace />;
+  }
 
   if (loading || !permissionsLoaded) {
     return (

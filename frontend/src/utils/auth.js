@@ -1,5 +1,7 @@
 export const TOKEN_KEY = 'token';
 export const USER_KEY = 'user';
+/** Set when logged in via torotech product-owner credentials. */
+export const PRODUCT_OWNER_KEY = 'product_owner_session';
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
@@ -12,6 +14,7 @@ export function setToken(token) {
 
 export function removeToken() {
   localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(PRODUCT_OWNER_KEY);
 }
 
 export function getStoredUser() {
@@ -30,6 +33,18 @@ export function setStoredUser(user) {
 
 export function removeStoredUser() {
   localStorage.removeItem(USER_KEY);
+}
+
+export function getProductOwnerSession() {
+  return localStorage.getItem(PRODUCT_OWNER_KEY) === '1';
+}
+
+export function setProductOwnerSession(active) {
+  if (active) {
+    localStorage.setItem(PRODUCT_OWNER_KEY, '1');
+  } else {
+    localStorage.removeItem(PRODUCT_OWNER_KEY);
+  }
 }
 
 export function isAuthenticated() {

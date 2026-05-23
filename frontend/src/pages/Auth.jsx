@@ -11,19 +11,22 @@ export default function Auth() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const { login, user, authenticated } = useAuth();
+  const [submitting, setSubmitting] = useState(false);
+  const { login, user, authenticated, isProductOwner, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
-  if (authenticated) return <Navigate to="/" replace />;
+  if (authenticated && !authLoading) {
+    return <Navigate to={isProductOwner || user?.is_product_owner ? '/product-owner' : '/'} replace />;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    setSubmitting(true);
     try {
-      await login(username, password);
+      const data = await login(username, password);
       toast.success('Logged in successfully');
-      navigate('/');
+      const dest = data?.redirect_to || (data?.is_product_owner || data?.user?.is_product_owner ? '/product-owner' : '/');
+      navigate(dest);
     } catch (err) {
       const msg =
         err.response?.data?.message ||
@@ -31,7 +34,7 @@ export default function Auth() {
         'Login failed';
       toast.error(msg);
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
@@ -140,10 +143,10 @@ export default function Auth() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={submitting}
               className="w-full h-11 rounded-lg bg-brand text-white text-sm font-medium hover:bg-brand-dark hover:shadow-md focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 mt-6"
             >
-              {loading ? 'Signing in...' : 'Sign in'}
+              {submitting ? 'Signing in...' : 'Sign in'}
             </button>
           </form>
         </motion.div>

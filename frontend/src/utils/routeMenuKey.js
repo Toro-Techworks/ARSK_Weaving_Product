@@ -29,7 +29,9 @@ export const pathToMenuKey = {
   '/admin/winding-units/deleted': 'admin.winding_units',
   '/admin/weavers': 'admin.weavers',
   '/admin/weavers/deleted': 'admin.weavers',
+  '/admin/loom-history': 'admin.loom_history',
   '/admin/master-settings': 'admin.master_settings',
+  '/loom-production/looms/:loomId': 'loom_production.looms',
   '/settings/profile': 'settings.profile',
 };
 
@@ -41,5 +43,8 @@ export function getMenuKeyForPath(pathname) {
   if (pathname.startsWith('/companies/') && pathname.endsWith('/edit')) return 'companies';
   if (pathname.startsWith('/orders/') && pathname.endsWith('/edit')) return 'orders';
   if (pathname.startsWith('/yarn-stock/entry')) return 'yarn_stock';
+  if (pathname.startsWith('/loom-production/looms/') && pathname !== '/loom-production/looms') {
+    return 'loom_production.looms';
+  }
   return null;
 }

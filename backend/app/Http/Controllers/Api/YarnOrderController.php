@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Company;
 use App\Models\YarnOrder;
 use App\Support\SlNumberFormatter;
 use Illuminate\Http\JsonResponse;
@@ -26,6 +27,7 @@ class YarnOrderController extends Controller
         }
 
         $this->applyColumnFilters($q, $request);
+        $this->applyCompanyFilter($q, $request);
 
         $orders = $q->paginate($perPage);
 
@@ -47,6 +49,7 @@ class YarnOrderController extends Controller
             });
         }
         $this->applyColumnFilters($q, $request);
+        $this->applyCompanyFilter($q, $request);
         $orders = $q->paginate($perPage);
 
         $payload = $orders->getCollection()->map(function (YarnOrder $o) {
@@ -82,6 +85,24 @@ class YarnOrderController extends Controller
     private function escapeLike(string $value): string
     {
         return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $value);
+    }
+
+    /**
+     * Restrict to yarn orders whose order_from matches the company master name.
+     */
+    private function applyCompanyFilter($query, Request $request): void
+    {
+        $companyId = $request->input('company_id');
+        if ($companyId === null || $companyId === '') {
+            return;
+        }
+        $company = Company::query()->find((int) $companyId);
+        if (! $company || trim((string) $company->company_name) === '') {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+        $query->where('order_from', $company->company_name);
     }
 
     /**

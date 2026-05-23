@@ -1,0 +1,57 @@
+# Laravel staging .env source (CI merges this into the server .env).
+# Placeholders __STAGING_*__ → filled on the GitHub runner from secrets/variables.
+# List of names + dummy values → secrets-and-variables.log
+# Local dev → use backend/.env from backend/.env.example.
+
+APP_NAME="ARSK Weaving Product"
+APP_ENV=staging
+APP_DEBUG=false
+APP_KEY=__STAGING_APP_KEY__
+APP_URL=__STAGING_APP_URL__
+
+APP_LOCALE=en
+APP_FALLBACK_LOCALE=en
+APP_TIMEZONE=Asia/Kolkata
+
+APP_MAINTENANCE_DRIVER=file
+
+BCRYPT_ROUNDS=12
+
+LOG_CHANNEL=stack
+LOG_STACK=single
+LOG_DEPRECATIONS_CHANNEL=null
+LOG_LEVEL=debug
+
+DB_CONNECTION=mysql
+DB_HOST=__STAGING_DB_HOST__
+DB_PORT=__STAGING_DB_PORT__
+DB_DATABASE=__STAGING_DB_DATABASE__
+DB_USERNAME=__STAGING_DB_USERNAME__
+DB_PASSWORD=__STAGING_DB_PASSWORD__
+
+SESSION_DRIVER=file
+SESSION_LIFETIME=120
+SESSION_ENCRYPT=false
+SESSION_PATH=/
+SESSION_DOMAIN=null
+
+BROADCAST_CONNECTION=log
+FILESYSTEM_DISK=local
+QUEUE_CONNECTION=sync
+
+CACHE_STORE=file
+CACHE_PREFIX=
+
+SANCTUM_STATEFUL_DOMAINS=localhost,localhost:5173,127.0.0.1
+SPA_URL=__STAGING_APP_URL__
+CORS_ORIGINS=http://localhost:5173,__STAGING_APP_URL__
+
+PUSHER_APP_ID=
+PUSHER_APP_KEY=
+PUSHER_APP_SECRET=
+PUSHER_APP_CLUSTER=mt1
+PUSHER_HOST=
+PUSHER_PORT=443
+PUSHER_SCHEME=https
+
+BACKEND_PATH=

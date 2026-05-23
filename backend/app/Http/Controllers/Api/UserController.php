@@ -53,7 +53,7 @@ class UserController extends Controller
         }
 
         $perPage = $this->clampPerPage($request, 10, 100);
-        $query = User::query();
+        $query = User::query()->visibleInAdmin();
 
         if ($request->user()->isAdmin()) {
             $superAdminRoleId = Role::where('role_name', 'super_admin')->value('id');
@@ -110,6 +110,9 @@ class UserController extends Controller
 
     public function show(Request $request, User $user): JsonResponse
     {
+        if ($user->isHiddenFromAdmin()) {
+            return response()->json(['message' => 'User not found.'], 404);
+        }
         if (! $this->canAccessAdminPanel($request) || ! $this->canModifyUser($request, $user)) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
@@ -119,6 +122,9 @@ class UserController extends Controller
 
     public function update(Request $request, User $user): JsonResponse
     {
+        if ($user->isHiddenFromAdmin()) {
+            return response()->json(['message' => 'User not found.'], 404);
+        }
         if (! $this->canAccessAdminPanel($request) || ! $this->canModifyUser($request, $user)) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
@@ -163,6 +169,9 @@ class UserController extends Controller
 
     public function destroy(Request $request, User $user): JsonResponse
     {
+        if ($user->isHiddenFromAdmin()) {
+            return response()->json(['message' => 'User not found.'], 404);
+        }
         if ($user->id === $request->user()->id) {
             return response()->json(['message' => 'Cannot delete your own account.'], 422);
         }
@@ -183,6 +192,9 @@ class UserController extends Controller
 
     public function resetPassword(Request $request, User $user): JsonResponse
     {
+        if ($user->isHiddenFromAdmin()) {
+            return response()->json(['message' => 'User not found.'], 404);
+        }
         if (! $this->canAccessAdminPanel($request) || ! $this->canModifyUser($request, $user)) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }

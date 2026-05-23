@@ -7,12 +7,16 @@ use App\Models\Fabric;
 use App\Models\GenericCode;
 use App\Models\Loom;
 use App\Models\LoomAssignmentHistory;
+use App\Services\LoomOrderAssignmentService;
 use App\Support\SlNumberFormatter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class FabricController extends Controller
 {
+    public function __construct(
+        private readonly LoomOrderAssignmentService $loomOrderAssignmentService,
+    ) {}
     /**
      * Get fabrics for a yarn order (paginated).
      * GET /fabrics/yarn-order/:yarnOrderId?page=&per_page=
@@ -153,6 +157,8 @@ class FabricController extends Controller
      */
     private function recordAssignmentSnapshot(int $loomId, Fabric $fabric): void
     {
+        $this->loomOrderAssignmentService->assignFabricToLoom($loomId, $fabric);
+
         LoomAssignmentHistory::create([
             'loom_id' => $loomId,
             'fabric_id' => (int) $fabric->id,
@@ -170,6 +176,8 @@ class FabricController extends Controller
      */
     private function recordUnassignmentSnapshot(int $loomId): void
     {
+        $this->loomOrderAssignmentService->unassignLoom($loomId);
+
         LoomAssignmentHistory::create([
             'loom_id' => $loomId,
             'fabric_id' => null,

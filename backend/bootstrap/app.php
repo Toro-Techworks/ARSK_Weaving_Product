@@ -27,6 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'role' => \App\Http\Middleware\CheckRole::class,
             'menu.permission' => \App\Http\Middleware\CheckMenuPermission::class,
+            'product.owner' => \App\Http\Middleware\EnsureProductOwner::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

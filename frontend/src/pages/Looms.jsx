@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, Navigate } from 'react-router-dom';
-import { Layers, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Layers, Pencil, Plus, Trash2, X, ExternalLink } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import { Card } from '../components/Card';
@@ -442,7 +442,19 @@ export function LoomList() {
 
   const tableColumns = useMemo(
     () => [
-      { key: 'loom_number', label: 'Loom no.' },
+      {
+        key: 'loom_number',
+        label: 'Loom no.',
+        render: (v, row) => (
+          <Link
+            to={`/loom-production/looms/${row.id}`}
+            className="inline-flex items-center gap-1 font-medium text-brand hover:underline"
+          >
+            {v}
+            <ExternalLink className="w-3 h-3 opacity-60" />
+          </Link>
+        ),
+      },
       { key: 'location', label: 'Location', render: (v) => v || '—' },
       {
         key: 'status',

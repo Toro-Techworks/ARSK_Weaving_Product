@@ -17,6 +17,8 @@ class LoomEntry extends Model
         'design',
         'weave_technique',
         'colour',
+        'customer',
+        'snapshot_order_label',
         'date',
         'shift',
         'meters_produced',

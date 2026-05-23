@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\ActivityLog;
+use App\Models\Loom;
 use Illuminate\Database\Eloquent\Model;
 
 final class RegistersActivityLogListeners
@@ -33,6 +34,11 @@ final class RegistersActivityLogListeners
                 }
 
                 if (! $model->wasChanged()) {
+                    return;
+                }
+
+                // Dedicated notification (with reason) is sent from LoomController when status → Inactive.
+                if ($model instanceof Loom && $model->wasChanged('status') && self::loomStatusIsInactive($model->status)) {
                     return;
                 }
 
@@ -72,5 +78,10 @@ final class RegistersActivityLogListeners
         $map = config('activity_log.display_names', []);
 
         return $map[$moduleKey] ?? ucfirst(str_replace('_', ' ', $moduleKey));
+    }
+
+    private static function loomStatusIsInactive(mixed $status): bool
+    {
+        return is_string($status) && strcasecmp(trim($status), 'inactive') === 0;
     }
 }

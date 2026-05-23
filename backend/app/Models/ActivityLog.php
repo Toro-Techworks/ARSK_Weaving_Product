@@ -54,9 +54,18 @@ class ActivityLog extends Model
     /**
      * @param  int|string|null  $recordId  Stored as integer when numeric; otherwise null (use description).
      */
-    public static function record(?int $userId, string $action, string $module, string $description, int|string|null $recordId = null): void
-    {
-        if (static::shouldSkipForActor($userId)) {
+    /**
+     * @param  bool  $alwaysRecord  When true, logs even if the actor is super_admin (e.g. loom inactive alerts for all super admins).
+     */
+    public static function record(
+        ?int $userId,
+        string $action,
+        string $module,
+        string $description,
+        int|string|null $recordId = null,
+        bool $alwaysRecord = false,
+    ): void {
+        if (! $alwaysRecord && static::shouldSkipForActor($userId)) {
             return;
         }
 

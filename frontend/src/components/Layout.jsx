@@ -199,7 +199,7 @@ export default function Layout({ children }) {
   const location = useLocation();
   const isLogin = location.pathname === '/login';
 
-  useActivityBroadcast(user?.role === 'super_admin' || user?.role === 'admin');
+  useActivityBroadcast(user?.role === 'super_admin');
 
   // Close mobile sidebar on route change
   useEffect(() => {

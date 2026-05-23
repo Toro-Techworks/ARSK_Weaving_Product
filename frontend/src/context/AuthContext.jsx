@@ -1,19 +1,28 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import api from '../api/client';
 import {
+  getProductOwnerSession,
   getStoredUser,
   getToken,
   removeStoredUser,
   removeToken,
+  setProductOwnerSession,
   setStoredUser,
   setToken,
 } from '../utils/auth';
+
+function mergeUserWithProductOwnerFlag(userData, isProductOwner) {
+  if (!userData) return null;
+  return { ...userData, is_product_owner: Boolean(isProductOwner) };
+}
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
-    return getStoredUser();
+    const stored = getStoredUser();
+    const isPO = getProductOwnerSession();
+    return mergeUserWithProductOwnerFlag(stored, isPO);
   });
   const [menus, setMenus] = useState([]);
   const [permissions, setPermissions] = useState({});
@@ -32,15 +41,23 @@ export function AuthProvider({ children }) {
       return;
     }
     try {
-      const [userRes, menusRes] = await Promise.all([
-        api.get('/user'),
-        api.get('/menus/user').catch(() => ({ data: { data: [], permissions: {} } })),
-      ]);
-      setUser(userRes.data.user);
-      setStoredUser(userRes.data.user);
-      setMenus(menusRes.data.data || []);
-      setPermissions(menusRes.data.permissions || {});
-      setPermissionsLoaded(true);
+      const userRes = await api.get('/user');
+      const userData = userRes.data.user;
+      const isPO = Boolean(userRes.data.is_product_owner || userData?.is_product_owner);
+      setProductOwnerSession(isPO);
+      const merged = mergeUserWithProductOwnerFlag(userData, isPO);
+      setUser(merged);
+      setStoredUser(merged);
+      if (isPO) {
+        setMenus([]);
+        setPermissions({});
+        setPermissionsLoaded(true);
+      } else {
+        const menusRes = await api.get('/menus/user').catch(() => ({ data: { data: [], permissions: {} } }));
+        setMenus(menusRes.data.data || []);
+        setPermissions(menusRes.data.permissions || {});
+        setPermissionsLoaded(true);
+      }
     } catch {
       setUser(null);
       setMenus([]);
@@ -48,6 +65,7 @@ export function AuthProvider({ children }) {
       setPermissionsLoaded(false);
       removeToken();
       removeStoredUser();
+      setProductOwnerSession(false);
     } finally {
       setLoading(false);
     }
@@ -84,14 +102,21 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (username, password) => {
     const { data } = await api.post('/login', { username, password });
     setToken(data.token);
-    // eslint-disable-next-line no-console
-    console.log('[auth] logged in token:', data.token);
-    setUser(data.user);
-    setStoredUser(data.user);
-    const menusRes = await api.get('/menus/user').catch(() => ({ data: { data: [], permissions: {} } }));
-    setMenus(menusRes.data.data || []);
-    setPermissions(menusRes.data.permissions || {});
-    setPermissionsLoaded(true);
+    const isPO = Boolean(data.is_product_owner || data.user?.is_product_owner);
+    setProductOwnerSession(isPO);
+    const merged = mergeUserWithProductOwnerFlag(data.user, isPO);
+    setUser(merged);
+    setStoredUser(merged);
+    if (isPO) {
+      setMenus([]);
+      setPermissions({});
+      setPermissionsLoaded(true);
+    } else {
+      const menusRes = await api.get('/menus/user').catch(() => ({ data: { data: [], permissions: {} } }));
+      setMenus(menusRes.data.data || []);
+      setPermissions(menusRes.data.permissions || {});
+      setPermissionsLoaded(true);
+    }
     return data;
   }, []);
 
@@ -112,6 +137,7 @@ export function AuthProvider({ children }) {
     } catch (_) {}
     removeToken();
     removeStoredUser();
+    setProductOwnerSession(false);
     setUser(null);
     setMenus([]);
     setPermissions({});
@@ -134,9 +160,12 @@ export function AuthProvider({ children }) {
 
   const token = getToken();
   const authenticated = Boolean(token);
+  const isProductOwner = Boolean(
+    getProductOwnerSession() || user?.is_product_owner,
+  );
 
   return (
-    <AuthContext.Provider value={{ user, authenticated, menus, permissions, permissionsLoaded, loading, login, logout, setAuth, fetchUser, hasRole, refreshMenus, canView, canEdit }}>
+    <AuthContext.Provider value={{ user, authenticated, isProductOwner, menus, permissions, permissionsLoaded, loading, login, logout, setAuth, fetchUser, hasRole, refreshMenus, canView, canEdit }}>
       {children}
     </AuthContext.Provider>
   );

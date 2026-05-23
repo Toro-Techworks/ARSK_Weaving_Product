@@ -734,7 +734,12 @@ export function YarnStockEntry() {
         next.delete(row.id);
         return next;
       });
-      if (editingOrderId) fetchReceipts(editingOrderId);
+      const original = receipts.find((r) => r.id === row.id);
+      if (original) {
+        setYarnReceiptRows((prev) =>
+          prev.map((r, i) => (i === rowIndex ? receiptToRow(original) : r)),
+        );
+      }
     } else {
       setYarnReceiptRows((prev) => {
         const next = prev.filter((_, i) => i !== rowIndex);
@@ -764,20 +769,34 @@ export function YarnStockEntry() {
       toast.error('DC No is required.');
       return;
     }
-    const body = { ...rowToPayload(row), yarn_order_id: editingOrderId };
+    const payload = { ...rowToPayload(row), yarn_order_id: editingOrderId };
     setSavingYarnReceiptRowIndex(rowIndex);
     try {
+      let saved;
       if (row.id == null) {
-        await api.post('/yarn-receipts', body);
+        const { data: resBody } = await api.post('/yarn-receipts', payload);
+        saved = resBody.data;
         toast.success('Receipt saved.');
       } else {
-        await api.put(`/yarn-receipts/${row.id}`, body);
+        const { data: resBody } = await api.put(`/yarn-receipts/${row.id}`, payload);
+        saved = resBody.data;
         toast.success('Receipt updated.');
       }
       setRowErrors({});
       setYarnReceiptEditIds(new Set());
       setYarnReceiptSessionIndex(null);
-      fetchReceipts(editingOrderId);
+      // Merge only this record — no full refetch (same as production planning grid).
+      setReceipts((prev) => {
+        if (row.id == null) {
+          return [...prev, saved].sort((a, b) => {
+            const da = a.date ? String(a.date).slice(0, 10) : '';
+            const db = b.date ? String(b.date).slice(0, 10) : '';
+            if (da !== db) return db.localeCompare(da);
+            return (b.id ?? 0) - (a.id ?? 0);
+          });
+        }
+        return prev.map((r) => (r.id === saved.id ? saved : r));
+      });
     } catch (err) {
       const msg = err.response?.data?.message
         || (err.response?.data?.errors ? Object.values(err.response.data.errors).flat().join(' ') : 'Failed to save');
@@ -808,7 +827,7 @@ export function YarnStockEntry() {
         return next;
       });
       setYarnReceiptSessionIndex(null);
-      fetchReceipts(editingOrderId);
+      setReceipts((prev) => prev.filter((r) => r.id !== row.id));
       setActiveCell(null);
       return;
     }
